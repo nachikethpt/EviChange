@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>EviChange WebGIS</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; }
+    #map { flex: 3; }
+    #panel { flex: 1; padding: 16px; background: #f5f5f5; overflow-y: auto; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="panel">
+    <h3>Report Panel</h3>
+    <p id="report-text">No pair selected yet.</p>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([21.0, 107.3], 8); // rough Quang Ninh coords, placeholder
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    document.getElementById('report-text').innerText =
+      "Once /interpret and /verify are live, the gated report will render here.";
+  </script>
+</body>
+</html>
