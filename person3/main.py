@@ -1,4 +1,6 @@
 from fastapi import FastAPI
+from pydantic import BaseModel
+from verifier import verify_claim
 
 app = FastAPI()
 
@@ -16,7 +18,23 @@ def interpret():
     # Person 2 will eventually fill this with VLM-generated claims
     return {"status": "stub", "claims": []}
 
+
+class Claim(BaseModel):
+    statement: str
+    location: str
+    confidence: float
+
+class Evidence(BaseModel):
+    magnitude: float
+    confidence: float
+
+class VerifyRequest(BaseModel):
+    claim: Claim
+    evidence: Evidence
+    threshold: float = 0.5
+
+
 @app.post("/verify")
-def verify():
-    # This is yours to build out — verifier + abstention logic
-    return {"status": "stub", "label": "uncertain", "confidence": 0.0}
+def verify(request: VerifyRequest):
+    result = verify_claim(request.claim.dict(), request.evidence.dict(), request.threshold)
+    return result
