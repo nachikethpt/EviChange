@@ -15,6 +15,7 @@ class PipelineState(TypedDict, total=False):
     date_after: str
     task: Literal["change_detection"]
     condition: Literal["template", "ungated", "gated"]
+    publish_live: bool  # if True, the Publishing Agent writes into webapp/backend/data/
     scene_before_id: str
     scene_after_id: str
     cloud_pct_before: float
