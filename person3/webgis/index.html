@@ -23,8 +23,41 @@
       attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
-    document.getElementById('report-text').innerText =
-      "Once /interpret and /verify are live, the gated report will render here.";
+    async function fetchVerification() {
+      const panel = document.getElementById('report-text');
+      panel.innerText = "Loading...";
+
+      try {
+        const response = await fetch('http://127.0.0.1:8000/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            claim: {
+              statement: "New building constructed in region A",
+              location: "A",
+              confidence: 0.7
+            },
+            evidence: {
+              magnitude: 0.8,
+              confidence: 0.6
+            },
+            threshold: 0.5
+          })
+        });
+
+        const data = await response.json();
+
+        panel.innerHTML = `
+          <strong>Label:</strong> ${data.label}<br>
+          <strong>Confidence:</strong> ${data.confidence}<br>
+          <strong>Abstained:</strong> ${data.abstain}
+        `;
+      } catch (err) {
+        panel.innerText = "Error reaching API: " + err.message;
+      }
+    }
+
+    fetchVerification();
   </script>
 </body>
 </html>
