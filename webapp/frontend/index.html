@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EviChange GIS</title>
+  <link rel="stylesheet" href="/static/vendor/maplibre-gl.css">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo">◆</span> EviChange GIS <span class="tag">starter v0.1</span></div>
+    <nav class="toolbar" id="toolbar">
+      <button data-tool="add"      title="Add GeoJSON or zipped shapefile">＋ Add data</button>
+      <button data-tool="basemap"  title="Choose basemap">▦ Basemap</button>
+      <button data-tool="measure"  title="Measure distance or area">📏 Measure</button>
+      <button data-tool="draw"     title="Draw an area and analyse change inside it">✎ Draw area</button>
+      <button data-tool="swipe"    title="Compare two images with a swipe bar">⇆ Swipe</button>
+      <button data-tool="table"    title="Open the attribute table">☰ Table</button>
+      <button data-tool="report" class="primary" title="AI change report">✦ AI report</button>
+    </nav>
+  </header>
+
+  <main class="layout">
+    <aside class="contents" id="contents">
+      <div class="pane-title">Contents</div>
+      <div id="layerList"></div>
+      <div class="legend" id="legend">
+        <div class="pane-subtitle">Change regions — model confidence</div>
+        <div class="ramp"></div>
+        <div class="ramp-labels"><span>0.3</span><span>0.6</span><span>0.9</span></div>
+      </div>
+    </aside>
+
+    <section class="mapwrap" id="mapwrap">
+      <div id="map"></div>
+      <div id="swipeMap" hidden></div>
+      <div id="swipeHandle" hidden><span>⇆</span></div>
+      <div class="hint" id="hint" hidden></div>
+      <div class="statusbar" id="statusbar">Move the mouse over the map</div>
+    </section>
+
+    <aside class="panel" id="panel" hidden>
+      <div class="panel-head"><span id="panelTitle"></span><button class="icon" id="panelClose" title="Close">✕</button></div>
+      <div class="panel-body" id="panelBody"></div>
+    </aside>
+  </main>
+
+  <section class="tablepane" id="tablepane" hidden>
+    <div class="table-head">
+      <strong>Attribute table</strong>
+      <select id="tableLayer"></select>
+      <span id="tableCount" class="muted"></span>
+      <button class="icon" id="tableClose" title="Close">✕</button>
+    </div>
+    <div class="table-scroll"><table id="attrTable"></table></div>
+  </section>
+
+  <input type="file" id="fileInput" accept=".geojson,.json,.zip" hidden>
+
+  <script src="/static/vendor/maplibre-gl.js"></script>
+  <script src="/static/vendor/turf.min.js"></script>
+  <script src="/static/vendor/shp.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
