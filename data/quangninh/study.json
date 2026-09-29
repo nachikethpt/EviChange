@@ -1,0 +1,23 @@
+{
+  "name": "quangninh",
+  "aoi": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [107.22, 20.98],
+        [107.40, 20.98],
+        [107.40, 21.10],
+        [107.22, 21.10],
+        [107.22, 20.98]
+      ]
+    ]
+  },
+  "before_window": ["2018-11-01", "2019-03-31"],
+  "after_window": ["2022-11-01", "2023-03-31"],
+  "thresholds": {
+    "max_cloud_pct": 30,
+    "index_delta": 0.1,
+    "min_area_ha": 1.0,
+    "mean_conf_min": 0.5
+  }
+}

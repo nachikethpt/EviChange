@@ -14,19 +14,20 @@ Then, from the repo root:
 Exit code 0 = ready for Phase 5.
 """
 import argparse
+import json
 import os
 import sys
+from pathlib import Path
 
-AOI_BOUNDS = [107.22, 20.98, 107.40, 21.10]   # Cam Pha study box, same as the web app and notebook
 S2 = "COPERNICUS/S2_SR_HARMONIZED"
-WINDOWS = {"before (2018 dry season)": ("2018-11-01", "2019-03-31"),
-           "after (2022 dry season)": ("2022-11-01", "2023-03-31")}
+STUDY_PATH = Path(__file__).parents[1] / "data" / "quangninh" / "study.json"
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--project", default=os.environ.get("EE_PROJECT"), help="Earth Engine Cloud project id")
     ap.add_argument("--max-cloud", type=float, default=30)
+    ap.add_argument("--study", type=Path, default=STUDY_PATH, help="study.json path")
     args = ap.parse_args()
     if not args.project:
         print("No project id. Pass --project YOUR_PROJECT_ID or set EE_PROJECT (see this file's docstring).")
@@ -45,9 +46,11 @@ def main() -> int:
         return 1
     print(f"Earth Engine initialized (project={args.project}).")
 
-    aoi = ee.Geometry.Rectangle(AOI_BOUNDS)
+    study = json.loads(args.study.read_text(encoding="utf-8"))
+    aoi = ee.Geometry(study["aoi"])
+    windows = {"before": study["before_window"], "after": study["after_window"]}
     ok = True
-    for label, (start, end) in WINDOWS.items():
+    for label, (start, end) in windows.items():
         col = (ee.ImageCollection(S2).filterBounds(aoi).filterDate(start, end)
                .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", args.max_cloud)))
         n = col.size().getInfo()

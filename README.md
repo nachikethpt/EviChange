@@ -42,6 +42,7 @@ python -m venv .venv
 
 Delete `webapp/backend/data/` to return the map to the built-in demo data.
 
-Data is still mock/demo: `SWAP-IN` functions in `agents/tools.py` and the demo
-`ungated_claims()` / `gated_claims()` in `webapp/backend/report.py` are replaced in
-Phases 3–6 (`docs/PLAN.md`).
+The pipeline defaults to a deterministic offline detector. Set
+`EVICHANGE_ENGINE=ee` and `EE_PROJECT=<project-id>` after running
+`earthengine authenticate` to use `agents/ee_engine.py` with Sentinel-2 SR.
+The real Quang Ninh export is created after Earth Engine access is verified.
