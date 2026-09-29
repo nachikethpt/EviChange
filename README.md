@@ -11,7 +11,7 @@ agents/      6-agent LangGraph pipeline + the shared contract
   verifier.py  deterministic claim verifier with reason codes
 webapp/      FastAPI + MapLibre web GIS; backend/report.py = the ONE claim generator
 notebooks/   Colab: Earth Engine acquisition, ground-truth labeling, Qwen2.5-VL claims
-             (the Person2 notebook's OSCD cells are obsolete; its Qwen cells are reused in Phase 4)
+             (the Person2 notebook pulls practice chips from Earth Engine; its Qwen cells are reused in Phase 4)
 scripts/     ee_smoke_test.py
 docs/        PLAN.md (phases, evaluation plan), decisions.md (design records)
 legacy/      deprecated old-schema files, not imported

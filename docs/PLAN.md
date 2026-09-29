@@ -38,8 +38,7 @@ Re-plan trigger: Phase 4 not finished by end of week 6.
   global region ids. Becomes a per-run store in Phase 6. `evidence_for()` AOI area from
   a lat/lon bbox → geodesic area of the run's AOI.
 - `docs/decisions.md` D3: `mean_conf` note referred to a trained model. It's now defined by D6.
-- `README.md`, `schema.py` docstring: mention OSCD. Remove. (Done: only the README's
-  "obsolete" note is left.)
+- `README.md`, `schema.py` docstring: mention OSCD. Remove. (Done.)
 
 Found in the rev-2 audit (2026-09-27), not in the list above:
 - **Dates vs windows.** `state.py`/`graph.py`/`tools.py`/`run_pipeline()` and the tests take one
@@ -62,9 +61,12 @@ Found in the rev-2 audit (2026-09-27), not in the list above:
   `nodes._region_polygon()` also divides by `24830`. Both go when the EE path lands.
 - `import_geojson.py` writes the single global store. In Phase 6 it becomes "import as the QN
   run".
-- `notebooks/EviChange_Person1_starter.ipynb`: the "train U-Net on OSCD" steps (cells 13, 23)
-  and the placeholder `mean_conf` are obsolete. `ee_engine.py` replaces the notebook's
-  extraction. Mark the notebook superseded rather than maintaining two extractors.
+- `notebooks/EviChange_Person1_starter.ipynb`: the placeholder `mean_conf` is obsolete
+  (the "train a model on the old dataset" steps are removed). `ee_engine.py` replaces the
+  notebook's extraction. Mark the notebook superseded rather than maintaining two extractors.
+- `notebooks/EviChange_Person2_starter.ipynb`: now pulls practice chips from Earth Engine
+  (5 sites near Cam Pha, threshold evidence). Switch its sites/evidence to `ee_engine.py`
+  regions once Phase 2 lands. (Done: no dataset download left.)
 - Phase 7 cleanup: `app.js` `HOME` view and `demo_data.py` are QN-specific. That's fine as a
   default view, but the map should fit to the run's AOI.
 - Unchanged and still valid: `schema.py` contract, `verifier.py`, `report.py`, the bridge,
