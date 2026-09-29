@@ -41,10 +41,12 @@ async def _worker():
         data_store.update_status(run_id, status="running", progress=0.1)
         try:
             state = await asyncio.to_thread(
-                run_pipeline, "on-demand", aoi, date_before, date_after, condition, 3, False
+                run_pipeline, run_id, aoi, date_before, date_after, condition, 3, False
             )
             if state.get("status") == "failed":
-                data_store.update_status(run_id, status="error", error=state.get("error", "pipeline failed"))
+                last_log = state.get("log", [])[-1] if state.get("log") else {}
+                reason = state.get("error") or last_log.get("detail") or "pipeline failed"
+                data_store.update_status(run_id, status="error", error=reason)
             else:
                 data_store.write_run_result(run_id, {
                     "type": "FeatureCollection",
