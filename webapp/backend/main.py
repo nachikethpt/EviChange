@@ -12,8 +12,15 @@ Phase 6: POST /api/runs and GET /api/runs/{id} run the agent pipeline on demand,
 as a background job, against an arbitrary AOI + date range. Existing /api/data/*,
 /api/layers and /api/report endpoints now accept an optional run_id so they can
 serve a specific run's results instead of only the demo/global data.
+
+Validation, per review: condition is checked against schema.CONDITIONS before
+queueing (not left to fail inside the background job); any run_id coming from
+a request is checked against the 12-char hex format the server generates
+(rejects path-traversal-shaped input) and checked to actually exist (a typo'd
+run_id returns 404, not a silent fall-through to demo data).
 """
 import asyncio
+import re
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -25,6 +32,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from agents.graph import run_pipeline
+from agents.schema import CONDITIONS
 
 from . import data_store
 from .aoi_validation import validate_aoi
@@ -35,6 +43,19 @@ FRONTEND = ROOT / "frontend"
 
 CODE_VERSION = "phase6-v1"  # bump when pipeline logic changes, invalidates cache
 run_queue: asyncio.Queue = asyncio.Queue()
+
+_RUN_ID_RE = re.compile(r"^[0-9a-f]{12}$")
+
+
+def _require_valid_run(run_id: Optional[str]) -> None:
+    """Reject malformed run ids (path-traversal shaped) and unknown ones (would
+    otherwise silently fall back to demo data instead of erroring)."""
+    if run_id is None:
+        return
+    if not _RUN_ID_RE.match(run_id):
+        raise HTTPException(400, "run_id must be a 12-character hex id")
+    if data_store.get_status(run_id) is None:
+        raise HTTPException(404, f"unknown run id: {run_id}")
 
 
 async def _worker():
@@ -77,6 +98,7 @@ def health():
 @app.get("/api/layers")
 def layers(run_id: Optional[str] = None):
     """The operational layers the map loads on start. Pass run_id to point at a specific run's results."""
+    _require_valid_run(run_id)
     label = "Detected change regions" if data_store.is_live_data(run_id) else "Detected change regions (DEMO)"
     suffix = f"?run_id={run_id}" if run_id else ""
     return [
@@ -87,11 +109,13 @@ def layers(run_id: Optional[str] = None):
 
 @app.get("/api/data/aoi")
 def aoi(run_id: Optional[str] = None):
+    _require_valid_run(run_id)
     return data_store.get_aoi(run_id)
 
 
 @app.get("/api/data/change_regions")
 def change_regions(run_id: Optional[str] = None):
+    _require_valid_run(run_id)
     return data_store.get_change_regions(run_id)
 
 
@@ -104,6 +128,7 @@ class ReportRequest(BaseModel):
 @app.post("/api/report")
 def report(req: ReportRequest):
     """Person 2's endpoint: selected change regions -> claims with verdicts and abstentions."""
+    _require_valid_run(req.run_id)
     known = data_store.known_region_ids(req.run_id)
     unknown = [r for r in req.region_ids if r not in known]
     if unknown:
@@ -121,6 +146,9 @@ class RunRequest(BaseModel):
 
 @app.post("/api/runs", status_code=202)
 def create_run(req: RunRequest):
+    if req.condition not in CONDITIONS:
+        raise HTTPException(400, f"condition must be one of {CONDITIONS}, got {req.condition!r}")
+
     errors = validate_aoi(req.aoi)
     if errors:
         raise HTTPException(400, "; ".join(errors))
@@ -141,10 +169,8 @@ def create_run(req: RunRequest):
 
 @app.get("/api/runs/{run_id}")
 def get_run(run_id: str):
-    status = data_store.get_status(run_id)
-    if status is None:
-        raise HTTPException(404, "unknown run id")
-    return status
+    _require_valid_run(run_id)
+    return data_store.get_status(run_id)
 
 
 app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
