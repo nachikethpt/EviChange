@@ -10,10 +10,10 @@ since you control the date range yourself there).
 """
 import argparse
 from agents.graph import run_pipeline
+from agents.study import load_study_config
 
-AOI = {"type": "Polygon", "coordinates": [[
-    [107.22, 20.98], [107.40, 20.98], [107.40, 21.10], [107.22, 21.10], [107.22, 20.98],
-]]}
+STUDY = load_study_config()
+AOI = STUDY["aoi"]
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
@@ -22,7 +22,7 @@ if __name__ == "__main__":
     args = ap.parse_args()
 
     for i in range(1, args.runs + 1):
-        r = run_pipeline(aoi_name=f"cli_run_{i}", aoi=AOI, date_before="2018-01-01", date_after="2022-06-01",
+        r = run_pipeline(aoi_name=f"cli_run_{i}", aoi=AOI, before_window=STUDY["before_window"], after_window=STUDY["after_window"],
                           condition=args.condition, publish_live=True)
         print(f"run {i}: status={r['status']} attempts={r['attempt']}")
         for e in r["log"]:

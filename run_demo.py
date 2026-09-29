@@ -2,18 +2,17 @@
 import json
 
 from agents.graph import run_pipeline
+from agents.study import load_study_config
 
-AOI = {"type": "Polygon", "coordinates": [[
-    [107.22, 20.98], [107.40, 20.98], [107.40, 21.10],
-    [107.22, 21.10], [107.22, 20.98],
-]]}
+STUDY = load_study_config()
+AOI = STUDY["aoi"]
 
 
 if __name__ == "__main__":
     print("Running the pipeline 5 times (some runs exercise the retry path)\n")
     result = None
     for name in ["run_a", "run_b", "run_c", "run_d", "run_e"]:
-        result = run_pipeline(name, AOI, "2018-01-01", "2022-06-01")
+        result = run_pipeline(name, AOI, STUDY["before_window"], STUDY["after_window"])
         print(f"--- {name} --- status={result['status']} attempts={result['attempt']}")
         for entry in result["log"]:
             marker = {"ok": "  ", "error": "!!", "retry": "~~"}.get(entry["event"], "->")

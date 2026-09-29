@@ -7,7 +7,9 @@ from agents.schema import validate_claim, validate_change_regions
 from webapp.backend import data_store
 from webapp.backend.main import app
 
-AOI = {"type": "Point", "coordinates": [107.3, 21.04]}
+AOI = {"type": "Polygon", "coordinates": [[[107.22, 20.98], [107.40, 20.98], [107.40, 21.10], [107.22, 21.10], [107.22, 20.98]]]}
+BEFORE = ["2018-11-01", "2019-03-31"]
+AFTER = ["2022-11-01", "2023-03-31"]
 
 
 @pytest.fixture
@@ -51,13 +53,13 @@ def test_unknown_region_rejected(client):
 
 
 def test_pipeline_and_webapp_share_one_claim_generator(client):
-    result = run_pipeline("bridge", AOI, "2018-01-01", "2022-06-01")
+    result = run_pipeline("bridge", AOI, BEFORE, AFTER)
     ev = {"change_frac": result["change_frac"], "regions": result["regions"]}
     assert result["claims"] == webapp_bridge.build_report(ev, "gated")["claims"]
 
 
 def test_publish_live_feeds_the_map(client):
-    result = run_pipeline("live", AOI, "2018-01-01", "2022-06-01", publish_live=True)
+    result = run_pipeline("live", AOI, BEFORE, AFTER, publish_live=True)
     assert result["status"] == "done"
     assert client.get("/api/health").json()["live_data"] is True
     served = client.get("/api/data/change_regions").json()
@@ -68,6 +70,6 @@ def test_publish_live_feeds_the_map(client):
 
 
 def test_publishing_rejects_schema_violations():
-    state = {"regions": [{"id": "r1"}], "date_before": "a", "date_after": "b", "model_version": "m", "scene_before_id": "s"}
+    state = {"regions": [{"id": "r1"}], "before_window": BEFORE, "after_window": AFTER, "model_version": "m", "scene_before_id": "s", "aoi": AOI}
     with pytest.raises(Exception, match="invalid published change regions"):
         nodes.publishing_agent(state)

@@ -13,6 +13,8 @@ here and the tests catch every place that disagrees.
 """
 from __future__ import annotations
 
+from datetime import date, timedelta
+from math import cos, pi
 from typing import Iterable
 
 T_IDX = 0.10      # |index change| at or below this is "no clear change" (notebooks, report, verifier)
@@ -66,6 +68,105 @@ REASONS = {
 
 class SchemaError(ValueError):
     """Raised by check() when data does not match the contract."""
+
+
+def _ring_area_km2(ring: list[list[float]]) -> float:
+    lat0 = sum(point[1] for point in ring[:-1]) / max(len(ring) - 1, 1)
+    scale_x = 111.32 * cos(lat0 * pi / 180)
+    scale_y = 111.32
+    return abs(sum(
+        ring[index][0] * scale_x * ring[(index + 1) % (len(ring) - 1)][1] * scale_y
+        - ring[(index + 1) % (len(ring) - 1)][0] * scale_x * ring[index][1] * scale_y
+        for index in range(len(ring) - 1)
+    ) / 2)
+
+
+def _valid_ring(ring: object) -> tuple[bool, float]:
+    if not isinstance(ring, list) or len(ring) < 4 or ring[0] != ring[-1]:
+        return False, 0.0
+    if any(not isinstance(point, list) or len(point) < 2 for point in ring):
+        return False, 0.0
+    if any(not isinstance(value, (int, float)) or isinstance(value, bool) for point in ring for value in point[:2]):
+        return False, 0.0
+    if len({(point[0], point[1]) for point in ring[:-1]}) < 3:
+        return False, 0.0
+    area = _ring_area_km2(ring)
+    return area > 0, area
+
+
+def _polygon_area_km2(coordinates: object) -> tuple[bool, float]:
+    if not isinstance(coordinates, list) or not coordinates:
+        return False, 0.0
+    valid, area = _valid_ring(coordinates[0])
+    if not valid:
+        return False, 0.0
+    for hole in coordinates[1:]:
+        hole_valid, hole_area = _valid_ring(hole)
+        if not hole_valid:
+            return False, 0.0
+        area -= hole_area
+    return area > 0, max(area, 0.0)
+
+
+def validate_aoi(aoi: object) -> list[str]:
+    """Validate a GeoJSON Polygon/MultiPolygon in longitude/latitude."""
+    if not isinstance(aoi, dict):
+        return ["AOI must be a GeoJSON object"]
+    if aoi.get("type") not in ("Polygon", "MultiPolygon"):
+        return ["AOI type must be Polygon or MultiPolygon"]
+    coordinates = aoi.get("coordinates")
+    if not isinstance(coordinates, list) or not coordinates:
+        return ["AOI coordinates must be a non-empty list"]
+    if aoi["type"] == "Polygon":
+        polygons = [coordinates]
+    else:
+        polygons = coordinates
+    results = [_polygon_area_km2(polygon) for polygon in polygons]
+    points = [point for polygon in polygons for ring in polygon for point in ring]
+    errors = []
+    if not results or not all(result[0] for result in results):
+        errors.append("AOI contains an invalid or zero-area ring")
+    if any(not isinstance(point, list) or len(point) < 2 for point in points):
+        errors.append("AOI coordinates must contain longitude/latitude pairs")
+    elif any(not -180 <= point[0] <= 180 or not -90 <= point[1] <= 90 for point in points):
+        errors.append("AOI longitude/latitude is out of range")
+    area = sum(result[1] for result in results)
+    if area < 1 or area > 500:
+        errors.append(f"AOI area must be between 1 and 500 km², got {area:.3f} km²")
+    return errors
+
+
+def validate_windows(before_window: object, after_window: object) -> list[str]:
+    errors = []
+    parsed = []
+    for name, window in (("before_window", before_window), ("after_window", after_window)):
+        if not isinstance(window, list) or len(window) != 2:
+            errors.append(f"{name} must be [start, end]")
+            continue
+        try:
+            start, end = date.fromisoformat(window[0]), date.fromisoformat(window[1])
+        except (TypeError, ValueError):
+            errors.append(f"{name} must contain ISO dates")
+            continue
+        if start >= end:
+            errors.append(f"{name} start must be earlier than end")
+        if end > start + timedelta(days=366):
+            errors.append(f"{name} must be at most 12 months")
+        parsed.append((start, end))
+    if len(parsed) == 2 and parsed[0][1] > parsed[1][0] and parsed[1][1] > parsed[0][0]:
+        errors.append("before_window and after_window must not overlap")
+    return errors
+
+
+def aoi_bounds(aoi: dict) -> tuple[float, float, float, float]:
+    polygons = [aoi["coordinates"]] if aoi["type"] == "Polygon" else aoi["coordinates"]
+    points = [point for polygon in polygons for ring in polygon for point in ring]
+    return min(p[0] for p in points), min(p[1] for p in points), max(p[0] for p in points), max(p[1] for p in points)
+
+
+def aoi_area_ha(aoi: dict) -> float:
+    polygons = [aoi["coordinates"]] if aoi["type"] == "Polygon" else aoi["coordinates"]
+    return sum(_polygon_area_km2(polygon)[1] for polygon in polygons) * 100
 
 
 def region_change_types(region: dict) -> list[str]:

@@ -13,7 +13,7 @@ Quang Ninh results are validated. See `decisions.md` D4–D5.
 | # | Phase | Depends on | Est. h | Status |
 |---|---|---|---|---|
 | 1 | Consolidate repo, one schema, real verifier, EE smoke test | — | 8 | **done** (EE smoke test waits on your project id) |
-| 2 | **Earth Engine engine for any AOI.** Phase-1 rework (below); `agents/ee_engine.py` (SCL composites, indices, change mask, vectorised regions, real `mean_conf`); AOI validation + size cap; `tools.py` mock/EE switch; produce the Quang Ninh `change_regions_quangninh_v1.json` | 1 | 14 | next |
+| 2 | **Earth Engine engine for any AOI.** Phase-1 rework (below); `agents/ee_engine.py` (SCL composites, indices, change mask, vectorised regions, real `mean_conf`); AOI validation + size cap; `tools.py` mock/EE switch; produce the Quang Ninh `change_regions_quangninh_v1.json` | 1 | 14 | **in progress** |
 | 3 | **Ground-truth labelling.** `notebooks/EviChange_labeling.ipynb`: 30 blind sites, then relabel 10 after ≥7 days | 2 | 4 | notebook ready |
 | 4 | **Real VLM.** `VLMClient` (hf / http / replay); develop prompts on detected QN regions **outside** the 30 labelled sites; freeze; run 3 conditions on the 30 sites | 2, 3 (labels done first) | 14 | |
 | 5 | **Evaluation.** Claim adjudication page (condition hidden), `eval/metrics.py`, results tables | 3, 4 | 10 | |
@@ -25,7 +25,7 @@ Total remaining ≈ 84 h against ≈117 h: about 4 weeks of margin before the wr
 The labelling itself is short, but the 7-day relabel gap runs alongside Phase 4.
 Re-plan trigger: Phase 4 not finished by end of week 6.
 
-### Phase-1 rework (done first in Phase 2)
+### Phase-1 rework (implemented in Phase 2)
 - `agents/nodes.py`: `AOI_BOUNDS` is hardcoded to Quang Ninh. Derive bounds, the published
   AOI and mock geometry from `state["aoi"]`.
 - `agents/tools.py`: mock `change_frac` divides by `24830` ha (the Quang Ninh box area).

@@ -1,6 +1,8 @@
 import pytest
+import random
 
-from agents.schema import REASONS, SchemaError, check, validate_change_regions, validate_claim, validate_evidence, validate_region
+from agents import tools
+from agents.schema import REASONS, SchemaError, check, validate_aoi, validate_change_regions, validate_claim, validate_evidence, validate_region, validate_windows
 from webapp.backend import demo_data
 
 GOOD = {"id": "r1", "area_ha": 10.0, "mean_conf": 0.5, "dNDVI": -0.2, "dNDBI": 0.1, "dMNDWI": 0.0, "location": "north"}
@@ -47,3 +49,31 @@ def test_check_raises():
 
 def test_every_reason_has_text():
     assert all(isinstance(v, str) and v for v in REASONS.values())
+
+
+def test_aoi_validation_accepts_study_polygon_and_rejects_point():
+    aoi = {"type": "Polygon", "coordinates": [[[107.22, 20.98], [107.40, 20.98], [107.40, 21.10], [107.22, 21.10], [107.22, 20.98]]]}
+    assert validate_aoi(aoi) == []
+    assert validate_aoi({"type": "Point", "coordinates": [107.3, 21.04]})
+
+
+def test_window_validation():
+    assert validate_windows(["2018-11-01", "2019-03-31"], ["2022-11-01", "2023-03-31"]) == []
+    assert validate_windows(["2019-03-31", "2019-01-01"], ["2022-11-01", "2023-03-31"])
+    assert validate_windows(["2019-01-01", "2020-06-01"], ["2022-11-01", "2023-03-31"])
+    assert validate_windows(["2019-01-01", "2019-06-01"], ["2019-05-01", "2019-07-01"])
+
+
+def test_mock_detector_region_and_metadata_contract(monkeypatch):
+    monkeypatch.setenv("EVICHANGE_ENGINE", "mock")
+    aoi = {"type": "Polygon", "coordinates": [[[107.22, 20.98], [107.40, 20.98], [107.40, 21.10], [107.22, 21.10], [107.22, 20.98]]]}
+    before = ["2018-11-01", "2019-03-31"]
+    after = ["2022-11-01", "2023-03-31"]
+    thresholds = {"max_cloud_pct": 30, "index_delta": 0.1, "min_area_ha": 1.0, "mean_conf_min": 0.5}
+    change_frac, regions, metadata = tools.run_change_detection(random.Random(4), aoi, before, after, thresholds, n_regions=20)
+    assert 0 <= change_frac <= 1
+    assert all(validate_region(region) == [] for region in regions)
+    assert metadata["before_window"] == before
+    assert metadata["after_window"] == after
+    assert metadata["thresholds"] == thresholds
+    assert metadata["aoi"] == aoi

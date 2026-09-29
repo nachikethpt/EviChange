@@ -11,8 +11,9 @@ class LogEntry(TypedDict):
 class PipelineState(TypedDict, total=False):
     aoi: dict
     aoi_name: str
-    date_before: str
-    date_after: str
+    before_window: list[str]
+    after_window: list[str]
+    thresholds: dict
     task: Literal["change_detection"]
     condition: Literal["template", "ungated", "gated"]
     publish_live: bool  # if True, the Publishing Agent writes into webapp/backend/data/
@@ -25,6 +26,7 @@ class PipelineState(TypedDict, total=False):
     model_version: str
     change_frac: float
     regions: list[dict]
+    engine_metadata: dict
     prompt_version: str
     claims: list[dict]
     abstain: list[dict]

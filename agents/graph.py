@@ -1,9 +1,10 @@
 """LangGraph wiring, including a bounded preprocessing retry loop."""
 from langgraph.graph import END, StateGraph
 
-from .schema import CONDITIONS
+from .schema import CONDITIONS, check, validate_aoi, validate_windows
 from .nodes import dl_analysis_agent, geovlm_agent, ingestion_agent, orchestrator, preprocessing_agent, publishing_agent
 from .state import PipelineState, log
+from .study import load_study_config
 
 
 def _failed_node(state: PipelineState) -> dict:
@@ -23,13 +24,12 @@ def _after_orchestrator(state: PipelineState) -> str:
     if normalized_condition not in CONDITIONS:
         return "failed"
 
-    aoi = state.get("aoi")
-    if not isinstance(aoi, dict) or not aoi.get("type") or not aoi.get("coordinates"):
+    try:
+        check(validate_aoi(state.get("aoi")), "AOI")
+    except ValueError:
         return "failed"
 
-    date_before = str(state.get("date_before", "")).strip()
-    date_after = str(state.get("date_after", "")).strip()
-    if not date_before or not date_after or date_after <= date_before:
+    if validate_windows(state.get("before_window"), state.get("after_window")):
         return "failed"
 
     return "ingestion_agent"
@@ -64,14 +64,15 @@ def build_graph():
     return graph.compile()
 
 
-def run_pipeline(aoi_name: str, aoi: dict, date_before: str, date_after: str, condition: str = "gated", max_attempts: int = 3, publish_live: bool = False) -> PipelineState:
+def run_pipeline(aoi_name: str, aoi: dict, before_window: list[str], after_window: list[str], condition: str = "gated", max_attempts: int = 3, publish_live: bool = False) -> PipelineState:
     normalized_condition = str(condition).strip().lower() if condition is not None else "gated"
     bounded_attempts = max(int(max_attempts), 1)
     return build_graph().invoke({
         "aoi": aoi,
         "aoi_name": aoi_name,
-        "date_before": date_before,
-        "date_after": date_after,
+        "before_window": before_window,
+        "after_window": after_window,
+        "thresholds": load_study_config()["thresholds"],
         "task": "change_detection",
         "condition": normalized_condition,
         "publish_live": publish_live,
