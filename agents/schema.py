@@ -155,6 +155,8 @@ def validate_windows(before_window: object, after_window: object) -> list[str]:
         parsed.append((start, end))
     if len(parsed) == 2 and parsed[0][1] > parsed[1][0] and parsed[1][1] > parsed[0][0]:
         errors.append("before_window and after_window must not overlap")
+    if len(parsed) == 2 and parsed[0][0] >= parsed[1][0]:
+        errors.append("before_window must precede after_window")
     return errors
 
 
