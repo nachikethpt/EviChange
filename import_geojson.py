@@ -1,4 +1,4 @@
-"""Bring Person 1's REAL Earth Engine export into the web app.
+r"""Bring Person 1's REAL Earth Engine export into the web app.
 
 EviChange_Person1_starter.ipynb (../notebooks/) ends by saving
 `change_regions_quangninh_v1.json` to Google Drive. Download that file, then:
@@ -26,9 +26,7 @@ def main():
     fc = json.loads(src.read_text())
     errors = validate_change_regions(fc)
     if errors:
-        sys.exit(f"{src} does not match agents/schema.py:
-  " + "
-  ".join(errors[:20]))
+        sys.exit(f"{src} does not match agents/schema.py:\n  " + "\n  ".join(errors[:20]))
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     (DATA_DIR / "change_regions.json").write_text(json.dumps(fc, indent=2))
