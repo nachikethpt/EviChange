@@ -9,13 +9,15 @@ or Person 1's real Earth Engine export has written backend/data/change_regions.j
 then automatically switches to that — no code change needed.
 
 Phase 6: POST /api/runs and GET /api/runs/{id} run the agent pipeline on demand,
-as a background job, against an arbitrary AOI + date range.
+as a background job, against an arbitrary AOI + date range. Existing /api/data/*,
+/api/layers and /api/report endpoints now accept an optional run_id so they can
+serve a specific run's results instead of only the demo/global data.
 """
 import asyncio
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
@@ -73,38 +75,40 @@ def health():
 
 
 @app.get("/api/layers")
-def layers():
-    """The operational layers the map loads on start. Person 1/3: add real layers here."""
-    label = "Detected change regions" if data_store.is_live_data() else "Detected change regions (DEMO)"
+def layers(run_id: Optional[str] = None):
+    """The operational layers the map loads on start. Pass run_id to point at a specific run's results."""
+    label = "Detected change regions" if data_store.is_live_data(run_id) else "Detected change regions (DEMO)"
+    suffix = f"?run_id={run_id}" if run_id else ""
     return [
-        {"id": "aoi", "name": "Study area (AOI)", "kind": "geojson", "url": "/api/data/aoi", "style": "outline"},
-        {"id": "change", "name": label, "kind": "geojson", "url": "/api/data/change_regions", "style": "confidence"},
+        {"id": "aoi", "name": "Study area (AOI)", "kind": "geojson", "url": f"/api/data/aoi{suffix}", "style": "outline"},
+        {"id": "change", "name": label, "kind": "geojson", "url": f"/api/data/change_regions{suffix}", "style": "confidence"},
     ]
 
 
 @app.get("/api/data/aoi")
-def aoi():
-    return data_store.get_aoi()
+def aoi(run_id: Optional[str] = None):
+    return data_store.get_aoi(run_id)
 
 
 @app.get("/api/data/change_regions")
-def change_regions():
-    return data_store.get_change_regions()
+def change_regions(run_id: Optional[str] = None):
+    return data_store.get_change_regions(run_id)
 
 
 class ReportRequest(BaseModel):
     region_ids: List[str]
     condition: Literal["template", "ungated", "gated"] = "gated"
+    run_id: Optional[str] = None
 
 
 @app.post("/api/report")
 def report(req: ReportRequest):
     """Person 2's endpoint: selected change regions -> claims with verdicts and abstentions."""
-    known = data_store.known_region_ids()
+    known = data_store.known_region_ids(req.run_id)
     unknown = [r for r in req.region_ids if r not in known]
     if unknown:
         raise HTTPException(400, f"unknown region ids: {unknown}")
-    ev = data_store.evidence_for(req.region_ids)
+    ev = data_store.evidence_for(req.region_ids, req.run_id)
     return build_report(ev, req.condition)
 
 
