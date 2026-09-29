@@ -71,3 +71,58 @@ def test_publishing_rejects_schema_violations():
     state = {"regions": [{"id": "r1"}], "date_before": "a", "date_after": "b", "model_version": "m", "scene_before_id": "s"}
     with pytest.raises(Exception, match="invalid published change regions"):
         nodes.publishing_agent(state)
+
+QN_AOI = {
+    "type": "Polygon",
+    "coordinates": [[[107.22, 20.98], [107.40, 20.98], [107.40, 21.10], [107.22, 21.10], [107.22, 20.98]]],
+}
+
+
+def test_run_rejects_point_aoi(client):
+    resp = client.post("/api/runs", json={
+        "aoi": {"type": "Point", "coordinates": [107.3, 21.04]},
+        "date_before": "2018-01-01", "date_after": "2022-06-01", "condition": "gated",
+    })
+    assert resp.status_code == 400
+
+
+def test_run_rejects_oversized_multipolygon(client):
+    huge = {"type": "MultiPolygon", "coordinates": [[[[0, 0], [50, 0], [50, 50], [0, 50], [0, 0]]]]}
+    resp = client.post("/api/runs", json={
+        "aoi": huge, "date_before": "2018-01-01", "date_after": "2022-06-01", "condition": "gated",
+    })
+    assert resp.status_code == 400
+
+
+def test_run_rejects_invalid_condition(client):
+    resp = client.post("/api/runs", json={
+        "aoi": QN_AOI, "date_before": "2018-01-01", "date_after": "2022-06-01", "condition": "xyz",
+    })
+    assert resp.status_code == 400
+
+
+def test_unknown_run_id_rejected(client):
+    """Well-formed (12-char hex) but nonexistent run id -> 404, not a silent demo-data fallback."""
+    fake_but_valid_id = "0123456789ab"
+    assert client.get(f"/api/runs/{fake_but_valid_id}").status_code == 404
+    assert client.get(f"/api/data/change_regions?run_id={fake_but_valid_id}").status_code == 404
+
+
+def test_malformed_run_id_rejected(client):
+    assert client.get("/api/data/change_regions?run_id=../../etc").status_code == 400
+
+
+def test_run_end_to_end_and_cache(client):
+    resp = client.post("/api/runs", json={
+        "aoi": QN_AOI, "date_before": "2018-01-01", "date_after": "2022-06-01", "condition": "gated",
+    })
+    assert resp.status_code == 202
+    run_id = resp.json()["run_id"]
+
+    status = client.get(f"/api/runs/{run_id}").json()
+    assert status["status"] in ("queued", "running", "done")
+
+    resp2 = client.post("/api/runs", json={
+        "aoi": QN_AOI, "date_before": "2018-01-01", "date_after": "2022-06-01", "condition": "gated",
+    })
+    assert resp2.json()["cached"] in (True, False)
