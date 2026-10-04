@@ -1,7 +1,9 @@
+import time
+
 import pytest
 from fastapi.testclient import TestClient
 
-from agents import nodes, webapp_bridge
+from agents import nodes, tools, webapp_bridge
 from agents.graph import run_pipeline
 from agents.schema import CHANGE_TYPES, T_IDX, validate_claim, validate_change_regions
 from webapp.backend import data_store
@@ -87,27 +89,39 @@ QN_AOI = {
 }
 
 
+def run_request(**overrides):
+    return {"aoi": QN_AOI, "before_window": BEFORE, "after_window": AFTER, "condition": "gated", **overrides}
+
+
 def test_run_rejects_point_aoi(client):
-    resp = client.post("/api/runs", json={
-        "aoi": {"type": "Point", "coordinates": [107.3, 21.04]},
-        "date_before": "2018-01-01", "date_after": "2022-06-01", "condition": "gated",
-    })
+    resp = client.post("/api/runs", json=run_request(aoi={"type": "Point", "coordinates": [107.3, 21.04]}))
     assert resp.status_code == 400
 
 
 def test_run_rejects_oversized_multipolygon(client):
     huge = {"type": "MultiPolygon", "coordinates": [[[[0, 0], [50, 0], [50, 50], [0, 50], [0, 0]]]]}
-    resp = client.post("/api/runs", json={
-        "aoi": huge, "date_before": "2018-01-01", "date_after": "2022-06-01", "condition": "gated",
-    })
-    assert resp.status_code == 400
+    assert client.post("/api/runs", json=run_request(aoi=huge)).status_code == 400
 
 
 def test_run_rejects_invalid_condition(client):
-    resp = client.post("/api/runs", json={
-        "aoi": QN_AOI, "date_before": "2018-01-01", "date_after": "2022-06-01", "condition": "xyz",
-    })
-    assert resp.status_code == 400
+    assert client.post("/api/runs", json=run_request(condition="xyz")).status_code == 400
+
+
+@pytest.mark.parametrize("before, after", [
+    (AFTER, BEFORE),                                    # before after after
+    (["2018-11-01", "2020-03-31"], AFTER),              # window longer than 12 months
+    (["2018-11-01", "2023-01-31"], AFTER),              # windows overlap
+    (["2019-03-31", "2018-11-01"], AFTER),              # start after end
+    (["2018-11-01"], AFTER),                            # not [start, end]
+    (["Nov 2018", "Mar 2019"], AFTER),                  # not ISO dates
+])
+def test_run_rejects_bad_windows(client, before, after):
+    assert client.post("/api/runs", json=run_request(before_window=before, after_window=after)).status_code == 400
+
+
+def test_run_rejects_old_single_date_fields(client):
+    old = {"aoi": QN_AOI, "date_before": "2018-01-01", "date_after": "2022-06-01", "condition": "gated"}
+    assert client.post("/api/runs", json=old).status_code == 422
 
 
 def test_unknown_run_id_rejected(client):
@@ -121,17 +135,25 @@ def test_malformed_run_id_rejected(client):
     assert client.get("/api/data/change_regions?run_id=../../etc").status_code == 400
 
 
-def test_run_end_to_end_and_cache(client):
-    resp = client.post("/api/runs", json={
-        "aoi": QN_AOI, "date_before": "2018-01-01", "date_after": "2022-06-01", "condition": "gated",
-    })
-    assert resp.status_code == 202
-    run_id = resp.json()["run_id"]
+def test_run_end_to_end_and_cache(client, monkeypatch):
+    """A run must actually finish in the background worker and serve its own regions;
+    the identical request afterwards is answered from the cache."""
+    monkeypatch.setattr(tools, "run_preprocessing", lambda *a: (True, "ok"))   # no random too-cloudy retries
+    with client:                                       # 'with' runs the app lifespan, i.e. starts the worker
+        resp = client.post("/api/runs", json=run_request())
+        assert resp.status_code == 202
+        run_id = resp.json()["run_id"]
 
-    status = client.get(f"/api/runs/{run_id}").json()
-    assert status["status"] in ("queued", "running", "done")
+        for _ in range(100):
+            status = client.get(f"/api/runs/{run_id}").json()
+            if status["status"] in ("done", "error"):
+                break
+            time.sleep(0.05)
+        assert status["status"] == "done", status
+        assert status["before_window"] == BEFORE and status["after_window"] == AFTER
 
-    resp2 = client.post("/api/runs", json={
-        "aoi": QN_AOI, "date_before": "2018-01-01", "date_after": "2022-06-01", "condition": "gated",
-    })
-    assert resp2.json()["cached"] in (True, False)
+        regions = client.get(f"/api/data/change_regions?run_id={run_id}").json()
+        assert regions["features"] and validate_change_regions(regions) == []
+
+        again = client.post("/api/runs", json=run_request()).json()
+        assert again == {"run_id": run_id, "status": "done", "cached": True}
