@@ -34,8 +34,59 @@ button { font: inherit; cursor: pointer; }
 .icon { background: none; border: none; padding: 2px 5px; border-radius: 4px; color: var(--muted); }
 .icon:hover { background: var(--bg); color: var(--text); }
 
-.legend .ramp { height: 10px; border-radius: 3px; background: linear-gradient(90deg, #fde68a, #f97316, #b91c1c); }
-.legend .ramp-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+.legend-row { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 1px solid transparent; border-radius: 6px; padding: 3px 4px; text-align: left; color: var(--text); }
+.legend-row:hover { background: var(--bg); }
+.legend-row span:nth-child(2) { flex: 1; }
+.legend-row.off { opacity: .4; }
+.legend-foot { font-size: 11px; margin-top: 6px; }
+.linkish { background: none; border: none; padding: 0; color: var(--accent); text-decoration: underline; font-size: inherit; }
+.swatch { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; font-size: 12px; line-height: 1; flex: none; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--border); }
+.swatch.big { width: 34px; height: 34px; font-size: 18px; }
+
+/* change-type icons on the map */
+.chg-marker { width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 2px solid #fff; background: var(--c); box-shadow: 0 1px 4px rgba(0,0,0,.45); display: grid; place-items: center; font-size: 13px; line-height: 1; }
+.chg-marker:hover { transform: scale(1.2); z-index: 2; }
+
+/* Find changes panel */
+.chat { max-height: 210px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.msg { padding: 6px 9px; border-radius: 10px; max-width: 92%; }
+.msg.bot { background: var(--accent-soft); align-self: flex-start; border-bottom-left-radius: 2px; }
+.msg.you { background: var(--top); color: #fff; align-self: flex-end; border-bottom-right-radius: 2px; }
+.chat-form { display: flex; gap: 6px; margin-bottom: 6px; }
+.chat-form input { flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font: inherit; }
+.chat-form input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.examples { margin-bottom: 12px; }
+.chip.ex { cursor: pointer; }
+.chip.ex:hover { border-color: var(--accent); }
+.seg button:disabled { color: var(--muted); cursor: not-allowed; }
+.type-row, .region-row { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 1px solid transparent; border-radius: 6px; padding: 4px; text-align: left; color: var(--text); }
+.type-row:hover, .region-row:hover { background: var(--accent-soft); border-color: #b9e3dc; }
+.type-name { width: 120px; flex: none; }
+.type-bar { flex: 1; height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+.type-bar span { display: block; height: 100%; }
+.type-num { width: 72px; flex: none; text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
+.region-list { max-height: 300px; overflow-y: auto; margin-bottom: 8px; }
+
+/* region detail card */
+.card-head { display: flex; gap: 10px; align-items: center; margin: 8px 0 10px; }
+.card-icons { display: flex; gap: 4px; }
+.card-title { font-weight: 600; font-size: 14px; }
+.beforeafter { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.beforeafter figure { margin: 0; }
+.minimap { position: relative; height: 140px; border-radius: 6px; overflow: hidden; background: #dfe3e8; }
+.beforeafter figcaption { font-size: 11px; color: var(--muted); text-align: center; margin-top: 2px; }
+.small { font-size: 11px; }
+.explain { display: flex; gap: 8px; align-items: flex-start; margin: 4px 0 8px; }
+.ibar { margin-bottom: 8px; }
+.ibar-label { display: flex; justify-content: space-between; font-size: 12px; font-variant-numeric: tabular-nums; }
+.ibar-track { position: relative; height: 10px; background: #f1f5f9; border-radius: 5px; margin-top: 2px; }
+.ibar-band { position: absolute; top: 0; bottom: 0; background: #e2e8f0; }
+.ibar-zero { position: absolute; top: -2px; bottom: -2px; left: 50%; width: 1px; background: #94a3b8; }
+.ibar-fill { position: absolute; top: 2px; bottom: 2px; border-radius: 3px; }
+.facts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.facts div { background: var(--bg); border-radius: 6px; padding: 5px 8px; display: flex; flex-direction: column; }
+.facts span { font-size: 11px; }
+.card-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 
 .mapwrap { position: relative; flex: 1; min-width: 0; }
 #map, #swipeMap { position: absolute; inset: 0; }

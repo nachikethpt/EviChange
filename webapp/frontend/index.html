@@ -17,6 +17,7 @@
       <button data-tool="draw"     title="Draw an area and analyse change inside it">✎ Draw area</button>
       <button data-tool="swipe"    title="Compare two images with a swipe bar">⇆ Swipe</button>
       <button data-tool="table"    title="Open the attribute table">☰ Table</button>
+      <button data-tool="changes"  title="Find and explain the changes in an area">🔎 Find changes</button>
       <button data-tool="report" class="primary" title="AI change report">✦ AI report</button>
     </nav>
   </header>
@@ -25,11 +26,7 @@
     <aside class="contents" id="contents">
       <div class="pane-title">Contents</div>
       <div id="layerList"></div>
-      <div class="legend" id="legend">
-        <div class="pane-subtitle">Change regions — model confidence</div>
-        <div class="ramp"></div>
-        <div class="ramp-labels"><span>0.3</span><span>0.6</span><span>0.9</span></div>
-      </div>
+      <div class="legend" id="legend"></div>
     </aside>
 
     <section class="mapwrap" id="mapwrap">
@@ -61,6 +58,7 @@
   <script src="/static/vendor/maplibre-gl.js"></script>
   <script src="/static/vendor/turf.min.js"></script>
   <script src="/static/vendor/shp.min.js"></script>
+  <script src="/static/explore.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

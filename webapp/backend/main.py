@@ -16,6 +16,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from agents.schema import CHANGE_TYPES, CONF_MIN, T_IDX
+
 from . import data_store
 from .report import build_report
 
@@ -38,6 +40,13 @@ def layers():
         {"id": "aoi", "name": "Study area (AOI)", "kind": "geojson", "url": "/api/data/aoi", "style": "outline"},
         {"id": "change", "name": label, "kind": "geojson", "url": "/api/data/change_regions", "style": "confidence"},
     ]
+
+
+@app.get("/api/change_types")
+def change_types():
+    """The change-type rules from agents/schema.py, so the map colours regions exactly as the verifier reads them."""
+    return {"t_idx": T_IDX, "conf_min": CONF_MIN,
+            "types": {k: {"field": field, "sign": sign, "label": label} for k, (field, sign, label) in CHANGE_TYPES.items()}}
 
 
 @app.get("/api/data/aoi")
