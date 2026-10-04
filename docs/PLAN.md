@@ -17,7 +17,7 @@ Quang Ninh results are validated. See `decisions.md` D4–D5.
 | 3 | **Ground-truth labelling.** `notebooks/EviChange_labeling.ipynb`: 30 blind sites, then relabel 10 after ≥7 days | 2 | 4 | notebook ready |
 | 4 | **Real VLM.** `VLMClient` (hf / http / replay); develop prompts on detected QN regions **outside** the 30 labelled sites; freeze; run 3 conditions on the 30 sites | 2, 3 (labels done first) | 14 | |
 | 5 | **Evaluation.** Claim adjudication page (condition hidden), `eval/metrics.py`, results tables | 3, 4 | 10 | |
-| 6 | **On-demand runs API.** `POST /api/runs` (AOI + dates) → background job running the agent pipeline on Earth Engine; `GET /api/runs/{id}` polling; per-run data store; cache; AOI cap | 2 | 12 | |
+| 6 | **On-demand runs API.** `POST /api/runs` (AOI + before/after date windows) → background job running the agent pipeline on Earth Engine; `GET /api/runs/{id}` polling; per-run data store; cache; AOI cap | 2 | 12 | |
 | 7 | **App.** Draw/search AOI, date pickers, run + progress state, per-run layers, "not validated outside Quang Ninh" banner, verdict reasons, export, cleanup | 6 | 16 | |
 | 8 | Write-up + advisor demo | 5, 7 | 14 | |
 

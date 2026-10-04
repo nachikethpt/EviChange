@@ -29,13 +29,13 @@ def _run_dir(run_id: str) -> Path:
     return DATA_DIR / "runs" / run_id
 
 
-def create_run(run_id: str, aoi_geojson: dict, date_before: str, date_after: str, condition: str, code_version: str) -> None:
+def create_run(run_id: str, aoi_geojson: dict, before_window: list[str], after_window: list[str], condition: str, code_version: str) -> None:
     d = _run_dir(run_id)
     d.mkdir(parents=True, exist_ok=True)
     (d / "status.json").write_text(json.dumps({
         "run_id": run_id, "status": "queued", "progress": 0.0,
         "created_at": time.time(), "error": None, "cache_key": None,
-        "aoi": aoi_geojson, "date_before": date_before, "date_after": date_after,
+        "aoi": aoi_geojson, "before_window": before_window, "after_window": after_window,
         "condition": condition, "code_version": code_version,
     }, indent=2))
 
@@ -59,9 +59,9 @@ def write_run_result(run_id: str, aoi_geojson: dict, change_regions_geojson: dic
     (d / "report.json").write_text(json.dumps(report, indent=2))
 
 
-def cache_key(aoi_geojson: dict, date_before: str, date_after: str, condition: str, code_version: str) -> str:
+def cache_key(aoi_geojson: dict, before_window: list[str], after_window: list[str], condition: str, code_version: str) -> str:
     payload = json.dumps(
-        {"aoi": aoi_geojson, "date_before": date_before, "date_after": date_after,
+        {"aoi": aoi_geojson, "before_window": before_window, "after_window": after_window,
          "condition": condition, "code_version": code_version},
         sort_keys=True,
     )

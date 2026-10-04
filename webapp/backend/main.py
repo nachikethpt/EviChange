@@ -9,7 +9,8 @@ or Person 1's real Earth Engine export has written backend/data/change_regions.j
 then automatically switches to that — no code change needed.
 
 Phase 6: POST /api/runs and GET /api/runs/{id} run the agent pipeline on demand,
-as a background job, against an arbitrary AOI + date range. Existing /api/data/*,
+as a background job, against an arbitrary AOI + before/after date windows
+([start, end] each, validated by schema.validate_windows). Existing /api/data/*,
 /api/layers and /api/report endpoints now accept an optional run_id so they can
 serve a specific run's results instead of only the demo/global data.
 
@@ -32,16 +33,15 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from agents.graph import run_pipeline
-from agents.schema import CHANGE_TYPES, CONDITIONS, CONF_MIN, T_IDX
+from agents.schema import CHANGE_TYPES, CONDITIONS, CONF_MIN, T_IDX, validate_aoi, validate_windows
 
 from . import data_store
-from .aoi_validation import validate_aoi
 from .report import build_report
 
 ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend"
 
-CODE_VERSION = "phase6-v1"  # bump when pipeline logic changes, invalidates cache
+CODE_VERSION = "phase6-v2"  # bump when pipeline logic changes, invalidates cache
 run_queue: asyncio.Queue = asyncio.Queue()
 
 _RUN_ID_RE = re.compile(r"^[0-9a-f]{12}$")
@@ -60,11 +60,11 @@ def _require_valid_run(run_id: Optional[str]) -> None:
 
 async def _worker():
     while True:
-        run_id, aoi, date_before, date_after, condition = await run_queue.get()
+        run_id, aoi, before_window, after_window, condition = await run_queue.get()
         data_store.update_status(run_id, status="running", progress=0.1)
         try:
             state = await asyncio.to_thread(
-                run_pipeline, run_id, aoi, date_before, date_after, condition, 3, False
+                run_pipeline, run_id, aoi, before_window, after_window, condition, 3, False
             )
             if state.get("status") == "failed":
                 last_log = state.get("log", [])[-1] if state.get("log") else {}
@@ -146,8 +146,8 @@ def report(req: ReportRequest):
 
 class RunRequest(BaseModel):
     aoi: dict
-    date_before: str
-    date_after: str
+    before_window: List[str]   # [start, end], ISO dates
+    after_window: List[str]
     condition: str = "gated"
 
 
@@ -156,21 +156,21 @@ def create_run(req: RunRequest):
     if req.condition not in CONDITIONS:
         raise HTTPException(400, f"condition must be one of {CONDITIONS}, got {req.condition!r}")
 
-    errors = validate_aoi(req.aoi)
+    # Same checks the pipeline applies, so a bad request fails here with a clear message
+    # instead of inside the background job.
+    errors = validate_aoi(req.aoi) + validate_windows(req.before_window, req.after_window)
     if errors:
         raise HTTPException(400, "; ".join(errors))
-    if req.date_after <= req.date_before:
-        raise HTTPException(400, "date_after must be later than date_before")
 
-    key = data_store.cache_key(req.aoi, req.date_before, req.date_after, req.condition, CODE_VERSION)
+    key = data_store.cache_key(req.aoi, req.before_window, req.after_window, req.condition, CODE_VERSION)
     cached = data_store.find_cached_run(key)
     if cached:
         return {"run_id": cached, "status": "done", "cached": True}
 
     run_id = uuid.uuid4().hex[:12]
-    data_store.create_run(run_id, req.aoi, req.date_before, req.date_after, req.condition, CODE_VERSION)
+    data_store.create_run(run_id, req.aoi, req.before_window, req.after_window, req.condition, CODE_VERSION)
     data_store.update_status(run_id, cache_key=key)
-    run_queue.put_nowait((run_id, req.aoi, req.date_before, req.date_after, req.condition))
+    run_queue.put_nowait((run_id, req.aoi, req.before_window, req.after_window, req.condition))
     return {"run_id": run_id, "status": "queued", "cached": False}
 
 
