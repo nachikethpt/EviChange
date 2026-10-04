@@ -2,6 +2,7 @@
  * Sections: 1 tile sources · 2 map + basemap · 3 layer registry + Contents pane
  * 4 identify/popups · 5 attribute table · 6 sketch (measure + draw) · 7 swipe
  * 8 AI report panel · 9 add data · 10 panel/toolbar wiring · 11 start-up
+ * The change explorer (change-type colours/icons, "Find changes" panel, region card) is in explore.js.
  */
 'use strict';
 
@@ -87,7 +88,12 @@ function addVectorLayer({ id, name, data, style = 'auto', visible = true, remova
   const mapLayers = [];
   const add = spec => { map.addLayer({ ...spec, source: id, layout: { ...vis, ...(spec.layout || {}) } }); mapLayers.push(spec.id); };
   let base = {};
-  if (style === 'confidence') {
+  if (style === 'change_type') {
+    const paint = changeTypePaint(hl);
+    base = { fill: paint.fill['fill-opacity'] };
+    add({ id: `${id}-fill`, type: 'fill', paint: paint.fill });
+    add({ id: `${id}-line`, type: 'line', paint: paint.line });
+  } else if (style === 'confidence') {
     base = { fill: 0.55 };
     add({ id: `${id}-fill`, type: 'fill', paint: {
       'fill-color': ['interpolate', ['linear'], ['get', 'mean_conf'], 0.3, '#fde68a', 0.6, '#f97316', 0.9, '#b91c1c'],
@@ -121,6 +127,7 @@ function applyOrder() {
 function setVisible(layer, on) {
   layer.visible = on;
   layer.mapLayers.forEach(ml => map.setLayoutProperty(ml, 'visibility', on ? 'visible' : 'none'));
+  if (layer.id === CHANGE_ID) refreshMarkers();
 }
 
 function setOpacity(layer, op) {
@@ -206,6 +213,8 @@ map.on('click', e => {
     syncSelection(); generateReport();
     return;
   }
+  // Otherwise clicking a change region opens its detail card (explore.js)
+  if (hit && layerOfMapLayer(hit.layer.id)?.id === CHANGE_ID) return openRegion(hit.properties.id);
   const html = hit
     ? `<strong>${esc(layerOfMapLayer(hit.layer.id)?.name)}</strong>${propsTable(hit.properties)}`
     : `<strong>Location</strong><br>Lon ${e.lngLat.lng.toFixed(5)}, Lat ${e.lngLat.lat.toFixed(5)}`;
@@ -340,13 +349,10 @@ function measureText() {
 }
 
 function analyseDrawnArea() {
-  const area = sketchGeometry(false);
-  const change = state.layers.find(l => l.id === CHANGE_ID);
-  const hits = change ? change.data.features.filter(f => turf.booleanIntersects(f, area)).map(f => f.properties.id) : [];
-  state.selected = new Set(hits);
+  setDrawnArea(sketchGeometry(false));   // explore.js: breakdown of every change inside the area
+  state.selected = new Set(explore.drawnIds);
   syncSelection();
-  state.drawnArea = area;
-  openPanel('report');
+  openPanel('changes');
 }
 
 function showHint(text) { const h = $('#hint'); h.hidden = !text; h.textContent = text || ''; }
@@ -497,7 +503,8 @@ $('#fileInput').onchange = async e => {
 function alertBox(msg) { showHint(msg); setTimeout(() => showHint(null), 6000); }
 
 // ---------- 10. Panels + toolbar ----------
-const PANEL_TITLES = { basemap: 'Basemap gallery', measure: 'Measure', draw: 'Draw area to analyse', swipe: 'Swipe compare', report: 'AI change report' };
+const PANEL_TITLES = { basemap: 'Basemap gallery', measure: 'Measure', draw: 'Draw area to analyse', swipe: 'Swipe compare',
+                       changes: 'Find changes', report: 'AI change report' };
 
 function openPanel(name) {
   if (state.panel === name) return renderPanel();
@@ -512,9 +519,10 @@ function openPanel(name) {
   if (name === 'report') generateReport(); else renderPanel();
 }
 function closePanel(resize = true) {
-  // keep a finished drawn area visible when moving on to the report; clear everything else
+  // keep a finished drawn area visible when moving on to the change panel or report; clear everything else
   if (state.sketch) stopSketch(!(state.panel === 'draw' && state.sketch.done));
-  else if (state.panel === 'report' || state.panel === 'measure') map.getSource('sketch')?.setData(turf.featureCollection([]));
+  else if (state.panel === 'measure' || (resize && ['report', 'changes'].includes(state.panel))) map.getSource('sketch')?.setData(turf.featureCollection([]));
+  if (state.panel === 'changes') { destroyCardMaps(); highlightRegion(null); }
   if (state.swipe.on) swipeOff();
   state.panel = null;
   $('#panel').hidden = true;
@@ -550,7 +558,7 @@ function renderPanel() {
     $('#mNew').onclick = () => startSketch(mode, 'measure');
   }
   if (name === 'draw') {
-    body.innerHTML = `<p>Draw a polygon on the map. When you double-click to close it, every change region inside it is sent to the AI report.</p>
+    body.innerHTML = `<p>Draw a polygon on the map. When you double-click to close it, you get a breakdown of every change inside it, by type, with the AI report one click away.</p>
       <div class="section">${state.sketch ? measureText() : ''}</div>
       <button class="btn" id="dNew">Start again</button>`;
     $('#dNew').onclick = () => startSketch('polygon', 'draw');
@@ -563,6 +571,7 @@ function renderPanel() {
     $('#swL').onchange = e => { state.swipe.left = e.target.value; swipeOn(); };
     $('#swR').onchange = e => { state.swipe.right = e.target.value; swipeOn(); };
   }
+  if (name === 'changes') renderChangesPanel(body);
   if (name === 'report') {
     const ids = [...state.selected].sort();
     body.innerHTML = `
@@ -610,11 +619,14 @@ map.on('load', async () => {
     state.liveData = !!health.live_data;
   } catch (err) { state.liveData = false; }
   try {
+    await loadChangeTypes();
     const defs = await (await fetch('/api/layers')).json();
     for (const d of defs) {
       const data = await (await fetch(d.url)).json();
-      addVectorLayer({ id: d.id, name: d.name, data, style: d.style });
+      if (d.id === CHANGE_ID) annotateRegions(data);   // colour + icon by change type instead of confidence
+      addVectorLayer({ id: d.id, name: d.name, data, style: d.id === CHANGE_ID ? 'change_type' : d.style });
     }
+    initExplorer();
   } catch (err) { alertBox(`Could not load layers from the backend: ${err.message}`); }
   window.eviReady = true;
 });

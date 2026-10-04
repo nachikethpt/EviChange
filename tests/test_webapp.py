@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 
 from agents import nodes, webapp_bridge
 from agents.graph import run_pipeline
-from agents.schema import validate_claim, validate_change_regions
+from agents.schema import CHANGE_TYPES, T_IDX, validate_claim, validate_change_regions
 from webapp.backend import data_store
 from webapp.backend.main import app
 
@@ -50,6 +50,13 @@ def test_demo_verdicts_tell_the_research_story(client):
 
 def test_unknown_region_rejected(client):
     assert client.post("/api/report", json={"region_ids": ["nope"], "condition": "gated"}).status_code == 400
+
+
+def test_change_types_endpoint_mirrors_schema(client):
+    """The map's change-type colours must use the same rules as the verifier."""
+    body = client.get("/api/change_types").json()
+    assert body["t_idx"] == T_IDX
+    assert {k: (v["field"], v["sign"], v["label"]) for k, v in body["types"].items()} == CHANGE_TYPES
 
 
 def test_pipeline_and_webapp_share_one_claim_generator(client):
