@@ -7,22 +7,87 @@ then open http://localhost:8000
 Data comes from data_store.py: demo data until the multi-agent pipeline (../agents)
 or Person 1's real Earth Engine export has written backend/data/change_regions.json,
 then automatically switches to that — no code change needed.
+
+Phase 6: POST /api/runs and GET /api/runs/{id} run the agent pipeline on demand,
+as a background job, against an arbitrary AOI + date range. Existing /api/data/*,
+/api/layers and /api/report endpoints now accept an optional run_id so they can
+serve a specific run's results instead of only the demo/global data.
+
+Validation, per review: condition is checked against schema.CONDITIONS before
+queueing (not left to fail inside the background job); any run_id coming from
+a request is checked against the 12-char hex format the server generates
+(rejects path-traversal-shaped input) and checked to actually exist (a typo'd
+run_id returns 404, not a silent fall-through to demo data).
 """
+import asyncio
+import re
+import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from agents.graph import run_pipeline
+from agents.schema import CONDITIONS
+
 from . import data_store
+from .aoi_validation import validate_aoi
 from .report import build_report
 
 ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend"
 
-app = FastAPI(title="EviChange GIS API", version="0.1.0")
+CODE_VERSION = "phase6-v1"  # bump when pipeline logic changes, invalidates cache
+run_queue: asyncio.Queue = asyncio.Queue()
+
+_RUN_ID_RE = re.compile(r"^[0-9a-f]{12}$")
+
+
+def _require_valid_run(run_id: Optional[str]) -> None:
+    """Reject malformed run ids (path-traversal shaped) and unknown ones (would
+    otherwise silently fall back to demo data instead of erroring)."""
+    if run_id is None:
+        return
+    if not _RUN_ID_RE.match(run_id):
+        raise HTTPException(400, "run_id must be a 12-character hex id")
+    if data_store.get_status(run_id) is None:
+        raise HTTPException(404, f"unknown run id: {run_id}")
+
+
+async def _worker():
+    while True:
+        run_id, aoi, date_before, date_after, condition = await run_queue.get()
+        data_store.update_status(run_id, status="running", progress=0.1)
+        try:
+            state = await asyncio.to_thread(
+                run_pipeline, run_id, aoi, date_before, date_after, condition, 3, False
+            )
+            if state.get("status") == "failed":
+                last_log = state.get("log", [])[-1] if state.get("log") else {}
+                reason = state.get("error") or last_log.get("detail") or "pipeline failed"
+                data_store.update_status(run_id, status="error", error=reason)
+            else:
+                data_store.write_run_result(run_id, {
+                    "type": "FeatureCollection",
+                    "features": [{"type": "Feature", "properties": {"name": "on-demand AOI"}, "geometry": aoi}],
+                }, state["published_geojson"], state["published_report"])
+                data_store.update_status(run_id, status="done", progress=1.0)
+        except Exception as exc:
+            data_store.update_status(run_id, status="error", error=str(exc))
+        run_queue.task_done()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    asyncio.create_task(_worker())
+    yield
+
+
+app = FastAPI(title="EviChange GIS API", version="0.1.0", lifespan=lifespan)
 
 
 @app.get("/api/health")
@@ -31,39 +96,81 @@ def health():
 
 
 @app.get("/api/layers")
-def layers():
-    """The operational layers the map loads on start. Person 1/3: add real layers here."""
-    label = "Detected change regions" if data_store.is_live_data() else "Detected change regions (DEMO)"
+def layers(run_id: Optional[str] = None):
+    """The operational layers the map loads on start. Pass run_id to point at a specific run's results."""
+    _require_valid_run(run_id)
+    label = "Detected change regions" if data_store.is_live_data(run_id) else "Detected change regions (DEMO)"
+    suffix = f"?run_id={run_id}" if run_id else ""
     return [
-        {"id": "aoi", "name": "Study area (AOI)", "kind": "geojson", "url": "/api/data/aoi", "style": "outline"},
-        {"id": "change", "name": label, "kind": "geojson", "url": "/api/data/change_regions", "style": "confidence"},
+        {"id": "aoi", "name": "Study area (AOI)", "kind": "geojson", "url": f"/api/data/aoi{suffix}", "style": "outline"},
+        {"id": "change", "name": label, "kind": "geojson", "url": f"/api/data/change_regions{suffix}", "style": "confidence"},
     ]
 
 
 @app.get("/api/data/aoi")
-def aoi():
-    return data_store.get_aoi()
+def aoi(run_id: Optional[str] = None):
+    _require_valid_run(run_id)
+    return data_store.get_aoi(run_id)
 
 
 @app.get("/api/data/change_regions")
-def change_regions():
-    return data_store.get_change_regions()
+def change_regions(run_id: Optional[str] = None):
+    _require_valid_run(run_id)
+    return data_store.get_change_regions(run_id)
 
 
 class ReportRequest(BaseModel):
     region_ids: List[str]
     condition: Literal["template", "ungated", "gated"] = "gated"
+    run_id: Optional[str] = None
 
 
 @app.post("/api/report")
 def report(req: ReportRequest):
     """Person 2's endpoint: selected change regions -> claims with verdicts and abstentions."""
-    known = data_store.known_region_ids()
+    _require_valid_run(req.run_id)
+    known = data_store.known_region_ids(req.run_id)
     unknown = [r for r in req.region_ids if r not in known]
     if unknown:
         raise HTTPException(400, f"unknown region ids: {unknown}")
-    ev = data_store.evidence_for(req.region_ids)
+    ev = data_store.evidence_for(req.region_ids, req.run_id)
     return build_report(ev, req.condition)
+
+
+class RunRequest(BaseModel):
+    aoi: dict
+    date_before: str
+    date_after: str
+    condition: str = "gated"
+
+
+@app.post("/api/runs", status_code=202)
+def create_run(req: RunRequest):
+    if req.condition not in CONDITIONS:
+        raise HTTPException(400, f"condition must be one of {CONDITIONS}, got {req.condition!r}")
+
+    errors = validate_aoi(req.aoi)
+    if errors:
+        raise HTTPException(400, "; ".join(errors))
+    if req.date_after <= req.date_before:
+        raise HTTPException(400, "date_after must be later than date_before")
+
+    key = data_store.cache_key(req.aoi, req.date_before, req.date_after, req.condition, CODE_VERSION)
+    cached = data_store.find_cached_run(key)
+    if cached:
+        return {"run_id": cached, "status": "done", "cached": True}
+
+    run_id = uuid.uuid4().hex[:12]
+    data_store.create_run(run_id, req.aoi, req.date_before, req.date_after, req.condition, CODE_VERSION)
+    data_store.update_status(run_id, cache_key=key)
+    run_queue.put_nowait((run_id, req.aoi, req.date_before, req.date_after, req.condition))
+    return {"run_id": run_id, "status": "queued", "cached": False}
+
+
+@app.get("/api/runs/{run_id}")
+def get_run(run_id: str):
+    _require_valid_run(run_id)
+    return data_store.get_status(run_id)
 
 
 app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
