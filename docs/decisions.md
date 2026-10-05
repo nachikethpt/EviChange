@@ -93,3 +93,37 @@ fraction**: the share of the region's pixels where at least 2 of the 3 index del
 exceed `T_IDX`. It's in [0, 1], has a plain meaning ("how consistently the indices agree
 this is change"), and is computed server-side in Earth Engine. The field name stays for
 schema compatibility; the report defines it explicitly and never calls it a probability.
+
+## D7 — Prompted change search: the VLM steers, the detector finds (2026-10-05, proposed)
+
+**Decision.** The Geo-VLM does more than write the change report: the user can prompt it to
+find changes ("forest cleared for mining near the coast, bigger than 5 ha, 2019 vs 2023").
+It does this in three steps, and **every region outline still comes from the Earth Engine
+detector**. The VLM never draws, invents or deletes a region.
+
+1. **Prompt → search spec.** The VLM turns the prompt into a JSON `SearchSpec`, validated
+   in `schema.py`: change types, gain/loss, min/max ha, locations, scope (all / view /
+   drawn), top N, and optionally `before_window`/`after_window` and detector options
+   (index subset, `MIN_AREA_HA` within fixed bounds). `T_IDX` is not prompt-tunable.
+   Invalid or unparseable output falls back to the keyword parser (`explore.js`
+   `parseQuery()`), which also stays the only path when no `VLMClient` backend is reachable.
+2. **Search or run.** If the spec fits the loaded run, it filters those regions. If it
+   needs other dates, another AOI or other detector options, the app shows the proposed run
+   and the user confirms it before `POST /api/runs` (Earth Engine cost, D5 cap and cache
+   apply). The AOI comes from the drawn/searched area, never from coordinates the VLM
+   writes.
+3. **Candidate check.** For up to 20 matching regions (largest first), the VLM sees the
+   before/after chips plus the prompt and answers `match` / `no_match` / `unsure` with a
+   one-line reason. `no_match` regions are hidden, not removed ("show rejected" toggle),
+   and the map labels the result "VLM-checked, not validated".
+
+The change report for the found regions is then produced and verified exactly as before.
+
+**Why not let the VLM scan imagery itself.** Hundreds to thousands of chips per AOI on a
+7B model is slow, its free detections are the hallucination this project measures, and
+they would need their own ground truth. Out of scope.
+
+**Evaluation.** Unchanged. Prompted search is a tool capability, like D5, not a reported
+result. Its prompts are separate from the frozen report prompts and are never run on the
+30 labelled sites before the Phase-4 freeze. If time allows, the write-up gives a small
+qualitative example of the candidate check against labels, clearly marked as anecdotal.

@@ -15,13 +15,15 @@ Quang Ninh results are validated. See `decisions.md` D4–D5.
 | 1 | Consolidate repo, one schema, real verifier, EE smoke test | — | 8 | **done** (EE smoke test waits on your project id) |
 | 2 | **Earth Engine engine for any AOI.** Phase-1 rework (below); `agents/ee_engine.py` (SCL composites, indices, change mask, vectorised regions, real `mean_conf`); AOI validation + size cap; `tools.py` mock/EE switch; produce the Quang Ninh `change_regions_quangninh_v1.json` | 1 | 14 | **in progress** |
 | 3 | **Ground-truth labelling.** `notebooks/EviChange_labeling.ipynb`: 30 blind sites, then relabel 10 after ≥7 days | 2 | 4 | notebook ready |
-| 4 | **Real VLM.** `VLMClient` (hf / http / replay); develop prompts on detected QN regions **outside** the 30 labelled sites; freeze; run 3 conditions on the 30 sites | 2, 3 (labels done first) | 14 | |
+| 4 | **Real VLM.** `VLMClient` (hf / http / replay); develop prompts on detected QN regions **outside** the 30 labelled sites; freeze; run 3 conditions on the 30 sites. Also the two prompted-search tasks (D7): prompt → `SearchSpec` (+ schema validation) and candidate check `match`/`no_match`/`unsure`; their prompts are separate and not part of the freeze | 2, 3 (labels done first) | 18 | |
 | 5 | **Evaluation.** Claim adjudication page (condition hidden), `eval/metrics.py`, results tables | 3, 4 | 10 | |
 | 6 | **On-demand runs API.** `POST /api/runs` (AOI + before/after date windows) → background job running the agent pipeline on Earth Engine; `GET /api/runs/{id}` polling; per-run data store; cache; AOI cap | 2 | 12 | |
-| 7 | **App.** Draw/search AOI, date pickers, run + progress state, per-run layers, "not validated outside Quang Ninh" banner, verdict reasons, export, cleanup | 6 | 16 | |
+| 7 | **App.** Draw/search AOI, date pickers, run + progress state, per-run layers, "not validated outside Quang Ninh" banner, verdict reasons, export, cleanup. **Prompted search (D7):** "Find changes" chat calls the VLM (keyword parser as fallback), confirm-before-run for new dates/AOI/options, candidate-check results with "show rejected" toggle and "VLM-checked, not validated" label | 6 | 24 | |
 | 8 | Write-up + advisor demo | 5, 7 | 14 | |
 
-Total remaining ≈ 84 h against ≈117 h: about 4 weeks of margin before the write-up.
+Total remaining ≈ 96 h against ≈117 h: ≈21 h of margin before the write-up (was ≈33 h;
+prompted search, D7, added 12 h). If time runs short, cut the D7 candidate check first;
+prompt → search spec on its own still works.
 The labelling itself is short, but the 7-day relabel gap runs alongside Phase 4.
 Re-plan trigger: Phase 4 not finished by end of week 6.
 
@@ -154,3 +156,5 @@ the 30 labelled sites. They are frozen (pinned by commit) before the 30 sites ar
 4. The multi-agent pipeline + general-AOI app is a core deliverable (was optional).
 5. The detector is an index-threshold baseline (no training data). Confirm that's acceptable.
 6. Old schema deprecated (`decisions.md` D1).
+7. Prompted change search (D7): the VLM steers search and checks candidates, the detector
+   still finds every region. Capability only, not evaluated. Confirm the scope is fine.
