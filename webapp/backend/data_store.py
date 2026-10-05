@@ -130,5 +130,26 @@ def evidence_for(region_ids: list[str], run_id: Optional[str] = None) -> dict:
     }
 
 
+DEFAULT_MAX_CLOUD_PCT = 30.0   # same as data/quangninh/study.json
+
+
+def analysis_params(run_id: Optional[str] = None) -> Optional[dict]:
+    """AOI, date windows and cloud limit the shown regions were computed from, or None
+    for demo data (which has no Earth Engine analysis behind it)."""
+    if run_id:
+        s = get_status(run_id)
+        if not s:
+            return None
+        return {"aoi": s["aoi"], "before_window": s["before_window"], "after_window": s["after_window"],
+                "max_cloud_pct": DEFAULT_MAX_CLOUD_PCT}
+    if not REGIONS_PATH.exists():
+        return None
+    meta = json.loads(REGIONS_PATH.read_text()).get("metadata") or {}
+    if not all(meta.get(k) for k in ("aoi", "before_window", "after_window")):
+        return None
+    return {"aoi": meta["aoi"], "before_window": meta["before_window"], "after_window": meta["after_window"],
+            "max_cloud_pct": float((meta.get("thresholds") or {}).get("max_cloud_pct", DEFAULT_MAX_CLOUD_PCT))}
+
+
 def known_region_ids(run_id: Optional[str] = None) -> set[str]:
     return {f["properties"]["id"] for f in get_change_regions(run_id)["features"]}

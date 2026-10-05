@@ -139,7 +139,15 @@ charts, export and a print layout (PLAN Phase 7b). Out of scope: editing, labell
 - Everything runs in the browser on GeoJSON (MapLibre + the bundled Turf), except the index
   rasters, which the backend serves as Earth Engine tile URLs for a run's AOI and windows,
   using the same composites as `ee_engine.py` so the map shows the detector's actual inputs.
-- Geoprocessing outputs are new user layers. They never change a run's change regions, and
-  regions derived from them carry no `mean_conf` and don't go to the AI report as evidence.
+- Geoprocessing outputs are new user layers. They never change a run's change regions and
+  never reach the AI report (only the change layer does). Clipped, intersected and buffered
+  polygons get their own `area_ha` (the source value is kept as `area_ha_src`); other source
+  attributes, such as `mean_conf`, are copied unchanged and describe the original region.
+- Geometry runs in a Web Worker: Earth Engine regions are pixel-edged (one QN region has ~100k
+  vertices), so buffer / clip / intersect / dissolve take 5–15 s on the full QN layer. Geometry
+  is never simplified to speed this up: removing the pixel steps would move outlines by more
+  than half a pixel.
+- Export formats: GeoJSON, CSV (attributes + centroid) and KML. Shapefile export is left out:
+  it needs a vendored writer library, and GeoJSON opens in ArcGIS Pro and QGIS.
 - Exports keep attribution (EOX for the Sentinel-2 mosaics, Copernicus for Earth Engine data)
   and the "not validated outside Quang Ninh" note for non-QN runs.

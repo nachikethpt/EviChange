@@ -3,7 +3,8 @@
  * 4 identify/popups · 5 attribute table · 6 sketch (measure + draw) · 7 swipe
  * 8 AI report panel · 9 add data · 10 panel/toolbar wiring · 11 start-up
  * The change explorer (change-type colours/icons, "Find changes" panel, region card) is in explore.js.
- * Symbology (style by attribute) + per-layer legends are in symbology.js.
+ * Symbology (style by attribute) + per-layer legends are in symbology.js; index rasters, selection and
+ * geoprocessing in gistools.js; charts in charts.js; export + print layout in layout.js.
  */
 'use strict';
 
@@ -74,10 +75,12 @@ function setBasemap(key) {
 const PALETTE = ['#2563eb', '#9333ea', '#db2777', '#0891b2', '#65a30d', '#ea580c'];
 let userLayerCount = 0;
 
-function addRasterLayer({ id, name, tileKey, visible = false }) {
-  map.addSource(id, rasterSource(tileKey));
+function addRasterLayer({ id, name, tileKey, source = null, visible = false, removable = false, legend = null }) {
+  map.addSource(id, source || rasterSource(tileKey));
   map.addLayer({ id, type: 'raster', source: id, layout: { visibility: visible ? 'visible' : 'none' } });
-  state.layers.unshift({ id, name, kind: 'raster', mapLayers: [id], visible, opacity: 1, removable: false });
+  // new rasters go on top of the other rasters but below every vector layer
+  const at = state.layers.findIndex(l => l.kind === 'raster');
+  state.layers.splice(at < 0 ? state.layers.length : at, 0, { id, name, kind: 'raster', mapLayers: [id], visible, opacity: 1, removable, legend });
   applyOrder();
 }
 
@@ -187,7 +190,7 @@ function renderLayerList() {
         ${layer.kind === 'vector' ? '<button class="icon" data-a="style" title="Symbology">🎨</button>' : ''}
         ${layer.removable ? '<button class="icon" data-a="remove" title="Remove layer">🗑</button>' : ''}
       </div>
-      ${layer.kind === 'vector' ? `<div class="layer-legend">${layerLegendHtml(layer)}</div>` : ''}`;
+      ${layer.kind === 'vector' || layer.legend ? `<div class="layer-legend">${layerLegendHtml(layer)}</div>` : ''}`;
     el.querySelector('input[type=checkbox]').onchange = e => setVisible(layer, e.target.checked);
     el.querySelector('input[type=range]').oninput = e => setOpacity(layer, +e.target.value);
     el.querySelectorAll('button[data-a]').forEach(b => b.onclick = () => ({
@@ -259,9 +262,10 @@ function renderTable() {
   if (!layer) { table.innerHTML = '<tr><td class="muted">No vector layers</td></tr>'; $('#tableCount').textContent = ''; return; }
   const feats = layer.data.features;
   const cols = [...new Set(feats.flatMap(f => Object.keys(f.properties)))].filter(k => k !== '__fid');
-  $('#tableCount').textContent = `${feats.length} features`;
+  const picked = selectedFids(layer);   // gistools.js
+  $('#tableCount').textContent = `${feats.length} features${picked.size ? ` · ${picked.size} selected` : ''}`;
   table.innerHTML = `<thead><tr>${cols.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>` +
-    feats.slice(0, 2000).map((f, i) => `<tr data-i="${i}">${cols.map(c => {
+    feats.slice(0, 2000).map((f, i) => `<tr data-i="${i}" class="${picked.has(f.properties.__fid) ? 'picked' : ''}">${cols.map(c => {
       const v = f.properties[c]; return `<td>${esc(typeof v === 'object' ? JSON.stringify(v) : v)}</td>`; }).join('')}</tr>`).join('') + '</tbody>';
   table.querySelectorAll('tbody tr').forEach(tr => tr.onclick = () => {
     table.querySelectorAll('tr.sel').forEach(r => r.classList.remove('sel'));
@@ -513,7 +517,8 @@ function alertBox(msg) { showHint(msg); setTimeout(() => showHint(null), 6000); 
 
 // ---------- 10. Panels + toolbar ----------
 const PANEL_TITLES = { basemap: 'Basemap gallery', measure: 'Measure', draw: 'Draw area to analyse', swipe: 'Swipe compare',
-                       changes: 'Find changes', report: 'AI change report', symbology: 'Symbology' };
+                       changes: 'Find changes', report: 'AI change report', symbology: 'Symbology',
+                       indices: 'Index layers (Earth Engine)', tools: 'Geoprocessing', charts: 'Charts', print: 'Export & print' };
 
 function openPanel(name) {
   if (state.panel === name) return renderPanel();
@@ -582,6 +587,10 @@ function renderPanel() {
   }
   if (name === 'changes') renderChangesPanel(body);
   if (name === 'symbology') renderSymbologyPanel(body);
+  if (name === 'indices') renderIndicesPanel(body);
+  if (name === 'tools') renderToolsPanel(body);
+  if (name === 'charts') renderChartsPanel(body);
+  if (name === 'print') renderPrintPanel(body);
   if (name === 'report') {
     const ids = [...state.selected].sort();
     body.innerHTML = `

@@ -84,6 +84,39 @@ def _indices(ee: Any, image: Any) -> Any:
     return ee.Image.cat([ndvi, ndbi, mndwi])
 
 
+INDEX_NAMES = ("NDVI", "NDBI", "MNDWI")
+INDEX_KINDS = ("before", "after", "change")
+# Map display only (the detector never reads these): value range + palette, low -> high.
+INDEX_VIS = {
+    "NDVI":  {"value": {"min": -0.2, "max": 0.8, "palette": ["#a16207", "#fef3c7", "#86efac", "#15803d", "#14532d"]},
+              "change": {"min": -0.4, "max": 0.4, "palette": ["#b91c1c", "#fca5a5", "#f8fafc", "#86efac", "#15803d"]}},
+    "NDBI":  {"value": {"min": -0.5, "max": 0.3, "palette": ["#1e3a8a", "#e0f2fe", "#fef3c7", "#ea580c", "#7f1d1d"]},
+              "change": {"min": -0.4, "max": 0.4, "palette": ["#15803d", "#86efac", "#f8fafc", "#fca5a5", "#b91c1c"]}},
+    "MNDWI": {"value": {"min": -0.6, "max": 0.6, "palette": ["#78350f", "#fef3c7", "#bae6fd", "#2563eb", "#1e3a8a"]},
+              "change": {"min": -0.4, "max": 0.4, "palette": ["#a16207", "#fde68a", "#f8fafc", "#93c5fd", "#1d4ed8"]}},
+}
+
+
+def index_tile_layer(aoi: dict, before_window: list[str], after_window: list[str], index: str, kind: str, max_cloud_pct: float) -> dict:
+    """XYZ tile URL for one index layer (before / after / change), built from the same
+    composites run_engine() uses, so the map shows the detector's actual inputs."""
+    if index not in INDEX_NAMES or kind not in INDEX_KINDS:
+        raise ValueError(f"index must be one of {INDEX_NAMES} and kind one of {INDEX_KINDS}")
+    ee = _ee()
+    schema.check(schema.validate_aoi(aoi), "AOI")
+    schema.check(schema.validate_windows(before_window, after_window), "date windows")
+
+    def value(window: list[str]) -> Any:
+        return _indices(ee, _composite(ee, aoi, window, max_cloud_pct)[0]).select(index)
+
+    image = {"before": lambda: value(before_window), "after": lambda: value(after_window),
+             "change": lambda: value(after_window).subtract(value(before_window))}[kind]()
+    vis = INDEX_VIS[index]["change" if kind == "change" else "value"]
+    map_id = image.clip(_geometry(ee, aoi)).getMapId(
+        {"min": vis["min"], "max": vis["max"], "palette": [c.lstrip("#") for c in vis["palette"]]})
+    return {"tiles": [map_id["tile_fetcher"].url_format], **vis}
+
+
 def where_in_aoi(lon: float, lat: float, bounds: tuple[float, float, float, float]) -> str:
     west, south, east, north = bounds
     col = ["west", "centre", "east"][min(max(int(3 * (lon - west) / (east - west)), 0), 2)]

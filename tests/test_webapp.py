@@ -1,12 +1,13 @@
+import json
 import time
 
 import pytest
 from fastapi.testclient import TestClient
 
-from agents import nodes, tools, webapp_bridge
+from agents import ee_engine, nodes, tools, webapp_bridge
 from agents.graph import run_pipeline
 from agents.schema import CHANGE_TYPES, T_IDX, validate_claim, validate_change_regions
-from webapp.backend import data_store
+from webapp.backend import data_store, main
 from webapp.backend.main import app
 
 AOI = {"type": "Polygon", "coordinates": [[[107.22, 20.98], [107.40, 20.98], [107.40, 21.10], [107.22, 21.10], [107.22, 20.98]]]}
@@ -157,3 +158,45 @@ def test_run_end_to_end_and_cache(client, monkeypatch):
 
         again = client.post("/api/runs", json=run_request()).json()
         assert again == {"run_id": run_id, "status": "done", "cached": True}
+
+# ---------- Phase 7b (D8): index rasters ----------
+
+def test_index_layer_needs_an_analysis(client):
+    """Demo data has no Earth Engine analysis behind it, so there is nothing to draw."""
+    assert client.get("/api/index_layer", params={"index": "NDVI", "kind": "change"}).status_code == 404
+
+
+def test_index_layer_rejects_unknown_index(client):
+    assert client.get("/api/index_layer", params={"index": "EVI", "kind": "change"}).status_code == 400
+    assert client.get("/api/index_layer", params={"index": "NDVI", "kind": "delta"}).status_code == 400
+
+
+def test_index_layer_uses_the_regions_own_analysis(client, monkeypatch):
+    """Tiles come from the AOI + windows + cloud limit in the live regions' metadata, and are cached."""
+    (data_store.REGIONS_PATH).write_text(json.dumps({"type": "FeatureCollection", "features": [], "metadata": {
+        "aoi": QN_AOI, "before_window": BEFORE, "after_window": AFTER, "thresholds": {"max_cloud_pct": 20}}}))
+    calls = []
+
+    def fake_layer(aoi, before, after, index, kind, max_cloud):
+        calls.append((aoi, before, after, index, kind, max_cloud))
+        return {"tiles": ["https://example/{z}/{x}/{y}"], "min": -0.4, "max": 0.4, "palette": ["#000", "#fff"]}
+
+    monkeypatch.setattr(ee_engine, "index_tile_layer", fake_layer)
+    main._index_tiles.clear()
+    for _ in range(2):
+        body = client.get("/api/index_layer", params={"index": "MNDWI", "kind": "after"}).json()
+    assert body["tiles"] == ["https://example/{z}/{x}/{y}"] and body["after_window"] == AFTER
+    assert calls == [(QN_AOI, BEFORE, AFTER, "MNDWI", "after", 20.0)]
+
+
+def test_index_layer_reports_earth_engine_errors(client, monkeypatch):
+    (data_store.REGIONS_PATH).write_text(json.dumps({"type": "FeatureCollection", "features": [], "metadata": {
+        "aoi": QN_AOI, "before_window": BEFORE, "after_window": AFTER}}))
+
+    def boom(*a):
+        raise ValueError("No Sentinel-2 SR scenes found")
+
+    monkeypatch.setattr(ee_engine, "index_tile_layer", boom)
+    main._index_tiles.clear()
+    resp = client.get("/api/index_layer", params={"index": "NDVI", "kind": "before"})
+    assert resp.status_code == 502 and "No Sentinel-2" in resp.json()["detail"]
