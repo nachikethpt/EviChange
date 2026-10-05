@@ -142,7 +142,7 @@ function refreshMarkers() {
   explore.markers.forEach(m => m.remove());
   explore.markers = [];
   const layer = changeLayer();
-  if (!layer || !layer.visible) return;
+  if (!layer || !layer.visible || symActive(layer)) return;   // icons show change type, which a custom style replaces
   const z = map.getZoom(), b = map.getBounds();
   const minHa = z < 11.5 ? 20 : z < 12.5 ? 5 : z < 13.5 ? 1 : 0;   // fewer, bigger regions when zoomed out
   currentResults()
@@ -168,8 +168,10 @@ function renderLegend() {
   all.forEach(f => { const k = f.properties.primary_type; counts[k] = (counts[k] || 0) + 1; });
   const shown = filterActive() || explore.scope !== 'all' ? currentResults().length : all.length;
   const selTypes = explore.filter.types;
+  const restyled = symActive(changeLayer());
   el.innerHTML = `<div class="pane-subtitle">Change regions — what changed</div>` +
-    Object.entries(TYPE_INFO).filter(([k]) => counts[k]).map(([k, t]) => `
+    (restyled ? `<div class="muted legend-foot">Styled by symbology, see the layer's legend above. <button class="linkish" id="legDefault">Back to change-type colours</button></div>` : '') +
+    Object.entries(TYPE_INFO).filter(([k]) => counts[k] && !restyled).map(([k, t]) => `
       <button class="legend-row ${selTypes && !selTypes.has(k) ? 'off' : ''}" data-k="${k}" title="Show only: ${esc(t.short)}">
         <span class="swatch" style="background:${t.color}">${t.icon}</span><span>${esc(t.short)}</span><span class="muted">${counts[k]}</span>
       </button>`).join('') +
@@ -183,6 +185,8 @@ function renderLegend() {
   });
   const c = $('#legClear');
   if (c) c.onclick = () => { explore.scope = 'all'; clearFilter(); if (state.panel === 'changes') renderPanel(); };
+  const d = $('#legDefault');
+  if (d) d.onclick = () => { changeLayer().sym.method = 'default'; applySymbology(changeLayer()); if (state.panel === 'symbology') renderPanel(); };
 }
 
 // ---------- "Find changes" chat: plain-language search ----------

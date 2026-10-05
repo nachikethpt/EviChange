@@ -19,11 +19,13 @@ Quang Ninh results are validated. See `decisions.md` D4–D5.
 | 5 | **Evaluation.** Claim adjudication page (condition hidden), `eval/metrics.py`, results tables | 3, 4 | 10 | |
 | 6 | **On-demand runs API.** `POST /api/runs` (AOI + before/after date windows) → background job running the agent pipeline on Earth Engine; `GET /api/runs/{id}` polling; per-run data store; cache; AOI cap | 2 | 12 | |
 | 7 | **App.** Draw/search AOI, date pickers, run + progress state, per-run layers, "not validated outside Quang Ninh" banner, verdict reasons, export, cleanup. **Prompted search (D7):** "Find changes" chat calls the VLM (keyword parser as fallback), confirm-before-run for new dates/AOI/options, candidate-check results with "show rejected" toggle and "VLM-checked, not validated" label | 6 | 24 | |
+| 7b | **GIS tools (D8).** (a) Symbology by attribute + legend, scale bar, north arrow; (b) index rasters from Earth Engine (before/after/difference NDVI, NDBI, MNDWI) as tile layers; (c) geoprocessing (buffer, clip, intersect, dissolve) + select by attribute / location; (d) linked charts, layer export (GeoJSON / shapefile / CSV) + print layout (PNG/PDF). Owners: (b) Person 1 backend + Person 3 layer; the rest Person 3 | 7 (b also 2) | 28 | (a) in progress |
 | 8 | Write-up + advisor demo | 5, 7 | 14 | |
 
-Total remaining ≈ 96 h against ≈117 h: ≈21 h of margin before the write-up (was ≈33 h;
-prompted search, D7, added 12 h). If time runs short, cut the D7 candidate check first;
-prompt → search spec on its own still works.
+Total remaining ≈ 124 h. That is over the solo budget (≈117 h), so 7b needs the group:
+with three people it runs alongside Phases 3–5. If time runs short, cut in this order:
+7b (c) geoprocessing, 7b (d) print layout, then the D7 candidate check. Prompt → search
+spec on its own still works.
 The labelling itself is short, but the 7-day relabel gap runs alongside Phase 4.
 Re-plan trigger: Phase 4 not finished by end of week 6.
 
