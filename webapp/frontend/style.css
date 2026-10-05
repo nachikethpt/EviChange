@@ -31,6 +31,19 @@ button { font: inherit; cursor: pointer; }
 .layer-row .kind { font-size: 10px; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
 .layer-tools { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
 .layer-tools input[type=range] { flex: 1; }
+.layer-legend { margin-top: 4px; padding-top: 4px; border-top: 1px dashed var(--border); }
+.layer-legend:empty { display: none; }
+
+/* symbology (symbology.js) */
+.sym-row { display: flex; align-items: center; gap: 6px; padding: 1px 0; font-size: 12px; }
+.sym-swatch { width: 14px; height: 14px; border-radius: 3px; flex: none; border: 1px solid rgba(0,0,0,.2); }
+.sym-swatch.outline { background: none; border: 2px dashed #5eead4; }
+.sym-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sym-ramp { height: 10px; border-radius: 3px; margin: 4px 0 2px; border: 1px solid rgba(0,0,0,.15); }
+.sym-ramp-labels { display: flex; justify-content: space-between; }
+.sym-controls label { display: block; margin-bottom: 8px; }
+.sym-controls select, .panel-body .section > label select { width: 100%; }
+.sym-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .icon { background: none; border: none; padding: 2px 5px; border-radius: 4px; color: var(--muted); }
 .icon:hover { background: var(--bg); color: var(--text); }
 

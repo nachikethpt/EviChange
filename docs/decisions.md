@@ -127,3 +127,19 @@ they would need their own ground truth. Out of scope.
 result. Its prompts are separate from the frozen report prompts and are never run on the
 30 labelled sites before the Phase-4 freeze. If time allows, the write-up gives a small
 qualitative example of the candidate check against labels, clearly marked as anecdotal.
+
+## D8 — ArcGIS Pro-style GIS tools in the web app (2026-10-05, proposed)
+
+**Decision.** Add the ArcGIS Pro features that help someone inspect and use change results,
+not a general GIS: symbology + legend, Earth Engine index rasters, geoprocessing + selection,
+charts, export and a print layout (PLAN Phase 7b). Out of scope: editing, labelling engine,
+3D, time slider (needs multi-date runs).
+
+**Constraints.**
+- Everything runs in the browser on GeoJSON (MapLibre + the bundled Turf), except the index
+  rasters, which the backend serves as Earth Engine tile URLs for a run's AOI and windows,
+  using the same composites as `ee_engine.py` so the map shows the detector's actual inputs.
+- Geoprocessing outputs are new user layers. They never change a run's change regions, and
+  regions derived from them carry no `mean_conf` and don't go to the AI report as evidence.
+- Exports keep attribution (EOX for the Sentinel-2 mosaics, Copernicus for Earth Engine data)
+  and the "not validated outside Quang Ninh" note for non-QN runs.

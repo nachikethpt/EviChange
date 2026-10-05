@@ -3,6 +3,7 @@
  * 4 identify/popups · 5 attribute table · 6 sketch (measure + draw) · 7 swipe
  * 8 AI report panel · 9 add data · 10 panel/toolbar wiring · 11 start-up
  * The change explorer (change-type colours/icons, "Find changes" panel, region card) is in explore.js.
+ * Symbology (style by attribute) + per-layer legends are in symbology.js.
  */
 'use strict';
 
@@ -85,9 +86,12 @@ function addVectorLayer({ id, name, data, style = 'auto', visible = true, remova
   map.addSource(id, { type: 'geojson', data, promoteId: '__fid' });
   const vis = { visibility: visible ? 'visible' : 'none' };
   const hl = ['any', ['boolean', ['feature-state', 'selected'], false], ['boolean', ['feature-state', 'hl'], false]];
-  const mapLayers = [];
-  const add = spec => { map.addLayer({ ...spec, source: id, layout: { ...vis, ...(spec.layout || {}) } }); mapLayers.push(spec.id); };
-  let base = {};
+  const mapLayers = [], origPaint = {};
+  const add = spec => {
+    map.addLayer({ ...spec, source: id, layout: { ...vis, ...(spec.layout || {}) } });
+    mapLayers.push(spec.id); origPaint[spec.id] = spec.paint;   // kept so symbology.js can restore the default style
+  };
+  let base = {}, color = null;
   if (style === 'change_type') {
     const paint = changeTypePaint(hl);
     base = { fill: paint.fill['fill-opacity'] };
@@ -103,7 +107,7 @@ function addVectorLayer({ id, name, data, style = 'auto', visible = true, remova
   } else if (style === 'outline') {
     add({ id: `${id}-line`, type: 'line', paint: { 'line-color': '#5eead4', 'line-width': 2, 'line-dasharray': [3, 2] } });
   } else {
-    const color = PALETTE[userLayerCount++ % PALETTE.length];
+    color = PALETTE[userLayerCount++ % PALETTE.length];
     base = { fill: 0.3 };
     add({ id: `${id}-fill`, type: 'fill', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': color, 'fill-opacity': base.fill } });
     add({ id: `${id}-line`, type: 'line', filter: ['!=', ['geometry-type'], 'Point'], paint: {
@@ -111,7 +115,8 @@ function addVectorLayer({ id, name, data, style = 'auto', visible = true, remova
     add({ id: `${id}-pt`, type: 'circle', filter: ['==', ['geometry-type'], 'Point'], paint: {
       'circle-color': color, 'circle-radius': ['case', hl, 7, 4.5], 'circle-stroke-color': '#fff', 'circle-stroke-width': 1 } });
   }
-  state.layers.unshift({ id, name, kind: 'vector', mapLayers, visible, opacity: 1, removable, data, base });
+  state.layers.unshift({ id, name, kind: 'vector', mapLayers, visible, opacity: 1, removable, data, base,
+                         style, color, origPaint, origBaseFill: base.fill, sym: null });
   applyOrder();
   renderTableLayerOptions();
   return state.layers[0];
@@ -152,6 +157,7 @@ function removeLayer(layer) {
   state.layers = state.layers.filter(l => l !== layer);
   renderLayerList();
   renderTableLayerOptions();
+  if (state.panel === 'symbology') renderPanel();
 }
 
 function moveLayer(layer, delta) {
@@ -178,12 +184,15 @@ function renderLayerList() {
         <button class="icon" data-a="zoom" title="Zoom to layer">🔍</button>
         <button class="icon" data-a="up" title="Move up">▲</button>
         <button class="icon" data-a="down" title="Move down">▼</button>
+        ${layer.kind === 'vector' ? '<button class="icon" data-a="style" title="Symbology">🎨</button>' : ''}
         ${layer.removable ? '<button class="icon" data-a="remove" title="Remove layer">🗑</button>' : ''}
-      </div>`;
+      </div>
+      ${layer.kind === 'vector' ? `<div class="layer-legend">${layerLegendHtml(layer)}</div>` : ''}`;
     el.querySelector('input[type=checkbox]').onchange = e => setVisible(layer, e.target.checked);
     el.querySelector('input[type=range]').oninput = e => setOpacity(layer, +e.target.value);
     el.querySelectorAll('button[data-a]').forEach(b => b.onclick = () => ({
       zoom: () => zoomTo(layer), up: () => moveLayer(layer, -1), down: () => moveLayer(layer, 1), remove: () => removeLayer(layer),
+      style: () => openSymbology(layer),
     })[b.dataset.a]());
     list.appendChild(el);
   });
@@ -504,7 +513,7 @@ function alertBox(msg) { showHint(msg); setTimeout(() => showHint(null), 6000); 
 
 // ---------- 10. Panels + toolbar ----------
 const PANEL_TITLES = { basemap: 'Basemap gallery', measure: 'Measure', draw: 'Draw area to analyse', swipe: 'Swipe compare',
-                       changes: 'Find changes', report: 'AI change report' };
+                       changes: 'Find changes', report: 'AI change report', symbology: 'Symbology' };
 
 function openPanel(name) {
   if (state.panel === name) return renderPanel();
@@ -572,6 +581,7 @@ function renderPanel() {
     $('#swR').onchange = e => { state.swipe.right = e.target.value; swipeOn(); };
   }
   if (name === 'changes') renderChangesPanel(body);
+  if (name === 'symbology') renderSymbologyPanel(body);
   if (name === 'report') {
     const ids = [...state.selected].sort();
     body.innerHTML = `
