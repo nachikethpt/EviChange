@@ -152,12 +152,21 @@ function legendRows(rows) {
 
 /** Small legend shown under each vector layer in Contents. */
 function layerLegendHtml(layer) {
+  if (layer.kind === 'raster') return rasterLegendHtml(layer.legend);
   const sym = symbologyFor(layer);
   if (sym) return `<div class="muted small">${esc(layer.sym.method === 'single' ? 'Single symbol' : layer.sym.field)}</div>` + legendRows(sym.legend);
   if (layer.style === 'change_type') return '<div class="muted small">Coloured by change type (legend below)</div>';
   if (layer.style === 'confidence') return '<div class="muted small">mean_conf</div><div class="sym-ramp" style="background:linear-gradient(90deg,#fde68a,#f97316,#b91c1c)"></div><div class="sym-ramp-labels muted small"><span>0.3</span><span>0.9</span></div>';
   if (layer.style === 'outline') return '<div class="sym-row"><span class="sym-swatch outline"></span><span class="sym-label">Outline</span></div>';
   return legendRows([{ color: layer.color, label: 'All features', count: layer.data.features.length }]);
+}
+
+/** Colour ramp + range for a raster layer (index layers from gistools.js). */
+function rasterLegendHtml(lg) {
+  return `<div class="muted small">${esc(lg.label)}</div>
+    <div class="sym-ramp" style="background:linear-gradient(90deg,${lg.palette.join(',')})"></div>
+    <div class="sym-ramp-labels muted small"><span>≤ ${lg.min}</span><span>≥ ${lg.max}</span></div>
+    ${lg.note ? `<div class="muted small">${esc(lg.note)}</div>` : ''}`;
 }
 
 // ---------- Symbology panel ----------

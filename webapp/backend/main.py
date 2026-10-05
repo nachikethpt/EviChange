@@ -21,7 +21,9 @@ a request is checked against the 12-char hex format the server generates
 run_id returns 404, not a silent fall-through to demo data).
 """
 import asyncio
+import json
 import re
+import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -32,6 +34,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from agents import ee_engine
 from agents.graph import run_pipeline
 from agents.schema import CHANGE_TYPES, CONDITIONS, CONF_MIN, T_IDX, validate_aoi, validate_windows
 
@@ -124,6 +127,36 @@ def aoi(run_id: Optional[str] = None):
 def change_regions(run_id: Optional[str] = None):
     _require_valid_run(run_id)
     return data_store.get_change_regions(run_id)
+
+
+INDEX_TILE_TTL_S = 3600   # Earth Engine map ids expire after a few hours
+_index_tiles: dict = {}
+
+
+@app.get("/api/index_layer")
+def index_layer(index: str, kind: str, run_id: Optional[str] = None):
+    """Phase 7b (D8): XYZ tiles for an index raster (NDVI / NDBI / MNDWI; before / after / change)
+    over the AOI and windows the shown regions were computed from."""
+    _require_valid_run(run_id)
+    if index not in ee_engine.INDEX_NAMES or kind not in ee_engine.INDEX_KINDS:
+        raise HTTPException(400, f"index must be one of {ee_engine.INDEX_NAMES}, kind one of {ee_engine.INDEX_KINDS}")
+    params = data_store.analysis_params(run_id)
+    if params is None:
+        raise HTTPException(404, "these change regions have no Earth Engine analysis behind them (demo data)")
+    key = (json.dumps(params, sort_keys=True), index, kind)
+    hit = _index_tiles.get(key)
+    if hit and time.time() - hit[0] < INDEX_TILE_TTL_S:
+        return hit[1]
+    try:
+        layer = ee_engine.index_tile_layer(params["aoi"], params["before_window"], params["after_window"],
+                                           index, kind, params["max_cloud_pct"])
+    except RuntimeError as exc:       # earthengine-api missing
+        raise HTTPException(503, str(exc))
+    except Exception as exc:          # auth, quota, no scenes, ...
+        raise HTTPException(502, f"Earth Engine: {exc}")
+    layer.update(index=index, kind=kind, before_window=params["before_window"], after_window=params["after_window"])
+    _index_tiles[key] = (time.time(), layer)
+    return layer
 
 
 class ReportRequest(BaseModel):

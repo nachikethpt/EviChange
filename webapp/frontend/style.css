@@ -43,6 +43,26 @@ button { font: inherit; cursor: pointer; }
 .sym-ramp-labels { display: flex; justify-content: space-between; }
 .sym-controls label { display: block; margin-bottom: 8px; }
 .sym-controls select, .panel-body .section > label select { width: 100%; }
+.check { display: flex !important; align-items: center; gap: 6px; }
+.gp-form input:not([type=checkbox]) { border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; font: inherit; }
+.gp-form input[data-f=value] { width: 100%; }
+.gp-form input[type=number] { width: 110px; }
+.gp-result { background: var(--bg); border-radius: 6px; padding: 8px; }
+pre.sql { margin: 6px 0 0; white-space: pre-wrap; word-break: break-word; }
+#attrTable tr.picked td { background: #fef9c3; }
+
+/* charts (charts.js) */
+.panel-body { position: relative; }
+.chart-title { font-weight: 600; margin-top: 4px; }
+.chart { margin: 6px 0 4px; }
+.chart .bar { cursor: pointer; }
+.chart .bar:hover rect:not(.hit) { filter: brightness(.9); }
+.chart-tip { position: absolute; background: var(--top); color: #fff; padding: 5px 8px; border-radius: 6px; font-size: 12px; pointer-events: none; z-index: 3; max-width: 200px; }
+
+/* export + print (layout.js) */
+.export-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.layout-preview { width: 100%; border: 1px solid var(--border); border-radius: 6px; margin-top: 8px; }
+.panel-body input[type=text] { width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; font: inherit; }
 .sym-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .icon { background: none; border: none; padding: 2px 5px; border-radius: 4px; color: var(--muted); }
 .icon:hover { background: var(--bg); color: var(--text); }
