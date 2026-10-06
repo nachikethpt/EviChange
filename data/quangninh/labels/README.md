@@ -26,7 +26,8 @@ but the set of change types matches exactly on only 3/10 sites.
   for the second person, so the file wrongly recorded one labeller. No label values were changed.
 
 ## Known limitations (open)
-- Sites were drawn from the **v1** detector regions (`ee-threshold-v1`), before the any-one-index
-  mask fix (decisions.md D6). The detected / random strata must be re-checked against the v2 regions.
+- `sites_key.json` region ids refer to `change_regions_quangninh_v1.json`. The current regions,
+  `change_regions_quangninh_v3.json` (decisions.md D6), have the same 504 regions with the same ids;
+  only `mean_conf` differs. `scripts/restratify_sites.py` confirms all 30 sites keep their strata.
 - `sites_key.json` is in the repository, so any further labeller must be told not to open it.
 - `labeler1` worked on the detector (Person 1), so was not fully blind to its output.
