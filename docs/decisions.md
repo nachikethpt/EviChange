@@ -86,12 +86,26 @@ every non-QN run.
 - Ungated/gated claims need the VLM (GPU in Colab). Without a reachable `VLMClient`
   backend, non-QN runs offer the template condition only, and the app says so.
 
-## D6 — `mean_conf` for the threshold detector (rev 2, proposed)
+## D6 — `mean_conf` for the threshold detector (rev 3, 2026-10-06)
 
-No trained model means no probability. `mean_conf` becomes the **index-agreement
-fraction**: the share of the region's pixels where at least 2 of the 3 index deltas
-exceed `T_IDX`. It's in [0, 1], has a plain meaning ("how consistently the indices agree
-this is change"), and is computed server-side in Earth Engine. The field name stays for
+No trained model means no probability. `mean_conf` is the **index-agreement fraction**:
+the share of the region's pixels where **all 3** index deltas exceed `T_IDX`. The change
+mask counts a pixel as changed when **at least 2 of 3** deltas exceed `T_IDX` (unchanged
+from the original detector). Agreement must be stricter than the mask, or every region
+averages to exactly 1.0. It's in [0, 1], has a plain meaning ("how consistently the indices agree
+this is change"), and is computed server-side in Earth Engine.
+
+**History.** v1 used a 2-of-3 mask and 2-of-3 agreement, so every region was 1.0. v2 kept
+2-of-3 agreement but loosened the mask to any one index: on Quang Ninh that flagged 58% of
+the AOI (v1: 38%), merged it into one 10,106 ha region, and put all 10 labelled background
+sites within 200 m of detected change. v3 (`ee-threshold-v3`) restores the v1 mask, so its
+regions are identical to v1 (`change_regions_quangninh_v3.json`: 504 regions, same ids,
+areas and deltas) and the labelled sites keep their strata (20 detected, 10 background;
+`scripts/restratify_sites.py`). Only `mean_conf` differs: 0.00–0.83, median 0.21.
+
+**Open.** `CONF_MIN = 0.5` was set when `mean_conf` was a placeholder. Under v3 only 46 of
+504 regions (2 of the 20 labelled detected sites) reach it. It must be re-chosen before
+Phase 4 produces claims. The field name stays for
 schema compatibility; the report defines it explicitly and never calls it a probability.
 
 ## D7 — Prompted change search: the VLM steers, the detector finds (2026-10-05, proposed)
@@ -151,3 +165,28 @@ charts, export and a print layout (PLAN Phase 7b). Out of scope: editing, labell
   it needs a vendored writer library, and GeoJSON opens in ArcGIS Pro and QGIS.
 - Exports keep attribution (EOX for the Sentinel-2 mosaics, Copernicus for Earth Engine data)
   and the "not validated outside Quang Ninh" note for non-QN runs.
+
+## D9 — Map assistant: typed requests become tool actions (2026-10-06, proposed)
+
+**Decision.** Like ArcGIS Pro's AI assistant, the "Find changes" chat takes requests such as
+"make the AOI purple, 95% transparent", "select regions bigger than 10 ha found after April" or
+"buffer the river layer by 500 m and clip the change regions to it", and runs them with the
+app's own tools (D8). D7's prompted change search becomes one action among several.
+
+1. **One action schema** (`schema.py`), e.g. `{action: "style_layer", layer, color, opacity}`,
+   `select_by_attributes`, `select_by_location`, `buffer`, `clip`, `intersect`, `dissolve`,
+   `add_index_layer`, `chart`, `export`, `search_changes`, `start_run`. Every action is
+   validated before it runs; an invalid one is rejected with a message, never run blind.
+2. **Two producers of actions.** The keyword parser (extending `explore.js` `parseQuery()`)
+   works without a model. In Phase 4 the VLM produces the same JSON from free text; its output
+   falls back to the keyword parser when invalid or when no `VLMClient` is reachable.
+3. **Show, then undo.** Each action shows what it ran (the SQL `WHERE` clause, the tool chain,
+   the style applied) and offers Undo. `start_run` (Earth Engine cost) and anything that
+   replaces a layer need confirmation first. Multi-step requests show the whole chain first.
+
+**Constraints.** Actions only call existing app tools: the assistant never edits a run's change
+regions, and geoprocessing outputs stay new layers (D8). The AOI for new runs comes from a drawn
+or searched area, never from coordinates the model writes (D7).
+
+**Evaluation.** None. Like D5 and D7, the assistant is a tool capability, not a reported result.
+Its prompts are separate from the frozen Phase-4 report prompts.

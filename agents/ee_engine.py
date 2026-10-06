@@ -13,7 +13,7 @@ from . import schema
 
 
 S2_COLLECTION = "COPERNICUS/S2_SR_HARMONIZED"
-CODE_VERSION = "ee-threshold-v1"
+CODE_VERSION = "ee-threshold-v3"
 SCL_CLOUD_CLASSES = [3, 8, 9, 10, 11]
 
 
@@ -23,7 +23,7 @@ def _ee():
     except ImportError as exc:
         raise RuntimeError("earthengine-api is required for EVICHANGE_ENGINE=ee") from exc
     try:
-        ee.Initialize(project=os.environ.get("EE_PROJECT", "ariel-509507"))
+        ee.Initialize(project=os.environ.get("EE_PROJECT", "space-510615"))
     except Exception:
         # A second initialize is harmless when another caller initialized EE.
         ee.Initialize()
@@ -117,6 +117,19 @@ def index_tile_layer(aoi: dict, before_window: list[str], after_window: list[str
     return {"tiles": [map_id["tile_fetcher"].url_format], **vis}
 
 
+def _change_bands(d_ndvi: Any, d_ndbi: Any, d_mndwi: Any, index_delta: float) -> tuple[Any, Any]:
+    """Change mask = at least 2 of 3 index deltas over the threshold; agreement = all 3 do (D6).
+
+    A region's mean of `agreement` is its `mean_conf`. Agreement must be stricter than the
+    mask, or every region would average to exactly 1.0. Loosening the mask to any one index
+    instead (v2) flagged 58% of the QN AOI as change and merged it into one 10,000 ha region.
+    """
+    votes = (d_ndvi.abs().gt(index_delta).add(d_ndbi.abs().gt(index_delta)).add(d_mndwi.abs().gt(index_delta)))
+    agreement = votes.gte(3).rename("agreement")
+    change_mask = votes.gte(2).selfMask().rename("change")
+    return change_mask, agreement
+
+
 def where_in_aoi(lon: float, lat: float, bounds: tuple[float, float, float, float]) -> str:
     west, south, east, north = bounds
     col = ["west", "centre", "east"][min(max(int(3 * (lon - west) / (east - west)), 0), 2)]
@@ -147,9 +160,7 @@ def run_engine(aoi: dict, before_window: list[str], after_window: list[str], thr
     d_ndbi = after_idx.select("NDBI").subtract(before_idx.select("NDBI")).rename("dNDBI")
     d_mndwi = after_idx.select("MNDWI").subtract(before_idx.select("MNDWI")).rename("dMNDWI")
     deltas = ee.Image.cat([d_ndvi, d_ndbi, d_mndwi])
-    votes = (d_ndvi.abs().gt(index_delta).add(d_ndbi.abs().gt(index_delta)).add(d_mndwi.abs().gt(index_delta)))
-    agreement = votes.gte(2).rename("agreement")
-    change_mask = agreement.selfMask().rename("change")
+    change_mask, agreement = _change_bands(d_ndvi, d_ndbi, d_mndwi, index_delta)
 
     stats = ee.Image.cat([change_mask, deltas, agreement, ee.Image.pixelArea().rename("area_m2")])
     vectors = stats.reduceToVectors(
