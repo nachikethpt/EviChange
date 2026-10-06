@@ -165,3 +165,28 @@ charts, export and a print layout (PLAN Phase 7b). Out of scope: editing, labell
   it needs a vendored writer library, and GeoJSON opens in ArcGIS Pro and QGIS.
 - Exports keep attribution (EOX for the Sentinel-2 mosaics, Copernicus for Earth Engine data)
   and the "not validated outside Quang Ninh" note for non-QN runs.
+
+## D9 — Map assistant: typed requests become tool actions (2026-10-06, proposed)
+
+**Decision.** Like ArcGIS Pro's AI assistant, the "Find changes" chat takes requests such as
+"make the AOI purple, 95% transparent", "select regions bigger than 10 ha found after April" or
+"buffer the river layer by 500 m and clip the change regions to it", and runs them with the
+app's own tools (D8). D7's prompted change search becomes one action among several.
+
+1. **One action schema** (`schema.py`), e.g. `{action: "style_layer", layer, color, opacity}`,
+   `select_by_attributes`, `select_by_location`, `buffer`, `clip`, `intersect`, `dissolve`,
+   `add_index_layer`, `chart`, `export`, `search_changes`, `start_run`. Every action is
+   validated before it runs; an invalid one is rejected with a message, never run blind.
+2. **Two producers of actions.** The keyword parser (extending `explore.js` `parseQuery()`)
+   works without a model. In Phase 4 the VLM produces the same JSON from free text; its output
+   falls back to the keyword parser when invalid or when no `VLMClient` is reachable.
+3. **Show, then undo.** Each action shows what it ran (the SQL `WHERE` clause, the tool chain,
+   the style applied) and offers Undo. `start_run` (Earth Engine cost) and anything that
+   replaces a layer need confirmation first. Multi-step requests show the whole chain first.
+
+**Constraints.** Actions only call existing app tools: the assistant never edits a run's change
+regions, and geoprocessing outputs stay new layers (D8). The AOI for new runs comes from a drawn
+or searched area, never from coordinates the model writes (D7).
+
+**Evaluation.** None. Like D5 and D7, the assistant is a tool capability, not a reported result.
+Its prompts are separate from the frozen Phase-4 report prompts.

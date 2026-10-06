@@ -1,6 +1,7 @@
 # EviChange build plan (rev 2)
 
-Solo, from the start of week 4 (≈7 weeks, ≈125 h; ≈117 h left after Phase 1).
+Team of three since 2026-10-05: Person 1 detector + labels, Person 2 VLM (Phases 4, 7c model side),
+Person 3 app + verifier (Phases 6, 7, 7b). Before that, solo from the start of week 4 (≈125 h).
 Defaults: this repo is canonical; Qwen2.5-VL-7B-Instruct for every reported run.
 
 **Rev 2 changes (2026-09-26):** (1) no OSCD. Imagery comes from Earth Engine for
@@ -20,11 +21,12 @@ Quang Ninh results are validated. See `decisions.md` D4–D5.
 | 6 | **On-demand runs API.** `POST /api/runs` (AOI + before/after date windows) → background job running the agent pipeline on Earth Engine; `GET /api/runs/{id}` polling; per-run data store; cache; AOI cap | 2 | 12 | **done** |
 | 7 | **App.** Draw/search AOI, date pickers, run + progress state, per-run layers, "not validated outside Quang Ninh" banner, verdict reasons, export, cleanup. **Prompted search (D7):** "Find changes" chat calls the VLM (keyword parser as fallback), confirm-before-run for new dates/AOI/options, candidate-check results with "show rejected" toggle and "VLM-checked, not validated" label | 6 | 24 | |
 | 7b | **GIS tools (D8).** (a) Symbology by attribute + legend, scale bar, north arrow; (b) index rasters from Earth Engine (before/after/difference NDVI, NDBI, MNDWI) as tile layers; (c) geoprocessing (buffer, clip, intersect, dissolve) + select by attribute / location; (d) linked charts, layer export (GeoJSON / CSV / KML) + print layout (PNG/PDF). Owners: (b) Person 1 backend + Person 3 layer; the rest Person 3 | 7 (b also 2) | 28 | **done** |
+| 7c | **Map assistant (D9).** The "Find changes" chat becomes an ArcGIS Pro-style assistant: typed requests become validated actions that drive the existing tools — style layer (symbology), select / filter by attributes or location, geoprocessing (buffer, clip, intersect, dissolve), add index layer, chart, export, change search and new runs (D7). Each action shows what it ran (query / tool chain) with Undo; runs need confirmation. Keyword parser first, then the Phase 4 VLM produces the same actions. Owners: Person 3 actions + UI, Person 2 VLM side | 7b; VLM side 4 | 12 | |
 | 8 | Write-up + advisor demo | 5, 7 | 14 | |
 
-Total remaining ≈ 96 h now that 7b is done (≈124 h before it). If time runs short, cut the
-D7 candidate check first; prompt → search spec on its own still works.
-The labelling itself is short, but the 7-day relabel gap runs alongside Phase 4.
+Total remaining ≈ 78 h (Phases 4, 5, 7, 7c, 8), split across three people. If time runs short,
+cut the D7 candidate check first, then 7c's VLM side (the keyword assistant still works).
+Labelling is done; a second labeller on the remaining 20 sites is optional (≈40 min).
 Re-plan trigger: Phase 4 not finished by end of week 6.
 
 ### Phase-1 rework (implemented in Phase 2)
@@ -158,3 +160,5 @@ the 30 labelled sites. They are frozen (pinned by commit) before the 30 sites ar
 6. Old schema deprecated (`decisions.md` D1).
 7. Prompted change search (D7): the VLM steers search and checks candidates, the detector
    still finds every region. Capability only, not evaluated. Confirm the scope is fine.
+8. Map assistant (D9): natural-language actions on the map, like ArcGIS Pro's AI assistant.
+   A tool capability, not evaluated. Confirm it's in scope.
