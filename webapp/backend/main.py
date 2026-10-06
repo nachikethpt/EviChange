@@ -44,7 +44,7 @@ from .report import build_report
 ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend"
 
-CODE_VERSION = "phase6-v2"  # bump when pipeline logic changes, invalidates cache
+CODE_VERSION = "phase6-v4"  # bump when pipeline or detector logic changes, invalidates cache
 run_queue: asyncio.Queue = asyncio.Queue()
 
 _RUN_ID_RE = re.compile(r"^[0-9a-f]{12}$")
