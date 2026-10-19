@@ -11,9 +11,12 @@ Needs PL_API_KEY (Planet account -> My settings -> API key), set in the shell, n
 
 Per month: PSScene items with 8-band surface reflectance, at most --max-cloud cloud cover, grouped by
 acquisition day (UTC); the day whose scenes cover the AOI best with the most clear sky wins. Orders
-are clipped to the AOI and harmonised to Sentinel-2. The km² shown is the AOI area those scenes
-cover (the clipped area); check in Planet Explorer how the E&R quota counts clipped orders before
-the first large order. `order` refuses to go over --max-km2 (default 3,000, one month's quota).
+are clipped to the AOI and harmonised to Sentinel-2. Only the scenes needed to cover the AOI are kept.
+
+Quota: Planet counts more than the AOI area once scenes overlap (October 2026: 3,131 km² charged
+for 2,567 km² of AOI covered; the per-scene clipped areas summed to 4,275 km²). The plan's quota
+estimate is that per-scene sum, an upper bound, and `order` refuses to go over --max-km2 of it
+(default 3,000, one month's quota).
 """
 from __future__ import annotations
 
@@ -117,21 +120,44 @@ def _clear_pct(item: dict) -> float:
     return float(p["clear_percent"]) if p.get("clear_percent") is not None else 100 * (1 - float(p.get("cloud_cover", 1)))
 
 
-def pick_day(items: list[dict], grid: list[tuple[float, float]]) -> dict | None:
-    """Best acquisition day: score = AOI coverage x mean clear share of that day's scenes."""
+def minimal_cover(its: list[dict], grid: list[tuple[float, float]]) -> tuple[list[dict], dict[str, int]]:
+    """Greedy smallest set of scenes covering every AOI grid point the day's scenes cover together.
+    Returns (chosen scenes, grid points inside each scene). Overlapping extra scenes only cost quota."""
+    pts = {it["id"]: {i for i, (x, y) in enumerate(grid) if _in_geometry(x, y, it["geometry"])} for it in its}
+    full = set().union(*pts.values()) if pts else set()
+    chosen, covered = [], set()
+    while covered != full:
+        it = max((i for i in its if i not in chosen), key=lambda i: (len(pts[i["id"]] - covered), _clear_pct(i)))
+        chosen.append(it)
+        covered |= pts[it["id"]]
+    return chosen, {k: len(v) for k, v in pts.items()}
+
+
+def pick_day(items: list[dict], grid: list[tuple[float, float]], aoi_km2: float | None = None,
+             near: float = 0.95) -> dict | None:
+    """Best acquisition day: score = AOI coverage x mean clear share of the scenes needed to cover it.
+    Only those scenes are kept. Among days scoring at least `near` x the best, the one with the
+    smallest quota estimate wins: the sum of each kept scene's area inside the AOI (Planet's quota
+    counts more than the AOI area once scenes overlap; on the 2026-10 orders it was between the
+    two, so this sum is a safe upper bound)."""
     days: dict[str, list[dict]] = {}
     for it in items:
         days.setdefault(it["properties"]["acquired"][:10], []).append(it)
-    best = None
+    if not days or not grid:
+        return None
+    options = []
     for day, its in sorted(days.items()):
-        cov = coverage(grid, [it["geometry"] for it in its])
-        clear = sum(_clear_pct(it) for it in its) / len(its)
-        score = cov * clear / 100
-        if best is None or score > best["score"]:
-            best = {"date": day, "item_ids": sorted(it["id"] for it in its), "coverage": round(cov, 3),
-                    "clear_pct": round(clear, 1), "score": round(score, 3)}
-    if best:
-        best["days_found"] = len(days)
+        chosen, n_pts = minimal_cover(its, grid)
+        cov = coverage(grid, [it["geometry"] for it in chosen])
+        clear = sum(_clear_pct(it) for it in chosen) / len(chosen) if chosen else 0.0
+        quota = sum(n_pts[it["id"]] for it in chosen) / len(grid) * aoi_km2 if aoi_km2 else None
+        options.append({"date": day, "item_ids": sorted(it["id"] for it in chosen), "coverage": round(cov, 3),
+                        "clear_pct": round(clear, 1), "score": round(cov * clear / 100, 3),
+                        "scenes_found": len(its), **({"quota_km2": round(quota, 1)} if quota is not None else {})})
+    top = max(o["score"] for o in options)
+    good = [o for o in options if o["score"] >= near * top]
+    best = min(good, key=lambda o: (o.get("quota_km2", 0), -o["score"]))
+    best["days_found"] = len(days)
     return best
 
 
@@ -144,26 +170,34 @@ def make_plan(session, aoi: dict, month_list: list[str], max_cloud: float, today
         row = {"month": month}
         if month_bounds(month)[0][:10] > newest.isoformat():
             row["note"] = f"after {newest.isoformat()}: PlanetScope has a {PLANET_DELAY_DAYS}-day delay"
-        best = pick_day(search_month(session, aoi, month, max_cloud), grid)
+        best = pick_day(search_month(session, aoi, month, max_cloud), grid, aoi_km2)
         if best is None:
-            row.update({"date": None, "item_ids": [], "km2": 0.0, "note": row.get("note") or "no scene under the cloud limit"})
+            row.update({"date": None, "item_ids": [], "km2": 0.0, "quota_km2": 0.0, "note": row.get("note") or "no scene under the cloud limit"})
         else:
             row.update(best, km2=round(aoi_km2 * best["coverage"], 1))
         rows.append(row)
     return {"aoi": aoi, "aoi_km2": round(aoi_km2, 1), "max_cloud": max_cloud, "item_type": ITEM_TYPE,
             "product_bundle": BUNDLE, "created": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            "months": rows, "total_km2": round(sum(r["km2"] for r in rows), 1)}
+            "months": rows, "total_km2": round(sum(r["km2"] for r in rows), 1),
+            "total_quota_km2": round(sum(r.get("quota_km2", r["km2"]) for r in rows), 1)}
 
 
 def print_plan(plan: dict) -> None:
     print(f"AOI {plan['aoi_km2']} km², cloud cover <= {plan['max_cloud']:.0%}\n")
-    print(f"{'month':8} {'day':10} {'scenes':>6} {'AOI cov':>8} {'clear':>6} {'km²':>7}  note")
+    print(f"{'month':8} {'day':10} {'scenes':>6} {'AOI cov':>8} {'clear':>6} {'AOI km²':>8} {'quota km²':>10}  note")
     for r in plan["months"]:
         if r["date"]:
-            print(f"{r['month']:8} {r['date']:10} {len(r['item_ids']):>6} {r['coverage']:>8.0%} {r['clear_pct']:>5.0f}% {r['km2']:>7.1f}  {r.get('note', '')}")
+            print(f"{r['month']:8} {r['date']:10} {len(r['item_ids']):>6} {r['coverage']:>8.0%} {r['clear_pct']:>5.0f}% "
+                  f"{r['km2']:>8.1f} {quota_km2(r):>10.1f}  {r.get('note', '')}")
         else:
-            print(f"{r['month']:8} {'-':10} {'-':>6} {'-':>8} {'-':>6} {0:>7.1f}  {r.get('note', '')}")
-    print(f"\nTotal ≈ {plan['total_km2']} km² (clipped to the AOI)")
+            print(f"{r['month']:8} {'-':10} {'-':>6} {'-':>8} {'-':>6} {0:>8.1f} {0:>10.1f}  {r.get('note', '')}")
+    print(f"\nTotal ≈ {plan['total_km2']} km² of the AOI; quota estimate ≈ {plan.get('total_quota_km2', plan['total_km2'])} km²"
+          " (sum of each scene's area inside the AOI: an upper bound for what Planet counts)")
+
+
+def quota_km2(row: dict) -> float:
+    """Quota estimate for a plan row; plans made before 2026-10-19 only have the AOI km²."""
+    return row.get("quota_km2", row["km2"])
 
 
 # ---------- orders ----------
@@ -222,9 +256,9 @@ def place_orders(session, plan: dict, confirm: bool, max_km2: float, min_coverag
     if retry_failed:
         forget_failed(session, plan, log)   # saved only if orders are actually placed below
     rows = pending_rows(plan, log, min_coverage)
-    km2 = round(sum(r["km2"] for r in rows), 1)
+    km2 = round(sum(quota_km2(r) for r in rows), 1)
     for r in rows:
-        print(f"  {r['month']}  {r['date']}  {len(r['item_ids'])} scene(s)  {r['km2']} km²")
+        print(f"  {r['month']}  {r['date']}  {len(r['item_ids'])} scene(s)  {r['km2']} km² of the AOI, quota ≈ {quota_km2(r)} km²")
     skipped = [r["month"] for r in plan["months"] if "order_id" in log.get(r["month"], {})]
     if skipped:
         print(f"  already ordered, skipped: {', '.join(skipped)}")
@@ -232,7 +266,7 @@ def place_orders(session, plan: dict, confirm: bool, max_km2: float, min_coverag
             if r["item_ids"] and "order_id" not in log.get(r["month"], {}) and r["coverage"] < min_coverage]
     if thin:
         print(f"  under {min_coverage:.0%} of the AOI, skipped (search again with a higher --max-cloud): {', '.join(thin)}")
-    print(f"To order: {len(rows)} month(s), ≈ {km2} km²")
+    print(f"To order: {len(rows)} month(s), quota ≈ {km2} km²")
     if km2 > max_km2:
         raise SystemExit(f"Refusing: {km2} km² is over --max-km2 {max_km2}. Order fewer months (a shorter plan).")
     if not confirm:

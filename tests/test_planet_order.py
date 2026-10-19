@@ -211,3 +211,32 @@ def test_retry_failed_reorders_only_failed_months(tmp_path, monkeypatch, capsys)
     assert feb["failed_orders"][0]["order_id"] == "order-2"
     assert fake.orders[-1]["tools"] == [{"clip": {"aoi": AOI}}]               # no harmonize tool
     assert po.load_log()["2025-01"]["order_id"] == "order-1"                  # January untouched
+
+
+def test_redundant_scenes_are_dropped_and_quota_estimated():
+    grid = po.aoi_grid(AOI)
+    items = [item("all", "2024-10-05T03:00:00Z", ALL), item("west", "2024-10-05T03:00:01Z", WEST_HALF),
+             item("east", "2024-10-05T03:00:02Z", EAST_HALF)]          # one scene already covers everything
+    best = po.pick_day(items, grid, aoi_km2=250.0)
+    assert best["item_ids"] == ["all"] and best["coverage"] == 1.0 and best["scenes_found"] == 3
+    assert best["quota_km2"] == 250.0
+
+
+def test_near_tie_prefers_the_cheaper_day():
+    grid = po.aoi_grid(AOI)
+    overlap = {"type": "Polygon", "coordinates": [[[107.25, 20.9], [107.6, 20.9], [107.6, 21.2], [107.25, 21.2], [107.25, 20.9]]]}
+    items = [item("w", "2024-10-03T03:00:00Z", WEST_HALF, clear=100), item("o", "2024-10-03T03:00:01Z", overlap, clear=100),
+             item("one", "2024-10-20T03:00:00Z", ALL, clear=97)]       # 3% less clear, but one scene
+    best = po.pick_day(items, grid, aoi_km2=250.0)
+    assert best["date"] == "2024-10-20" and best["quota_km2"] == 250.0
+    strict = po.pick_day(items, grid, aoi_km2=250.0, near=1.0)          # without the tolerance: the clearer day
+    assert strict["date"] == "2024-10-03" and strict["quota_km2"] > 250.0
+
+
+def test_old_plans_without_quota_estimate_still_order(tmp_path, monkeypatch):
+    monkeypatch.setattr(po, "OUT", tmp_path); monkeypatch.setattr(po, "ORDERS_LOG", tmp_path / "orders.json")
+    plan = {"aoi": AOI, "item_type": "PSScene", "product_bundle": "analytic_8b_sr_udm2",
+            "months": [{"month": "2025-02", "date": "2025-02-13", "item_ids": ["a"], "coverage": 0.85, "km2": 211.9}]}
+    fake = FakePlanet({})
+    assert po.place_orders(fake, plan, confirm=True, max_km2=3000) == ["order-1"]
+    assert po.quota_km2(plan["months"][0]) == 211.9
