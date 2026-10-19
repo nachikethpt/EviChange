@@ -34,7 +34,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from agents import ee_engine
+from agents import ee_engine, vlm_check
+from agents.vlm_client import VLMClient, VLMUnavailable
 from agents.graph import run_pipeline
 from agents.schema import CHANGE_TYPES, CONDITIONS, CONF_MIN, T_IDX, validate_aoi, validate_windows
 
@@ -157,6 +158,101 @@ def index_layer(index: str, kind: str, run_id: Optional[str] = None):
     layer.update(index=index, kind=kind, before_window=params["before_window"], after_window=params["after_window"])
     _index_tiles[key] = (time.time(), layer)
     return layer
+
+
+vlm = VLMClient()
+_vlm_checks: dict = {}           # check key -> result; filled from the answer log on first use
+_vlm_log_loaded = False
+LOG_ONLY_FIELDS = ("key", "time", "run_id", "bbox", "seconds")
+
+
+def _cached_check(key: str) -> Optional[dict]:
+    """A result for this check key from this session or, after a restart, from the answer log."""
+    global _vlm_log_loaded
+    if not _vlm_log_loaded:
+        for rec in vlm_check.read_log():
+            result = {k: v for k, v in rec.items() if k not in LOG_ONLY_FIELDS}
+            result["raw"] = (result.get("raw") or "")[:1000]
+            _vlm_checks[rec["key"]] = {**result, "from_log": True}
+        _vlm_log_loaded = True
+    return _vlm_checks.get(key)
+
+
+@app.get("/api/vlm/status")
+def vlm_status():
+    """Whether a Geo-VLM server is reachable (see notebooks/EviChange_vlm_server.ipynb).
+    Always asks the server afresh: the app calls this on start-up and on "Retry connection"."""
+    vlm._status = None
+    return {**vlm.status(), "labelled_sites_locked": not vlm_check.LABELLED_SITES_UNLOCKED,
+            "prompt_version": vlm_check.prompt_version(vlm_check.DEFAULT_CHIP_SET),
+            "chip_sets": list(vlm_check.CHIP_SETS), "default_chips": vlm_check.DEFAULT_CHIP_SET}
+
+
+class VLMCheckRequest(BaseModel):
+    region_id: str
+    run_id: Optional[str] = None
+    chips: Optional[str] = None          # a vlm_check.CHIP_SETS key; default VLM_CHIPS / rgb_swir
+
+
+@app.post("/api/vlm/check")
+def vlm_check_region(req: VLMCheckRequest):
+    """D7 candidate check for one region: before/after chips -> Geo-VLM -> verdict, compared with
+    the detector. One region per request so the app can show progress; results are cached."""
+    _require_valid_run(req.run_id)
+    chip_set = req.chips or vlm_check.DEFAULT_CHIP_SET
+    if chip_set not in vlm_check.CHIP_SETS:
+        raise HTTPException(400, f"chips must be one of {list(vlm_check.CHIP_SETS)}")
+    version = vlm_check.prompt_version(chip_set)
+    fc = data_store.get_change_regions(req.run_id)
+    feature = next((f for f in fc["features"] if f["properties"]["id"] == req.region_id), None)
+    if feature is None:
+        raise HTTPException(404, f"unknown region id: {req.region_id}")
+    bbox = _bbox(feature["geometry"])
+    if vlm_check.touches_labelled_site(bbox):
+        return {"region_id": req.region_id, "status": "blocked",
+                "detail": "Overlaps a labelled evaluation site: not sent to the model until the Phase 4 prompts are frozen."}
+    params = data_store.analysis_params(req.run_id)
+    if params is None:
+        raise HTTPException(404, "these change regions have no Earth Engine analysis behind them (demo data)")
+    status = vlm.status()
+    if not status["available"]:
+        raise HTTPException(503, status["detail"])
+    key = vlm_check.check_key(params, req.region_id, version, status["model"])
+    cached = _cached_check(key)
+    if cached:
+        return cached
+    t0 = time.time()
+    try:
+        chips = ee_engine.region_chips(params["aoi"], params["before_window"], params["after_window"],
+                                       params["max_cloud_pct"], bbox, kinds=vlm_check.chip_kinds(chip_set))
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc))
+    except Exception as exc:
+        raise HTTPException(502, f"Earth Engine: {exc}")
+    prompt = vlm_check.build_prompt(params["before_window"], params["after_window"], chip_set)
+    images = [chips[k] for k in vlm_check.chip_keys(chip_set)]
+    try:
+        out = vlm.generate(prompt, images, replay_key=f"{version}:{req.region_id}")
+    except VLMUnavailable as exc:
+        raise HTTPException(503, str(exc))
+    answer = vlm_check.parse_answer(out["text"])
+    result = {"region_id": req.region_id, "status": "checked", **answer,
+              **vlm_check.compare(answer, feature["properties"]),
+              "model": out["model"], "prompt_version": version, "chips": chip_set, "raw": out["text"][:1000],
+              "before_window": params["before_window"], "after_window": params["after_window"]}
+    if vlm.mode != "replay":   # replayed answers are already recorded somewhere
+        vlm_check.log_check({"key": key, "time": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "run_id": req.run_id,
+                             "bbox": [round(v, 6) for v in bbox], "seconds": round(time.time() - t0, 1),
+                             **result, "raw": out["text"]})   # full text in the log, for replays
+    _vlm_checks[key] = result
+    return result
+
+
+def _bbox(geometry: dict) -> tuple[float, float, float, float]:
+    polys = [geometry["coordinates"]] if geometry["type"] == "Polygon" else geometry["coordinates"]
+    xs = [p[0] for poly in polys for p in poly[0]]
+    ys = [p[1] for poly in polys for p in poly[0]]
+    return min(xs), min(ys), max(xs), max(ys)
 
 
 class ReportRequest(BaseModel):

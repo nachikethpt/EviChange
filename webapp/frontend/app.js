@@ -37,7 +37,7 @@ const state = {
   swipe: { on: false, left: 's2_2018', right: 's2_2022', x: null, map: null },
   selected: new Set(),      // selected change-region ids for the AI report
   condition: 'gated',
-  threshold: 0.5,
+  threshold: 0.2,            // replaced by CONF_MIN from /api/change_types on start-up
   tableLayerId: null,
 };
 const $ = sel => document.querySelector(sel);
@@ -244,6 +244,7 @@ function syncSelection() {
   const layer = state.layers.find(l => l.id === CHANGE_ID);
   if (!layer) return;
   layer.data.features.forEach(f => map.setFeatureState({ source: CHANGE_ID, id: f.properties.__fid }, { selected: state.selected.has(f.properties.id) }));
+  selectionChanged();   // explore.js: keeps Find changes' "Selection" scope in step
 }
 
 // ---------- 5. Attribute table ----------
@@ -536,7 +537,11 @@ function closePanel(resize = true) {
   // keep a finished drawn area visible when moving on to the change panel or report; clear everything else
   if (state.sketch) stopSketch(!(state.panel === 'draw' && state.sketch.done));
   else if (state.panel === 'measure' || (resize && ['report', 'changes'].includes(state.panel))) map.getSource('sketch')?.setData(turf.featureCollection([]));
-  if (state.panel === 'changes') { destroyCardMaps(); highlightRegion(null); }
+  if (state.panel === 'changes') {
+    destroyCardMaps(); highlightRegion(null);
+    // the "Selection" scope only limits the map while Find changes is open, so other tools can still click any region
+    if (explore.scope === 'selection') { explore.scope = 'all'; applyFilter(); }
+  }
   if (state.swipe.on) swipeOff();
   state.panel = null;
   $('#panel').hidden = true;

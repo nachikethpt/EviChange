@@ -16,16 +16,41 @@ Quang Ninh results are validated. See `decisions.md` D4–D5.
 | 1 | Consolidate repo, one schema, real verifier, EE smoke test | — | 8 | **done** (EE smoke test waits on your project id) |
 | 2 | **Earth Engine engine for any AOI.** Phase-1 rework (below); `agents/ee_engine.py` (SCL composites, indices, change mask, vectorised regions, real `mean_conf`); AOI validation + size cap; `tools.py` mock/EE switch; produce the Quang Ninh regions (now `change_regions_quangninh_v3.json`, D6) | 1 | 14 | **done** |
 | 3 | **Ground-truth labelling.** `notebooks/EviChange_labeling.ipynb`: 30 blind sites + a second labeller on 10 (inter-rater κ 0.63); `data/quangninh/labels/` | 2 | 4 | **done** (2nd labeller on all 30 recommended) |
-| 4 | **Real VLM.** `VLMClient` (hf / http / replay); develop prompts on detected QN regions **outside** the 30 labelled sites; freeze; run 3 conditions on the 30 sites. Also the two prompted-search tasks (D7): prompt → `SearchSpec` (+ schema validation) and candidate check `match`/`no_match`/`unsure`; their prompts are separate and not part of the freeze | 2, 3 (labels done first) | 18 | |
+| 4 | **Real VLM.** `VLMClient` (hf / http / replay) — http + replay done 2026-10-06 with the Geo-VLM region check (D7), served from Colab; develop prompts on detected QN regions **outside** the 30 labelled sites; freeze; run 3 conditions on the 30 sites. Also the two prompted-search tasks (D7): prompt → `SearchSpec` (+ schema validation) and candidate check `match`/`no_match`/`unsure`; their prompts are separate and not part of the freeze | 2, 3 (labels done first) | 18 | |
 | 5 | **Evaluation.** Claim adjudication page (condition hidden), `eval/metrics.py`, results tables | 3, 4 | 10 | |
 | 6 | **On-demand runs API.** `POST /api/runs` (AOI + before/after date windows) → background job running the agent pipeline on Earth Engine; `GET /api/runs/{id}` polling; per-run data store; cache; AOI cap | 2 | 12 | **done** |
 | 7 | **App.** Draw/search AOI, date pickers, run + progress state, per-run layers, "not validated outside Quang Ninh" banner, verdict reasons, export, cleanup. **Prompted search (D7):** "Find changes" chat calls the VLM (keyword parser as fallback), confirm-before-run for new dates/AOI/options, candidate-check results with "show rejected" toggle and "VLM-checked, not validated" label | 6 | 24 | |
 | 7b | **GIS tools (D8).** (a) Symbology by attribute + legend, scale bar, north arrow; (b) index rasters from Earth Engine (before/after/difference NDVI, NDBI, MNDWI) as tile layers; (c) geoprocessing (buffer, clip, intersect, dissolve) + select by attribute / location; (d) linked charts, layer export (GeoJSON / CSV / KML) + print layout (PNG/PDF). Owners: (b) Person 1 backend + Person 3 layer; the rest Person 3 | 7 (b also 2) | 28 | **done** |
 | 7c | **Map assistant (D9).** The "Find changes" chat becomes an ArcGIS Pro-style assistant: typed requests become validated actions that drive the existing tools — style layer (symbology), select / filter by attributes or location, geoprocessing (buffer, clip, intersect, dissolve), add index layer, chart, export, change search and new runs (D7). Each action shows what it ran (query / tool chain) with Undo; runs need confirmation. Keyword parser first, then the Phase 4 VLM produces the same actions. Owners: Person 3 actions + UI, Person 2 VLM side | 7b; VLM side 4 | 12 | |
-| 8 | Write-up + advisor demo | 5, 7 | 14 | |
+| 8 | Write-up + advisor demo | 5, 7, 14 | 14 | |
 
-Total remaining ≈ 78 h (Phases 4, 5, 7, 7c, 8), split across three people. If time runs short,
-cut the D7 candidate check first, then 7c's VLM side (the keyword assistant still works).
+### Coastal + land-cover extension (teacher feedback, 2026-10-08; D10–D14)
+
+The teacher asked for (1) specific land-cover classes, (2) change over **months**, including
+shorelines and buildings near the shoreline, and (3) the same analysis on **Planet** data, which
+arrives later (access granted 2026-10-08, D12). Later the teacher also asked for **time series
+analysis** (D14): when a change happened and whether it lasts, not only before vs after. These are
+both new app capabilities and new evaluated claim types (D13).
+Study period for the monthly work: the last 24 months, **Oct 2024 – Sep 2026**.
+
+| # | Phase | Depends on | Est. h | Status |
+|---|---|---|---|---|
+| 9 | **Land-cover classes (D10).** Dynamic World for each change region: dominant class before / after and class shares, so a region reads "trees → bare" instead of "vegetation loss + more bare ground". New optional region fields `class_before`, `class_after`, `class_frac_*`; app legend, cards and Find changes search by class / transition ("trees to built") | 2 | 10 | |
+| 10 | **Monthly time series (D11).** One map per month for the AOI: Dynamic World class map (only where clear: about Oct–Mar, see D11), Sentinel-1 water mask (every month), and a per-month data-quality layer (clear-sky share). Monthly change vs the previous month and vs Oct 2024. App: time slider over months with gaps shown as gaps, a monthly chart per region / transect | 2, 9 | 16 | |
+| 10b | **Time series analysis (D14).** CCDC (`ee.Algorithms.TemporalSegmentation.Ccdc`) on Sentinel-2 per pixel: a seasonal model learned from 2018 onwards, breaks detected in Oct 2024 – Sep 2026. Per region: `change_month` (date window between the last clear look before and the first after the break), break magnitude per index, lasting vs seasonal. Planet monthly images (Phase 13) fill the monsoon months visually. App: region chart with monthly values, the fitted seasonal curve and the break; Find changes by date ("forest loss after June 2025") | 10 | 12 | |
+| 11 | **Shoreline change (D11).** Monthly land / water line from Sentinel-1 (VV, Otsu threshold) with Sentinel-2 MNDWI where clear; baseline + transects every 100 m; per transect: position each month, net movement and linear rate (m/yr) over the 24 months; tide caveat on every number (D11). App: shoreline per month on the map, transect chart, "advancing / retreating" colouring | 10 | 14 | |
+| 12 | **Buildings near the shoreline (D11).** Built area inside coastal strips (0–200 m, 200–500 m from the Oct 2024 shoreline) per month from Dynamic World `built`; new built patches; Open Buildings temporal (to 2023) as a pre-period reference | 10, 11 | 8 | |
+| 13 | **Planet imagery (D12).** (a) `scripts/planet_order.py`: best clear 8-band scene set per month over the AOI, clipped and harmonised to Sentinel-2, km² shown before ordering; Oct 2024 – Sep 2025 on the October 2026 quota, the rest in November; (b) `ee_engine` gets a `source` setting (sentinel2 / planet) with a per-source band map and resolution; indices that need SWIR (NDBI, MNDWI) are replaced by NDWI + classes for Planet; (c) integration: monsoon gap fill for Phase 10, 3 m detail for Phases 11–12, Geo-VLM chips | 9, 10 (a: none) | 6 (+8) | (a) in progress |
+| 14 | **Ground truth for classes, shoreline and coastal buildings (D13).** (a) From / to land-cover class at the existing 30 sites (blind to Dynamic World); (b) reference shorelines digitised on high-resolution imagery at 2 dates on 30 transects; (c) 30 coastal cells labelled built / not built at Oct 2024 and Sep 2026; (d) month of change at the 30 sites where the Planet monthly images show it (D14) | 9, 11, 12, 13 | 9 | |
+| 15 | **Evaluation extension (D13).** Claim types `land_cover` (L3), `shoreline` (L2) and `coastal_built` (L2) in `schema.py`, verifier rules, gated / ungated prompts cover them; metrics per claim type; extraction accuracy (shoreline RMSE in m, class-transition agreement κ with the labels) | 4, 14 | 10 | |
+
+**Order matters for the evaluation.** Phase 4's report prompts must be frozen **after** Phase 9 and
+the Phase 15 schema exist, because the frozen prompts have to cover the new claim types. Phase 4
+work that doesn't depend on them (VLMClient, server notebook, the region check) carries on.
+
+Total remaining ≈ 179 h: ≈ 78 h for Phases 4, 5, 7, 7c, 8, plus ≈ 101 h for the coastal + land-cover
+extension (Phases 9–15 with 10b, including Planet integration; time series analysis added 2026-10-11). Decided 2026-10-08: add the hours rather than
+cut scope. If something must give later, cut the D7 candidate check first, then 7c's VLM side.
 Labelling is done; a second labeller on the remaining 20 sites is optional (≈40 min).
 Re-plan trigger: Phase 4 not finished by end of week 6.
 
@@ -162,3 +187,11 @@ the 30 labelled sites. They are frozen (pinned by commit) before the 30 sites ar
    still finds every region. Capability only, not evaluated. Confirm the scope is fine.
 8. Map assistant (D9): natural-language actions on the map, like ArcGIS Pro's AI assistant.
    A tool capability, not evaluated. Confirm it's in scope.
+9. Teacher feedback (2026-10-08) is in Phases 9–15: Dynamic World classes, monthly change,
+   shoreline + coastal buildings, Planet later, and an extended evaluation. Confirm (a) the 24-month
+   window, (b) that monthly land-cover maps may only cover the dry season (D11), and (c) that tide
+   is reported as an uncertainty rather than corrected (D11).
+10. Time series analysis (D14): CCDC on Sentinel-2, with Planet for monsoon months and detail rather
+   than as the time series source (short history, no SWIR, sensor mix). Confirm (a) CCDC is the
+   method wanted (vs LandTrendr / BFAST or a general monthly series), and (b) that this Planet role
+   is acceptable.

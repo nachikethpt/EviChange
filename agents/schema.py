@@ -18,7 +18,7 @@ from math import cos, pi
 from typing import Iterable
 
 T_IDX = 0.10      # |index change| at or below this is "no clear change" (notebooks, report, verifier)
-CONF_MIN = 0.5    # detections with mean_conf below this only support "uncertain" claims
+CONF_MIN = 0.2    # detections with mean_conf below this only support "uncertain" claims (D6: ~median of v3 QN regions)
 
 CONDITIONS = ("template", "ungated", "gated")
 LEVELS = ("L1", "L2", "L3", "L4")
