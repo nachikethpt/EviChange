@@ -31,13 +31,13 @@ const FALLBACK_TYPES = {
   built_up_increase: { field: 'dNDBI', sign: 1 }, built_up_decrease: { field: 'dNDBI', sign: -1 },
   water_increase: { field: 'dMNDWI', sign: 1 }, water_decrease: { field: 'dMNDWI', sign: -1 },
 };
-const EXAMPLES = ['vegetation loss bigger than 10 ha', 'new water in the north', 'mining-like changes in this area', 'largest 5 changes'];
+const EXAMPLES = ['vegetation loss bigger than 10 ha', 'new water in the north', 'mining-like changes in this area', 'largest 5 changes', 'select new water bigger than 5 ha'];
 
 const explore = {
   types: FALLBACK_TYPES, tIdx: 0.1,
   meta: new Map(),          // region id -> { fid, bbox, anchor }
   filter: emptyFilter(),
-  scope: 'all',             // 'all' | 'view' | 'drawn'
+  scope: 'all',             // 'all' | 'view' | 'drawn' | 'selection' (state.selected: ⚙ Tools, charts, table, AI report)
   drawnIds: null,           // Set of region ids inside the drawn area
   regionId: null,           // region shown in the detail card (null = list view)
   chat: [],
@@ -52,6 +52,7 @@ async function loadChangeTypes() {
   try {
     const j = await (await fetch('/api/change_types')).json();
     explore.types = j.types; explore.tIdx = j.t_idx;
+    if (typeof j.conf_min === 'number') state.threshold = j.conf_min;   // AI report slider starts at the verifier's cut-off
   } catch (err) { /* keep FALLBACK_TYPES */ }
 }
 
@@ -82,7 +83,8 @@ function changeTypePaint(hl) {
   const match = ['match', ['get', 'primary_type'], ...Object.entries(TYPE_INFO).flatMap(([k, v]) => [k, v.color]), TYPE_INFO.unclear.color];
   return {
     fill: { 'fill-color': match, 'fill-opacity': 0.5 },
-    line: { 'line-color': ['case', hl, '#22d3ee', match], 'line-width': ['case', hl, 3.5, 1.4] },
+    line: { 'line-color': ['case', hl, '#22d3ee', ['boolean', ['feature-state', 'vlmNo'], false], '#111827', match],
+            'line-width': ['case', hl, 3.5, ['boolean', ['feature-state', 'vlmNo'], false], 3, 1.4] },   // vlmNo: Geo-VLM sees no change (geovlm.js)
   };
 }
 
@@ -95,12 +97,14 @@ function initExplorer() {
   });
   map.on('moveend', () => { refreshMarkers(); if (state.panel === 'changes' && explore.scope === 'view' && !explore.regionId) renderPanel(); });
   applyFilter();
+  loadVlmStatus();   // geovlm.js
 }
 
 // ---------- filtering ----------
-function inScope(f) {
-  if (explore.scope === 'drawn') return !!explore.drawnIds?.has(f.properties.id);
-  if (explore.scope === 'view') {
+function inScope(f, scope = explore.scope) {
+  if (scope === 'selection') return state.selected.has(f.properties.id);
+  if (scope === 'drawn') return !!explore.drawnIds?.has(f.properties.id);
+  if (scope === 'view') {
     const b = map.getBounds(), [w, s, e, n] = explore.meta.get(f.properties.id).bbox;
     return w <= b.getEast() && e >= b.getWest() && s <= b.getNorth() && n >= b.getSouth();
   }
@@ -118,10 +122,47 @@ function matchesFilter(f, flt = explore.filter) {
 
 function filterActive() { const f = explore.filter; return !!(f.types || f.minHa != null || f.maxHa != null || f.locations || f.top); }
 
-/** Regions in the current scope that match the filter, largest first. */
-function currentResults() {
-  const res = allRegions().filter(f => inScope(f) && matchesFilter(f)).sort((a, b) => b.properties.area_ha - a.properties.area_ha);
-  return explore.filter.top ? res.slice(0, explore.filter.top) : res;
+/** Regions in the scope that match the filter, largest first (defaults: the panel's current search). */
+function currentResults(flt = explore.filter, scope = explore.scope) {
+  const res = allRegions().filter(f => inScope(f, scope) && matchesFilter(f, flt)).sort((a, b) => b.properties.area_ha - a.properties.area_ha);
+  return flt.top ? res.slice(0, flt.top) : res;
+}
+
+/** The search as a SQL WHERE clause, the same form ⚙ Tools > Select by attributes shows.
+ *  Change types are written as the index rules that define them (agents/schema.py CHANGE_TYPES). */
+function filterSql(flt, scope) {
+  const t = explore.tIdx, conds = [];
+  if (flt.types) {
+    const parts = [...flt.types].map(k => {
+      if (k === 'unclear') return `(ABS(dNDVI) <= ${t} AND ABS(dNDBI) <= ${t} AND ABS(dMNDWI) <= ${t})`;
+      const ty = explore.types[k];
+      return ty ? `${ty.field} ${ty.sign > 0 ? `> ${t}` : `< -${t}`}` : null;
+    }).filter(Boolean);
+    conds.push(parts.length > 1 ? `(${parts.join(' OR ')})` : parts[0]);
+  }
+  if (flt.minHa != null) conds.push(`area_ha >= ${+flt.minHa}`);
+  if (flt.maxHa != null) conds.push(`area_ha <= ${+flt.maxHa}`);
+  if (flt.locations) conds.push(`location IN (${[...flt.locations].map(l => `'${l}'`).join(', ')})`);
+  let sql = conds.length ? `WHERE ${conds.join('\n  AND ')}` : 'WHERE TRUE   -- every region';
+  const where = { view: 'inside the current map view', drawn: 'intersecting the drawn area', selection: 'among the selected regions' }[scope];
+  if (where) sql += `\n  -- ${where}`;
+  if (flt.top) sql += `\nORDER BY area_ha DESC LIMIT ${flt.top}`;
+  return sql;
+}
+
+/** Called whenever the change-region selection changes (app.js syncSelection). */
+function selectionChanged() {
+  if (explore.scope === 'selection') {
+    if (!state.selected.size) explore.scope = 'all';
+    applyFilter();
+  }
+  if (state.panel === 'changes' && !explore.regionId) renderPanel();
+}
+
+/** Select search results: mode 'new' | 'add' | 'remove', like ⚙ Tools' selection types. */
+function selectResults(results, mode = 'new') {
+  const layer = changeLayer(); if (!layer) return;
+  setSelection(layer, combineSelection(layer, new Set(results.map(f => f.properties.__fid)), mode));   // gistools.js
 }
 
 /** Show only matching regions on the map (all regions when nothing is filtered). */
@@ -275,20 +316,25 @@ function describeFilter(flt, scope) {
   else if (flt.minHa != null) parts.push(`at least ${fmtHa(flt.minHa)}`);
   else if (flt.maxHa != null) parts.push(`at most ${fmtHa(flt.maxHa)}`);
   if (flt.locations) parts.push(`in the ${[...flt.locations].join(' / ')}`);
-  parts.push({ all: 'in the whole study area', view: 'in the current map view', drawn: 'inside the drawn area' }[scope]);
+  parts.push({ all: 'in the whole study area', view: 'in the current map view', drawn: 'inside the drawn area', selection: 'among the selected regions' }[scope]);
   if (flt.top) parts.push(`(largest ${flt.top})`);
   return parts.join(', ');
 }
 
+const SELECT_VERBS = /^\s*(also select|select|choose|pick|highlight|add|remove|deselect|unselect)\b\s*/i;
+const SELECT_MODES = { add: 'add', 'also select': 'add', remove: 'remove', deselect: 'remove', unselect: 'remove' };
+
 function askChat(text) {
   text = text.trim(); if (!text) return;
   explore.chat.push({ who: 'you', html: esc(text) });
+  const verb = text.match(SELECT_VERBS);
+  if (verb) return askSelect(verb[1].toLowerCase(), text.slice(verb[0].length));
   const r = parseQuery(text);
   if (r.reset) {
     explore.scope = 'all'; clearFilter();
     explore.chat.push({ who: 'bot', html: `Showing all ${allRegions().length} change regions again.` });
   } else if (!r.understood) {
-    explore.chat.push({ who: 'bot', html: `I can search by <b>type</b> (vegetation, bare/built-up ground, water, mining-like), <b>gain or loss</b>, <b>size</b> ("bigger than 10 ha"), <b>location</b> ("in the north-east"), <b>largest N</b>, and <b>where</b> ("in this area" for a drawn area, "in view"). Try one of the examples below.` });
+    explore.chat.push({ who: 'bot', html: `I can search by <b>type</b> (vegetation, bare/built-up ground, water, mining-like), <b>gain or loss</b>, <b>size</b> ("bigger than 10 ha"), <b>location</b> ("in the north-east"), <b>largest N</b>, and <b>where</b> ("in this area" for a drawn area, "in view"). Start with <b>select</b>, <b>add</b> or <b>remove</b> to change the map selection instead. Try one of the examples below.` });
   } else {
     if (r.scope === 'drawn' && !explore.drawnIds) explore.chat.push({ who: 'bot', html: 'No area drawn yet: searching the whole study area. Use ✎ Draw area first to search inside an area.' });
     else if (r.scope) explore.scope = r.scope;
@@ -296,10 +342,40 @@ function askChat(text) {
     const res = currentResults(), total = res.reduce((s, f) => s + f.properties.area_ha, 0);
     explore.chat.push({ who: 'bot', html:
       `Looking for ${esc(describeFilter(r.filter, explore.scope))}.<br>` +
-      (res.length ? `<b>Found ${res.length} region${res.length > 1 ? 's' : ''}, ${fmtHa(total)} in total.</b> They are the only ones shown on the map now.`
+      (res.length ? `<b>Found ${res.length} region${res.length > 1 ? 's' : ''}, ${fmtHa(total)} in total.</b> They are the only ones shown on the map now. Say <i>select …</i> to select them instead.`
                   : '<b>No regions match.</b> Try a smaller size, another location or the whole study area.') +
+      `<pre class="sql">${esc(filterSql(r.filter, explore.scope))}</pre>` +
       r.notes.map(n => `<div class="muted">${esc(n)}</div>`).join('') });
     if (res.length) fitToRegions(res);
+  }
+  explore.chat = explore.chat.slice(-8);
+  explore.regionId = null;
+  renderPanel();
+}
+
+/** "select / add / remove …": the same search, but the matches become the map selection
+ *  (the one ⚙ Tools, charts, the table and the AI report use) and the panel shows it. */
+function askSelect(verb, rest) {
+  const mode = SELECT_MODES[verb] || 'new';
+  rest = rest.replace(/\b(to|from|in|into)\s+(the\s+)?(current\s+)?selection\b/i, ' ').trim();
+  const r = parseQuery(rest || 'all');
+  if (!r.reset && !r.understood) {
+    explore.chat.push({ who: 'bot', html: 'Say what to select, e.g. <i>select vegetation loss bigger than 10 ha</i>, <i>add new water in the north</i> or <i>remove regions smaller than 2 ha</i>.' });
+  } else {
+    const flt = r.reset ? emptyFilter() : r.filter;
+    let scope = r.scope || (explore.scope === 'selection' ? 'all' : explore.scope);
+    if (scope === 'drawn' && !explore.drawnIds) scope = 'all';
+    const hits = currentResults(flt, scope);
+    selectResults(hits, mode);
+    const sel = allRegions().filter(f => state.selected.has(f.properties.id));
+    const n = sel.length, total = sel.reduce((s, f) => s + f.properties.area_ha, 0);
+    explore.filter = emptyFilter(); explore.scope = n ? 'selection' : 'all'; applyFilter();
+    const did = { new: `Selected ${hits.length}`, add: `Added ${hits.length}`, remove: `Removed ${hits.length}` }[mode];
+    explore.chat.push({ who: 'bot', html:
+      `${did} region${hits.length === 1 ? '' : 's'} (${esc(describeFilter(flt, scope))}).<br>` +
+      `<b>${n} selected, ${fmtHa(total)} in total.</b> ${n ? 'The map now shows only the selection; pick another scope below to see everything.' : ''}` +
+      `<pre class="sql">${esc(filterSql(flt, scope))}</pre>` + r.notes.map(x => `<div class="muted">${esc(x)}</div>`).join('') });
+    if (n) fitToRegions(sel);
   }
   explore.chat = explore.chat.slice(-8);
   explore.regionId = null;
@@ -365,13 +441,15 @@ function renderChangesPanel(body) {
       <button class="btn primary" type="submit">Find</button></form>
     <div class="chips examples">${EXAMPLES.map(x => `<button class="chip ex" type="button">${esc(x)}</button>`).join('')}</div>
     <div class="section seg scope" id="scopeSeg">
-      <button data-s="all" class="${explore.scope === 'all' ? 'on' : ''}">Whole study area</button>
+      <button data-s="all" class="${explore.scope === 'all' ? 'on' : ''}">Whole area</button>
       <button data-s="view" class="${explore.scope === 'view' ? 'on' : ''}">Map view</button>
       <button data-s="drawn" class="${explore.scope === 'drawn' ? 'on' : ''}" ${explore.drawnIds ? '' : 'disabled title="Draw an area first (✎ Draw area)"'}>Drawn area</button>
+      <button data-s="selection" class="${explore.scope === 'selection' ? 'on' : ''}" ${state.selected.size ? '' : 'disabled title="Nothing selected yet: say “select …”, use ⚙ Tools, click a chart bar or pick regions in the AI report"'}>Selection${state.selected.size ? ` (${state.selected.size})` : ''}</button>
     </div>
     <div class="section">
       <div class="pane-subtitle">${results.length} change region${results.length === 1 ? '' : 's'} · ${fmtHa(total)}
         ${filterActive() ? `<span class="muted"> · ${esc(describeFilter(explore.filter, explore.scope))}</span> <button class="linkish" id="clearF">clear</button>` : ''}</div>
+      ${filterActive() || explore.scope !== 'all' ? `<details class="small"><summary>As a query</summary><pre class="sql">${esc(filterSql(explore.filter, explore.scope))}</pre></details>` : ''}
       ${Object.entries(byType).sort((a, b) => b[1].ha - a[1].ha).map(([k, v]) => `
         <button class="type-row" data-k="${k}" title="Show only this type">
           <span class="swatch" style="background:${info(k).color}">${info(k).icon}</span>
@@ -386,9 +464,15 @@ function renderChangesPanel(body) {
         return `<button class="region-row" data-id="${esc(p.id)}">
           <span class="swatch" style="background:${info(p.primary_type).color}">${info(p.primary_type).icon}</span>
           <span><b>${esc(typesOf(f).map(t => info(t).short).join(' + '))}</b><br>
-          <span class="muted">${esc(p.id)} · ${fmtHa(p.area_ha)} · ${esc(p.location)}</span></span></button>`;
+          <span class="muted">${esc(p.id)} · ${fmtHa(p.area_ha)} · ${esc(p.location)}</span> ${vlmBadge(p.id)}</span></button>`;
       }).join('')}</div>
       ${results.length > 100 ? `<p class="muted">…and ${results.length - 100} smaller regions. Narrow the search to see them.</p>` : ''}</div>
+      <div class="section card-actions">
+        <button class="btn" id="selThese" title="Make these regions the map selection">☑ Select these ${results.length}</button>
+        ${state.selected.size && explore.scope !== 'selection' ? '<button class="btn" id="selAdd" title="Add these to the current selection">＋ Add to selection</button>' : ''}
+        ${state.selected.size ? `<button class="btn" id="selClear">Clear selection (${state.selected.size})</button>` : ''}
+      </div>
+      ${vlmSectionHtml(results)}
       <button class="btn" id="toReport">✦ AI report for these ${results.length} region${results.length > 1 ? 's' : ''}</button>` : ''}`;
 
   const log = $('#chatLog'); log.scrollTop = log.scrollHeight;
@@ -402,6 +486,10 @@ function renderChangesPanel(body) {
     b.onmouseleave = () => highlightRegion(null);
     b.onclick = () => openRegion(b.dataset.id, true);
   });
+  wireVlmSection(results);
+  const st = $('#selThese'); if (st) st.onclick = () => selectResults(results, 'new');
+  const sa = $('#selAdd'); if (sa) sa.onclick = () => selectResults(results, 'add');
+  const sc = $('#selClear'); if (sc) sc.onclick = () => selectResults([], 'new');
   const tr = $('#toReport');
   if (tr) tr.onclick = () => { state.selected = new Set(results.map(f => f.properties.id)); syncSelection(); openPanel('report'); };
 }
@@ -460,11 +548,13 @@ function renderRegionCard(body, f) {
       <button class="btn" id="cardSwipe">⇆ Swipe here</button>
       <button class="btn primary" id="cardAI">✦ AI claims</button>
     </div>
-    <div id="cardReport"></div>`;
+    <div id="cardReport"></div>
+    ${vlmCardHtml(p.id)}`;
 
   const clean = { type: 'Feature', properties: {}, geometry: f.geometry };
   explore.cardMaps.push(miniMap('mmBefore', 's2_2018', clean), miniMap('mmAfter', 's2_2022', clean));
   $('#cardBack').onclick = () => { explore.regionId = null; renderPanel(); };
+  wireVlmCard(p.id);
   $('#cardZoom').onclick = () => map.fitBounds(explore.meta.get(p.id).bbox, { padding: 80, maxZoom: 15 });
   $('#cardSwipe').onclick = () => { map.fitBounds(explore.meta.get(p.id).bbox, { padding: 80, maxZoom: 15, duration: 0 }); openPanel('swipe'); };
   $('#cardAI').onclick = async () => {

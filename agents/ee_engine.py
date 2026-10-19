@@ -6,6 +6,7 @@ remain usable on machines without the EE client or credentials.
 from __future__ import annotations
 
 from datetime import date, timedelta
+import json
 import os
 from typing import Any
 
@@ -115,6 +116,50 @@ def index_tile_layer(aoi: dict, before_window: list[str], after_window: list[str
     map_id = image.clip(_geometry(ee, aoi)).getMapId(
         {"min": vis["min"], "max": vis["max"], "palette": [c.lstrip("#") for c in vis["palette"]]})
     return {"tiles": [map_id["tile_fetcher"].url_format], **vis}
+
+
+CHIP_VIS = {"rgb": (["B4", "B3", "B2"], 0, 3000), "swir": (["B11", "B8", "B4"], 0, 4500),
+            "cir": (["B8", "B4", "B3"], 0, 4500)}   # same stretch both dates
+CHIP_MIN_M, CHIP_PX = 600, 512
+_composite_cache: dict = {}
+
+
+def chip_box(bbox: tuple[float, float, float, float]) -> list[float]:
+    """Square chip around a region's bounding box: 1.6 x its longer side, at least CHIP_MIN_M
+    (the labelling notebook's framing), as [west, south, east, north]."""
+    import math
+    w, s, e, n = bbox
+    cx, cy = (w + e) / 2, (s + n) / 2
+    m_per_deg_lon = 111_320 * math.cos(math.radians(cy))
+    side_m = max(CHIP_MIN_M, 1.6 * max((e - w) * m_per_deg_lon, (n - s) * 111_320))
+    dx, dy = side_m / 2 / m_per_deg_lon, side_m / 2 / 111_320
+    return [cx - dx, cy - dy, cx + dx, cy + dy]
+
+
+def region_chips(aoi: dict, before_window: list[str], after_window: list[str], max_cloud_pct: float,
+                 bbox: tuple[float, float, float, float], kinds: tuple[str, ...] = ("rgb", "swir")) -> dict[str, bytes]:
+    """Before/after PNG chips around one region, its bounding box outlined in yellow, from the
+    same composites run_engine() uses. `kinds` picks CHIP_VIS entries (true colour, SWIR false
+    colour, colour infrared). Keys: before_<kind>, after_<kind>."""
+    import urllib.request
+    ee = _ee()
+    key = json.dumps([aoi, before_window, after_window, max_cloud_pct], sort_keys=True)
+    if key not in _composite_cache:
+        _composite_cache[key] = (_composite(ee, aoi, before_window, max_cloud_pct)[0],
+                                 _composite(ee, aoi, after_window, max_cloud_pct)[0])
+    before, after = _composite_cache[key]
+    region = ee.Geometry.Rectangle(chip_box(bbox))
+    edge = (ee.Image().byte().paint(ee.FeatureCollection([ee.Feature(ee.Geometry.Rectangle(list(bbox)))]), 1, 2)
+            .visualize(palette=["ffff00"]))
+    chips = {}
+    for when, img in (("before", before), ("after", after)):
+        for kind in kinds:
+            bands, lo, hi = CHIP_VIS[kind]
+            url = img.visualize(bands=bands, min=lo, max=hi).blend(edge).getThumbURL(
+                {"region": region, "dimensions": CHIP_PX, "format": "png"})
+            with urllib.request.urlopen(url, timeout=120) as resp:
+                chips[f"{when}_{kind}"] = resp.read()
+    return chips
 
 
 def _change_bands(d_ndvi: Any, d_ndbi: Any, d_mndwi: Any, index_delta: float) -> tuple[Any, Any]:

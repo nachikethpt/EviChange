@@ -288,6 +288,7 @@ function renderToolsPanel(body) {
     <div class="section card-actions">
       <button class="btn primary" id="gpRun" ${gis.toolBusy ? 'disabled' : ''}>${gis.toolBusy ? 'Running…' : 'Run'}</button>
       ${isSelect && selCount ? `<button class="btn" id="gpClear">Clear selection (${selCount})</button><button class="btn" id="gpExport">Selection → new layer</button>` : ''}
+      ${isSelect && selCount && layer.id === CHANGE_ID ? '<button class="btn" id="gpFind">🔎 Explore in Find changes</button>' : ''}
     </div>
     ${gis.toolMsg ? `<div class="section gp-result">${gis.toolMsg}</div>` : ''}
     <p class="muted small">Outputs are new layers in Contents: the change regions themselves are never changed.
@@ -304,6 +305,7 @@ function renderToolsPanel(body) {
     };
   });
   $('#gpRun').onclick = () => runTool();
+  const fc = $('#gpFind'); if (fc) fc.onclick = () => { explore.filter = emptyFilter(); explore.scope = 'selection'; explore.regionId = null; applyFilter(); openPanel('changes'); };
   const c = $('#gpClear'); if (c) c.onclick = () => { setSelection(layer, new Set()); gis.toolMsg = ''; renderPanel(); };
   const x = $('#gpExport'); if (x) x.onclick = () => {
     const feats = toolInput(layer, true).map(f => turf.feature(f.geometry, cleanProps(f.properties)));

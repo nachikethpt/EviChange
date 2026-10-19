@@ -24,9 +24,11 @@ Run it from the **repo root** (it imports the shared `agents/schema.py` and
 | ⇆ Swipe | Before/after slider (e.g. Sentinel-2 2018 vs 2022) |
 | ◐ Indices | NDVI / NDBI / MNDWI before, after or change, as Earth Engine tile layers over the regions' own AOI and dates (needs live data + an Earth Engine login) |
 | ⚙ Tools | Select by attributes (shows the SQL) or location; buffer, clip, intersect, dissolve (run in a background worker; outputs are new layers) |
+| 🔎 Find changes ⇄ selection | Start a search with *select*, *add* or *remove* to change the map selection (the one ⚙ Tools, charts, the table and the AI report use); every search shows its SQL `WHERE` clause; ☑ Select these / ＋ Add to selection on the results; a **Selection** scope lists and checks whatever is selected; ⚙ Tools → 🔎 Explore in Find changes |
 | 📊 Charts | Bar chart (count or sum by a field) or histogram; click a bar to select its features; table view |
 | 🖨 Export | Layer → GeoJSON / CSV / KML (all or selected); A4 print layout with legend, north arrow and scale bar → PNG or PDF |
 | 🎨 (in Contents) | Symbology: single colour, unique values or graduated colours, with a legend under each layer |
+| 🛰 Geo-VLM check (in 🔎 Find changes) | Sends up to 20 regions, one at a time, to Qwen2.5-VL with before/after chips; shows whether the model sees change and how that compares with the detector; flags "no change" regions on the map. Needs `VLM_URL` + `VLM_TOKEN` from `notebooks/EviChange_vlm_server.ipynb` (Colab GPU). An **Images** menu picks the chips sent (true colour / + SWIR / + colour infrared; default from `VLM_CHIPS`, else true colour + SWIR). Every answer is saved to `data/vlm_checks.jsonl` (survives restarts; `python scripts/vlm_compare.py` compares models and image sets). The 30 labelled sites are skipped. |
 | ✦ AI report | Template / Ungated / Gated / Compare, confidence threshold slider, verdicts (supported / unsupported / uncertain), abstentions |
 
 Map imagery needs internet. Sentinel-2 cloudless mosaics © EOX IT Services (CC BY-NC-SA 4.0 for 2018 and later: fine for research, keep the attribution).

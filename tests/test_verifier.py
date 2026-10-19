@@ -7,7 +7,7 @@ EV = {
     "regions": [
         {"id": "r1", "area_ha": 182.4, "mean_conf": 0.86, "dNDVI": -0.34, "dNDBI": 0.21, "dMNDWI": -0.03, "location": "north-east"},
         {"id": "r2", "area_ha": 41.7, "mean_conf": 0.55, "dNDVI": 0.04, "dNDBI": 0.03, "dMNDWI": 0.16, "location": "south-west"},
-        {"id": "r3", "area_ha": 19.9, "mean_conf": 0.33, "dNDVI": -0.25, "dNDBI": 0.02, "dMNDWI": 0.00, "location": "west"},
+        {"id": "r3", "area_ha": 19.9, "mean_conf": 0.12, "dNDVI": -0.25, "dNDBI": 0.02, "dMNDWI": 0.00, "location": "west"},
     ],
 }
 EMPTY = {"change_frac": 0.0, "regions": []}
@@ -65,7 +65,7 @@ def test_verdicts(c, ev, expected):
 
 def test_confidence_threshold_is_a_parameter():
     c = claim("L3", "change_type", "Vegetation loss in the west.", change_type="vegetation_loss")
-    assert verify(c, EV, min_conf=0.3).verdict == "supported"
+    assert verify(c, EV, min_conf=0.1).verdict == "supported"
 
 
 def test_text_parsing_helpers():

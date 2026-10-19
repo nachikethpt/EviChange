@@ -103,9 +103,13 @@ regions are identical to v1 (`change_regions_quangninh_v3.json`: 504 regions, sa
 areas and deltas) and the labelled sites keep their strata (20 detected, 10 background;
 `scripts/restratify_sites.py`). Only `mean_conf` differs: 0.00–0.83, median 0.21.
 
-**Open.** `CONF_MIN = 0.5` was set when `mean_conf` was a placeholder. Under v3 only 46 of
-504 regions (2 of the 20 labelled detected sites) reach it. It must be re-chosen before
-Phase 4 produces claims. The field name stays for
+**`CONF_MIN = 0.2`** (2026-10-06, set before any Phase-4 claims exist). The old 0.5 was set when
+`mean_conf` was a placeholder: under v3 only 46 of 504 QN regions (2 of the 20 labelled detected
+sites) reach it, so the verifier would rate almost every gated claim `uncertain`. 0.2 is about
+the median of the v3 QN regions (0.21), so roughly half the detections count as confident.
+It is pinned from here on: changing it after claims exist would be tuning on the test set.
+`change_regions_quangninh_v3.json` still records `mean_conf_min: 0.5` in its metadata (the
+`study.json` value when it was generated); the detector never reads it. The field name stays for
 schema compatibility; the report defines it explicitly and never calls it a probability.
 
 ## D7 — Prompted change search: the VLM steers, the detector finds (2026-10-05, proposed)
@@ -130,6 +134,15 @@ detector**. The VLM never draws, invents or deletes a region.
    before/after chips plus the prompt and answers `match` / `no_match` / `unsure` with a
    one-line reason. `no_match` regions are hidden, not removed ("show rejected" toggle),
    and the map labels the result "VLM-checked, not validated".
+   **Built (2026-10-06)** as the standalone "🛰 Check with Geo-VLM" button in Find changes, before
+   step 1 exists: `agents/vlm_check.py` (prompt `vlmcheck_v1`, parsing, comparison with the detector),
+   `agents/vlm_client.py` (http / replay / off), `POST /api/vlm/check` (one region per call, chips
+   rendered by `ee_engine.region_chips()` from the detector's composites, results cached), and
+   `notebooks/EviChange_vlm_server.ipynb` (Qwen2.5-VL on a Colab GPU behind a token-protected
+   cloudflared tunnel). The model sees images only, not the detector's numbers or types, so its
+   answer is an independent second look. Regions whose box overlaps any of the 30 labelled sites
+   are not sent to the model until the Phase-4 prompts are frozen (`LABELLED_SITES_UNLOCKED`):
+   45 of the 504 QN regions.
 
 The change report for the found regions is then produced and verified exactly as before.
 
@@ -190,3 +203,123 @@ or searched area, never from coordinates the model writes (D7).
 
 **Evaluation.** None. Like D5 and D7, the assistant is a tool capability, not a reported result.
 Its prompts are separate from the frozen Phase-4 report prompts.
+
+## D10 — Specific land-cover classes from Dynamic World (2026-10-08, proposed)
+
+**Decision.** Change regions get land-cover classes from Google Dynamic World V1
+(`GOOGLE/DYNAMICWORLD/V1`, 10 m, one classification per Sentinel-2 scene): water, trees, grass,
+flooded vegetation, crops, shrub and scrub, built, bare, snow and ice. For each region and window,
+the mode of the per-pixel most-likely class gives `class_before` / `class_after`, and the mean class
+probabilities give `class_frac_<class>`. A region then reads "trees → bare" (likely mining or
+clearing), "water → built" (reclamation), "bare → built" (construction).
+
+**Why not our own classifier.** Training data for a custom classifier (e.g. aquaculture ponds, coastal
+sand, mangrove) doesn't exist yet; Dynamic World is documented, peer-reviewed and needs none. Custom
+coastal classes can be added later on top of Dynamic World, once Planet data and labels exist.
+
+**What doesn't change.** The detector (D6) still decides *where* change is; classes describe *what*
+it is. Index types (`dNDVI` …) stay as evidence. Dynamic World only exists for scenes with ≤ 35 %
+cloud, so a window with no usable scene gets `class_* = null`, never a guess.
+
+## D11 — Monthly change, shoreline and coastal buildings (2026-10-08, proposed)
+
+**Period.** Oct 2024 – Sep 2026 (24 months: two full monsoon cycles, so seasonal swings can be
+told apart from lasting change).
+
+**Data availability over the QN AOI (checked 2026-10-08).** Sentinel-2 scenes with < 40 % cloud /
+Dynamic World images per month: 1–6 from October to March, but **0 in most of April–August**
+(monsoon). Sentinel-1 radar: 1–4 IW scenes in every month. Therefore:
+- **Water and shoreline are monthly all year**, from Sentinel-1 (VV backscatter, Otsu threshold per
+  scene, monthly median), with Sentinel-2 MNDWI used where a clear scene exists.
+- **Land-cover class maps are monthly only where clear** (about Oct–Mar); other months are shown as
+  gaps, never interpolated. Seasonal (dry-season) composites are the fallback for comparisons.
+
+**Shoreline method.** Monthly water mask → land / water boundary as a line; a fixed baseline along
+the Oct 2024 shoreline with transects every 100 m; per transect the shoreline position each month,
+net movement and a linear rate (m/yr) over 24 months, as in standard shoreline-change analysis.
+
+**Tide.** The tidal range around Ha Long Bay is several metres, so one month's shoreline can differ
+from the next mostly because of the tide at acquisition time. Monthly positions are therefore
+shown with a tide caveat, and the reported quantity is the **24-month trend**, which averages out
+tide noise. Correcting each scene to a common tide (a tide model) is optional future work.
+
+**Buildings near the shoreline.** Dynamic World `built` inside 0–200 m and 200–500 m strips from
+the Oct 2024 shoreline, per month (where clear) and per dry season; new built patches as regions.
+Google Open Buildings temporal (`GOOGLE/Research/open-buildings-temporal/v1`, available over the
+AOI, yearly to 2023) is a pre-period reference only. At 10 m, single houses are below resolution:
+"built area" is reported, not building counts, until Planet (3 m) is integrated.
+
+## D12 — Planet-ready imagery source (2026-10-08, proposed)
+
+**Decision.** `ee_engine` gets an imagery `source` (`sentinel2` now, `planet` when the data arrives)
+with a per-source band map, scale and cloud mask, so every phase above can run on either.
+PlanetScope has **no SWIR band**: NDBI and MNDWI can't be computed from it. On Planet, water uses
+NDWI (green / NIR), and built / bare come from classification rather than an index. Request
+**8-band surface reflectance** (SuperDove) for the AOI and the 24-month window; deliveries outside
+Earth Engine are uploaded as an Earth Engine image collection so the same code reads them.
+
+**Access (2026-10-11 update).** Planet's Education and Research program accepted the project on
+2026-10-08: two years, **3,000 km² per month** (reset on the 1st), non-commercial, 30-day delay on
+PlanetScope. Published work must cite *Planet Team (2026). Planet Application Program Interface: In
+Space for Life on Earth. San Francisco, CA. https://api.planet.com.*
+
+**What Planet is used for.** Not as the time series source (D14): PlanetScope has no SWIR, its
+history for this AOI would cost quota, and its sensor generations differ radiometrically. Planet is
+used for (1) **monsoon months**: daily revisits give clear looks in April–August, when Sentinel-2
+has almost none; (2) **3 m detail**: buildings near the shore (Phase 12), the shoreline (Phase 11),
+and labelling (Phase 14); (3) sharper **Geo-VLM chips**.
+
+**Ordering.** `scripts/planet_order.py` searches PSScene 8-band surface reflectance per month, picks
+the acquisition day whose scenes cover the AOI best with the most clear sky, and orders it clipped
+to the AOI and harmonised to Sentinel-2 (Planet's `harmonize` tool). The AOI is ≈ 250 km², so one
+day per month for 24 months is ≈ 6,000 km²: Oct 2024 – Sep 2025 on the October 2026 quota, Oct
+2025 – Sep 2026 on November's. Nothing is ordered without an explicit `--confirm` after the km²
+total is shown. Extra monsoon days are ordered only from leftover quota.
+
+## D13 — Extended evaluation: classes, shoreline and coastal buildings (2026-10-08, proposed)
+
+**Decision.** The new outputs are also evaluated, not only shown, using the same two-axis design
+(truth vs labels, support vs evidence) and the same gated / ungated / template conditions:
+- **New claim types:** `land_cover` (L3, "trees were replaced by bare ground"), `shoreline` (L2,
+  "the shoreline moved ~40 m seaward in the north-east") and `coastal_built` (L2, "built area
+  within 200 m of the shore grew by ~3 ha"). Evidence fields: the D10 class fields, transect
+  statistics, coastal-strip built areas. The verifier gets rules for each.
+- **New ground truth (Phase 14), labelled blind like Phase 3:** from / to class at the existing 30
+  sites (labellers don't see Dynamic World); reference shorelines digitised on high-resolution
+  imagery for 2 dates on 30 transects; 30 coastal cells labelled built / not built at both ends of
+  the window. The existing `labels_v1` files are not changed; new labels go in new files.
+- **Extra metrics:** shoreline extraction RMSE (m) against the reference lines, class-transition
+  agreement (κ) between Dynamic World and the labels, coastal-built accuracy, and hallucination
+  rates per claim type.
+- **Freeze order:** Phase 4 prompts are frozen only after the new claim types exist (PLAN).
+
+## D14 — Time series analysis with CCDC (2026-10-11, proposed)
+
+**Why.** The teacher asked for time series analysis. Two-date comparison (D6) says *what* changed
+but not *when*, and it can't tell a monsoon greening that comes back every year from a lasting
+change. Phase 10's monthly maps show the series; this decision adds an analysis of it.
+
+**Decision.** Continuous Change Detection and Classification (CCDC, Zhu & Woodcock 2014), built
+into Earth Engine as `ee.Algorithms.TemporalSegmentation.Ccdc`, on Sentinel-2 surface reflectance
+(SCL cloud mask): green, red, NIR, SWIR1, SWIR2 plus NDVI / NDBI / MNDWI. Each pixel gets a harmonic
+(seasonal) model learned from **2018 onwards**; a break is a run of clear observations that leave
+the model. Breaks in **Oct 2024 – Sep 2026** are kept.
+
+**Outputs per change region.** `change_month`: the window between the last clear look before the
+break and the first after it, reported as a window because monsoon gaps can be months long, never
+as a single invented date. `break_magnitude` per index. `lasting`: true when the post-break model
+differs from the pre-break one, false when the region only swings with the season. App: a chart of
+monthly values with the fitted curve and the break; Find changes can filter by date.
+
+**Why Sentinel-2, not Planet.** CCDC needs years of consistent history to learn the season.
+Sentinel-2 has it for free from 2018, with SWIR. Planet's history would use months of quota, has no
+SWIR, and mixes sensor generations whose colours differ (D12). Planet's monthly images are still
+used to *see* the monsoon months and to label the month of change (Phase 14d).
+
+**Limits to state.** Few clear Sentinel-2 looks from April to August (D11), so a break there is
+dated to a window spanning the monsoon. Sentinel-1 water series (Phase 11) are not run through CCDC;
+they use the monthly series and trend directly. CCDC parameters are the Earth Engine defaults unless
+the labelled data show a reason to change them, and any change is recorded here.
+
+**Evaluation.** Break-month agreement with the Phase 14d labels (share within ± 1 month and within
+the reported window), and the share of detector regions CCDC calls seasonal rather than lasting.
