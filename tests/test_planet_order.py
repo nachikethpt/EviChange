@@ -176,3 +176,38 @@ def test_fetch_gives_up_without_crashing(tmp_path, monkeypatch):
             return Stream(b"0123456789", cut=0)
     target = tmp_path / "x.tif"
     assert po.fetch(Dead(), "https://x", target, attempts=3) is False and not target.exists()
+
+
+class FailingPlanet(FakePlanet):
+    """Orders whose id is in `failed` report state 'failed' with Planet-style error details."""
+    def __init__(self, by_month, failed=()):
+        super().__init__(by_month)
+        self.failed = set(failed)
+
+    def get(self, url, **kw):
+        oid = url.rsplit("/", 1)[-1]
+        if oid in self.failed:
+            return Resp({"state": "failed", "last_message": "Order failed", "error_hints": ["harmonize: unsupported item"]})
+        return Resp({"state": "success"})
+
+
+def test_retry_failed_reorders_only_failed_months(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(po, "OUT", tmp_path); monkeypatch.setattr(po, "ORDERS_LOG", tmp_path / "orders.json")
+    fake = FailingPlanet({"2025-01": [item("jan", "2025-01-12T03:00:00Z", ALL)],
+                          "2025-02": [item("feb", "2025-02-13T03:00:00Z", ALL)]}, failed={"order-2"})
+    plan = po.make_plan(fake, AOI, ["2025-01", "2025-02"], 0.6, today=date(2026, 10, 19))
+    po.place_orders(fake, plan, confirm=True, max_km2=3000)                  # order-1 = Jan, order-2 = Feb (fails)
+    assert po.place_orders(fake, plan, confirm=True, max_km2=3000) == []    # without the flag: nothing re-ordered
+
+    po.show_status(fake)
+    assert "harmonize: unsupported item" in capsys.readouterr().out
+
+    po.place_orders(fake, plan, confirm=False, max_km2=3000, retry_failed=True)   # dry run changes nothing
+    assert po.load_log()["2025-02"]["order_id"] == "order-2"
+
+    assert po.place_orders(fake, plan, confirm=True, max_km2=3000, retry_failed=True, harmonize=False) == ["order-3"]
+    feb = po.load_log()["2025-02"]
+    assert feb["order_id"] == "order-3" and feb["harmonized"] is False
+    assert feb["failed_orders"][0]["order_id"] == "order-2"
+    assert fake.orders[-1]["tools"] == [{"clip": {"aoi": AOI}}]               # no harmonize tool
+    assert po.load_log()["2025-01"]["order_id"] == "order-1"                  # January untouched

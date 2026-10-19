@@ -167,10 +167,38 @@ def print_plan(plan: dict) -> None:
 
 
 # ---------- orders ----------
-def order_request(plan: dict, row: dict) -> dict:
+def order_request(plan: dict, row: dict, harmonize: bool = True) -> dict:
+    tools = [{"clip": {"aoi": plan["aoi"]}}]
+    if harmonize:
+        tools.append({"harmonize": {"target_sensor": "Sentinel-2"}})
     return {"name": f"evichange-qn-{row['month']}-{row['date']}",
             "products": [{"item_ids": row["item_ids"], "item_type": plan["item_type"], "product_bundle": plan["product_bundle"]}],
-            "tools": [{"clip": {"aoi": plan["aoi"]}}, {"harmonize": {"target_sensor": "Sentinel-2"}}]}
+            "tools": tools}
+
+
+FAILED_STATES = ("failed", "cancelled")
+
+
+def failure_reason(order: dict) -> str:
+    hints = order.get("error_hints") or []
+    return "; ".join([order.get("last_message") or "", *map(str, hints)]).strip("; ") or "no reason given"
+
+
+def forget_failed(session, plan: dict, log: dict) -> list[str]:
+    """Drop the plan's months whose logged order failed, keeping the old order in the entry's
+    'failed_orders' history, so they can be ordered again. Returns the months dropped."""
+    dropped = []
+    for r in plan["months"]:
+        entry = log.get(r["month"])
+        if not entry:
+            continue
+        order = _call(session.get, f"{ORDERS_URL}/{entry['order_id']}").json()
+        if order.get("state") in FAILED_STATES:
+            print(f"  {r['month']}: previous order {entry['order_id']} {order['state']} ({failure_reason(order)})")
+            history = entry.get("failed_orders", []) + [{k: v for k, v in entry.items() if k != "failed_orders"}]
+            log[r["month"]] = {"failed_orders": history}
+            dropped.append(r["month"])
+    return dropped
 
 
 def load_log() -> dict:
@@ -184,20 +212,24 @@ def save_log(log: dict) -> None:
 
 def pending_rows(plan: dict, log: dict, min_coverage: float = 0.0) -> list[dict]:
     """Months in the plan with scenes that cover enough of the AOI and have not been ordered yet."""
-    return [r for r in plan["months"] if r["item_ids"] and r["month"] not in log and r["coverage"] >= min_coverage]
+    return [r for r in plan["months"] if r["item_ids"] and "order_id" not in log.get(r["month"], {})
+            and r["coverage"] >= min_coverage]
 
 
-def place_orders(session, plan: dict, confirm: bool, max_km2: float, min_coverage: float = 0.5) -> list[str]:
+def place_orders(session, plan: dict, confirm: bool, max_km2: float, min_coverage: float = 0.5,
+                 retry_failed: bool = False, harmonize: bool = True) -> list[str]:
     log = load_log()
+    if retry_failed:
+        forget_failed(session, plan, log)   # saved only if orders are actually placed below
     rows = pending_rows(plan, log, min_coverage)
     km2 = round(sum(r["km2"] for r in rows), 1)
     for r in rows:
         print(f"  {r['month']}  {r['date']}  {len(r['item_ids'])} scene(s)  {r['km2']} km²")
-    skipped = [r["month"] for r in plan["months"] if r["month"] in log]
+    skipped = [r["month"] for r in plan["months"] if "order_id" in log.get(r["month"], {})]
     if skipped:
         print(f"  already ordered, skipped: {', '.join(skipped)}")
     thin = [f"{r['month']} ({r['coverage']:.0%})" for r in plan["months"]
-            if r["item_ids"] and r["month"] not in log and r["coverage"] < min_coverage]
+            if r["item_ids"] and "order_id" not in log.get(r["month"], {}) and r["coverage"] < min_coverage]
     if thin:
         print(f"  under {min_coverage:.0%} of the AOI, skipped (search again with a higher --max-cloud): {', '.join(thin)}")
     print(f"To order: {len(rows)} month(s), ≈ {km2} km²")
@@ -208,9 +240,10 @@ def place_orders(session, plan: dict, confirm: bool, max_km2: float, min_coverag
         return []
     placed = []
     for r in rows:
-        body = _call(session.post, ORDERS_URL, json=order_request(plan, r)).json()
+        body = _call(session.post, ORDERS_URL, json=order_request(plan, r, harmonize)).json()
         log[r["month"]] = {"order_id": body["id"], "date": r["date"], "item_ids": r["item_ids"], "km2": r["km2"],
-                           "placed": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+                           "placed": datetime.now(timezone.utc).isoformat(timespec="seconds"), "harmonized": harmonize,
+                           **({"failed_orders": log[r["month"]]["failed_orders"]} if r["month"] in log else {})}
         save_log(log)   # after each order, so a failure halfway never re-orders the months already placed
         placed.append(body["id"])
         print(f"  ordered {r['month']}: {body['id']}")
@@ -219,8 +252,13 @@ def place_orders(session, plan: dict, confirm: bool, max_km2: float, min_coverag
 
 def show_status(session) -> None:
     for month, entry in sorted(load_log().items()):
-        state = _call(session.get, f"{ORDERS_URL}/{entry['order_id']}").json().get("state")
-        print(f"{month}  {entry['date']}  {state:10}  {entry['order_id']}")
+        if "order_id" not in entry:
+            print(f"{month}  {'-':10}  {'failed':10}  (re-order with --retry-failed)")
+            continue
+        order = _call(session.get, f"{ORDERS_URL}/{entry['order_id']}").json()
+        state = order.get("state") or "?"
+        reason = f"  <- {failure_reason(order)}" if state in FAILED_STATES else ""
+        print(f"{month}  {entry['date']}  {state:10}  {entry['order_id']}{reason}")
 
 
 def download(session, copy_to: Path | None = None) -> None:
@@ -229,6 +267,9 @@ def download(session, copy_to: Path | None = None) -> None:
     A file that keeps failing is reported at the end and retried on the next run."""
     failed: list[str] = []
     for month, entry in sorted(load_log().items()):
+        if "order_id" not in entry:
+            print(f"{month}: failed, nothing to download (re-order with --retry-failed)")
+            continue
         order = _call(session.get, f"{ORDERS_URL}/{entry['order_id']}").json()
         if order.get("state") != "success":
             print(f"{month}: {order.get('state')}, not ready")
@@ -336,6 +377,8 @@ def main(argv: list[str] | None = None) -> None:
     o.add_argument("--confirm", action="store_true")
     o.add_argument("--max-km2", type=float, default=3000)
     o.add_argument("--min-coverage", type=float, default=0.5, help="skip months covering less of the AOI, 0-1 (default 0.5)")
+    o.add_argument("--retry-failed", action="store_true", help="order again the months whose previous order failed")
+    o.add_argument("--no-harmonize", action="store_true", help="skip Planet's harmonize-to-Sentinel-2 tool")
     sub.add_parser("status")
     d = sub.add_parser("download", help="download finished orders")
     d.add_argument("--copy-to", help="also copy into this folder, e.g. a Google Drive for desktop folder")
@@ -351,7 +394,8 @@ def main(argv: list[str] | None = None) -> None:
         print_plan(plan)
         print(f"Plan saved: {path.relative_to(ROOT)}. Nothing ordered.")
     elif args.cmd == "order":
-        place_orders(session, json.loads(Path(args.plan).read_text(encoding="utf-8")), args.confirm, args.max_km2, args.min_coverage)
+        place_orders(session, json.loads(Path(args.plan).read_text(encoding="utf-8")), args.confirm, args.max_km2, args.min_coverage,
+                     args.retry_failed, not args.no_harmonize)
     elif args.cmd == "status":
         show_status(session)
     else:
