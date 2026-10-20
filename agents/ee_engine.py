@@ -253,7 +253,7 @@ def run_engine(aoi: dict, before_window: list[str], after_window: list[str], thr
     change_area = change_mask.multiply(ee.Image.pixelArea()).reduceRegion(ee.Reducer.sum(), geometry, 10, maxPixels=1e10).get("change")
     aoi_area = ee.Image.pixelArea().reduceRegion(ee.Reducer.sum(), geometry, 10, maxPixels=1e10).get("area")
     change_frac = float(ee.Number(change_area).divide(aoi_area).getInfo() or 0.0)
-    return {
+    fc = {
         "type": "FeatureCollection",
         "features": features,
         "metadata": {
@@ -265,3 +265,11 @@ def run_engine(aoi: dict, before_window: list[str], after_window: list[str], thr
             "change_frac": change_frac,
         },
     }
+    if not features:
+        return fc
+    try:   # D10: land-cover classes describe the regions; a failure here never loses the detection
+        from .landcover import add_landcover
+        return add_landcover(fc, aoi, before_window, after_window)
+    except Exception as exc:
+        fc["metadata"]["landcover_error"] = str(exc)[:300]
+        return fc

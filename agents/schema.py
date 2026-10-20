@@ -6,7 +6,8 @@ instead of keeping its own list of field names. If a field changes, it changes
 here and the tests catch every place that disagrees.
 
     region   {id, area_ha, mean_conf, dNDVI, dNDBI, dMNDWI, location,
-              [date_before, date_after, source]}
+              [date_before, date_after, source],
+              [class_before, class_after, class_frac_before, class_frac_after] (D10)}
     evidence {pair_id, dates, source, change_frac, regions[]}
     claim    {claim_id, level, type, text, region_ref, evidence_ref[], stated_conf,
               [change_type], [verdict, verdict_reason]}
@@ -28,6 +29,8 @@ LOCATIONS = ("north", "north-east", "east", "south-east", "south", "south-west",
 INDEX_FIELDS = ("dNDVI", "dNDBI", "dMNDWI")
 
 REGION_FIELDS = ("id", "area_ha", "mean_conf", "dNDVI", "dNDBI", "dMNDWI", "location")
+LANDCOVER_CLASSES = ("water", "trees", "grass", "flooded_vegetation", "crops", "shrub_and_scrub", "built", "bare",
+                     "snow_and_ice")   # Dynamic World V1 (D10); optional region fields, null when unknown
 REGION_PROVENANCE_FIELDS = ("date_before", "date_after", "source")
 EVIDENCE_REF_FIELDS = frozenset({"change_frac", "area_ha", "location", "mean_conf", *INDEX_FIELDS})
 
@@ -193,6 +196,17 @@ def validate_region(region: object) -> list[str]:
         errors.append("'mean_conf' must be in [0, 1]")
     if "location" in region and region["location"] not in LOCATIONS:
         errors.append(f"'location' must be one of {LOCATIONS}, got {region['location']!r}")
+    for f in ("class_before", "class_after"):
+        if region.get(f) is not None and region[f] not in LANDCOVER_CLASSES:
+            errors.append(f"'{f}' must be one of {LANDCOVER_CLASSES} or null, got {region[f]!r}")
+    for f in ("class_frac_before", "class_frac_after"):
+        frac = region.get(f)
+        if frac is None:
+            continue
+        if not isinstance(frac, dict) or set(frac) - set(LANDCOVER_CLASSES):
+            errors.append(f"'{f}' must map Dynamic World classes to shares")
+        elif not all(_is_number(v) and 0 <= v <= 1 for v in frac.values()):
+            errors.append(f"'{f}' shares must be numbers in [0, 1]")
     rid = region.get("id", "?")
     return [f"region {rid}: {e}" for e in errors]
 

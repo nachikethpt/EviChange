@@ -116,6 +116,11 @@ pre.sql { margin: 6px 0 0; white-space: pre-wrap; word-break: break-word; }
 .ibar-band { position: absolute; top: 0; bottom: 0; background: #e2e8f0; }
 .ibar-zero { position: absolute; top: -2px; bottom: -2px; left: 50%; width: 1px; background: #94a3b8; }
 .ibar-fill { position: absolute; top: 2px; bottom: 2px; border-radius: 3px; }
+/* land cover (D10): class chips and per-window class-share bars */
+.lc-trans { margin: 4px 0 8px; }
+.lc-chip { display: inline-block; padding: 1px 8px; border-radius: 10px; color: #fff; font-size: 12px; font-weight: 600; text-shadow: 0 0 2px rgba(0, 0, 0, .45); }
+.lc-bar-row { display: grid; grid-template-columns: 48px 1fr; align-items: center; gap: 6px; margin-bottom: 4px; }
+.lc-bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: #f1f5f9; }
 .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .facts div { background: var(--bg); border-radius: 6px; padding: 5px 8px; display: flex; flex-direction: column; }
 .facts span { font-size: 11px; }

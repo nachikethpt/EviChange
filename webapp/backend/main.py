@@ -34,7 +34,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from agents import ee_engine, vlm_check
+from agents import ee_engine, landcover, vlm_check
 from agents.vlm_client import VLMClient, VLMUnavailable
 from agents.graph import run_pipeline
 from agents.schema import CHANGE_TYPES, CONDITIONS, CONF_MIN, T_IDX, validate_aoi, validate_windows
@@ -45,7 +45,7 @@ from .report import build_report
 ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend"
 
-CODE_VERSION = "phase6-v4"  # bump when pipeline or detector logic changes, invalidates cache
+CODE_VERSION = "phase6-v5"  # bump when pipeline or detector logic changes, invalidates cache (v5: D10 classes)
 run_queue: asyncio.Queue = asyncio.Queue()
 
 _RUN_ID_RE = re.compile(r"^[0-9a-f]{12}$")
@@ -126,8 +126,9 @@ def aoi(run_id: Optional[str] = None):
 
 @app.get("/api/data/change_regions")
 def change_regions(run_id: Optional[str] = None):
+    """Change regions; land-cover classes (D10) are hidden at the labelled sites until Phase 14."""
     _require_valid_run(run_id)
-    return data_store.get_change_regions(run_id)
+    return landcover.hide_at_labelled_sites(data_store.get_change_regions(run_id))
 
 
 INDEX_TILE_TTL_S = 3600   # Earth Engine map ids expire after a few hours

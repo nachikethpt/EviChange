@@ -104,10 +104,13 @@ function symbologyFor(layer) {
     const top = vals.slice(0, MAX_CATEGORIES);
     const rest = vals.slice(MAX_CATEGORIES).reduce((n, [, c]) => n + c, 0);
     const missing = feats.length - vals.reduce((n, [, c]) => n + c, 0);
-    const legend = top.map(([v, c], i) => ({ color: CATEGORICAL[i], label: v, count: c }));
+    // land-cover fields (D10) keep Dynamic World's own colours and names (LC_INFO, explore.js)
+    const lc = /^class_(before|after)$/.test(s.field) && typeof LC_INFO !== 'undefined';
+    const colorOf = (v, i) => (lc && LC_INFO[v]?.color) || CATEGORICAL[i];
+    const legend = top.map(([v, c], i) => ({ color: colorOf(v, i), label: lc && LC_INFO[v] ? LC_INFO[v].short : v, count: c }));
     if (rest) legend.push({ color: NO_DATA, label: `Other (${vals.length - MAX_CATEGORIES} values)`, count: rest });
     if (missing) legend.push({ color: NO_DATA, label: 'No value', count: missing });
-    const color = top.length ? ['match', ['to-string', ['get', s.field]], ...top.flatMap(([v], i) => [v, CATEGORICAL[i]]), NO_DATA] : NO_DATA;
+    const color = top.length ? ['match', ['to-string', ['get', s.field]], ...top.flatMap(([v], i) => [v, colorOf(v, i)]), NO_DATA] : NO_DATA;
     return { color, legend };
   }
 
