@@ -48,9 +48,45 @@ def _bbox(geometry: dict) -> tuple[float, float, float, float]:
     return min(xs), min(ys), max(xs), max(ys)
 
 
+MIN_SITE_SHARE = 0.10    # hide a region's classes when at least this share of its area lies in a site
+_share_cache: dict[tuple, float] = {}
+
+
+def _rings(geometry: dict) -> list[list]:
+    polys = [geometry["coordinates"]] if geometry["type"] == "Polygon" else geometry["coordinates"]
+    return [ring for poly in polys for ring in poly]          # holes too: even-odd ray casting handles them
+
+
+def site_share(geometry: dict, area_ha: float, boxes: list[tuple[float, float, float, float]], n: int = 12) -> float:
+    """Approximate share of a region's area that lies inside the labelled-site boxes: an n x n grid
+    of points over each box ∩ region bbox, tested against the region outline (even-odd rule; only
+    edges spanning the box's latitudes are scanned, so huge outlines stay fast)."""
+    import math
+    w, s, e, nn = _bbox(geometry)
+    edges = [(a, b) for ring in _rings(geometry) for a, b in zip(ring, ring[1:])]
+    inside_m2 = 0.0
+    for bw, bs, be, bn in boxes:
+        x0, y0, x1, y1 = max(w, bw), max(s, bs), min(e, be), min(nn, bn)
+        if x0 >= x1 or y0 >= y1:
+            continue
+        near = [(a, b) for a, b in edges if min(a[1], b[1]) <= y1 and max(a[1], b[1]) >= y0]
+        hits = 0
+        for i in range(n):
+            for j in range(n):
+                px, py = x0 + (i + 0.5) * (x1 - x0) / n, y0 + (j + 0.5) * (y1 - y0) / n
+                crossings = sum(1 for a, b in near if (a[1] > py) != (b[1] > py)
+                                and px < a[0] + (py - a[1]) * (b[0] - a[0]) / (b[1] - a[1]))
+                hits += crossings % 2
+        cell_m2 = (x1 - x0) * 111_320 * math.cos(math.radians((y0 + y1) / 2)) * (y1 - y0) * 110_574
+        inside_m2 += cell_m2 * hits / (n * n)
+    return min(1.0, inside_m2 / (area_ha * 10_000)) if area_ha else 0.0
+
+
 def hide_at_labelled_sites(fc: dict) -> dict:
-    """Copy of fc with the class fields removed (and class_hidden: true) on regions overlapping a
-    labelled site, until the Phase 14 class labels exist. Other regions are unchanged."""
+    """Copy of fc with the class fields removed (and class_hidden: true) on regions with at least
+    MIN_SITE_SHARE of their area inside a labelled site, until the Phase 14 class labels exist.
+    A region that only grazes a site (the big QN regions: < 1 %) says nothing about the site's class,
+    so it keeps its classes. Other regions are unchanged."""
     if CLASSES_UNLOCKED_AT_LABELLED_SITES or not fc.get("features"):
         return fc
     from .vlm_check import labelled_site_boxes
@@ -59,8 +95,11 @@ def hide_at_labelled_sites(fc: dict) -> dict:
     for f in fc["features"]:
         props = f.get("properties", {})
         if any(k in props for k in CLASS_FIELDS):
-            w, s, e, n = _bbox(f["geometry"])
-            if any(w <= b[2] and e >= b[0] and s <= b[3] and n >= b[1] for b in boxes):
+            geom = f["geometry"]
+            key = (props.get("id"), json.dumps(geom["coordinates"][0][:3]), sum(len(r) for r in _rings(geom)))
+            if key not in _share_cache:
+                _share_cache[key] = site_share(geom, props.get("area_ha", 0), boxes)
+            if _share_cache[key] >= MIN_SITE_SHARE:
                 props = {k: v for k, v in props.items() if k not in CLASS_FIELDS}
                 props["class_hidden"] = True
                 f = {**f, "properties": props}

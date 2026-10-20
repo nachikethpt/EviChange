@@ -78,3 +78,21 @@ def test_api_hides_classes_at_labelled_sites(tmp_path, monkeypatch):
     by_id = {f["properties"]["id"]: f["properties"] for f in body["features"]}
     assert by_id["free"]["class_before"] == "trees"
     assert by_id["onsite"].get("class_hidden") is True and "class_before" not in by_id["onsite"]
+
+
+def test_big_region_grazing_a_site_keeps_its_classes():
+    """Only regions with >= MIN_SITE_SHARE of their area in a site are locked (the 3,275 ha QN region
+    r239 only grazes site boxes, so hiding it hid 41 % of all changed area for nothing)."""
+    site = vlm_check.labelled_site_boxes()[0]
+    cx, cy = (site[0] + site[2]) / 2, (site[1] + site[3]) / 2
+    big = square(cx + 0.05, cy, d=0.0505)          # ~1,100 ha, its west edge just reaches into the site
+    small = square(cx, cy, d=0.0005)               # well inside the site
+    boxes = vlm_check.labelled_site_boxes()
+    assert landcover.site_share(big, 1100, boxes) < landcover.MIN_SITE_SHARE
+    assert landcover.site_share(small, 1.0, boxes) >= landcover.MIN_SITE_SHARE
+    classes = {"class_before": "trees", "class_after": "bare", "class_frac_before": FRAC, "class_frac_after": FRAC}
+    fc = {"type": "FeatureCollection", "features": [
+        {"type": "Feature", "geometry": big, "properties": {**BASE, "id": "big", "area_ha": 1100, **classes}},
+        {"type": "Feature", "geometry": small, "properties": {**BASE, "id": "small", "area_ha": 1.0, **classes}}]}
+    big_p, small_p = (f["properties"] for f in landcover.hide_at_labelled_sites(fc)["features"])
+    assert big_p["class_after"] == "bare" and small_p.get("class_hidden") is True

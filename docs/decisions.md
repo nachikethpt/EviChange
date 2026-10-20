@@ -232,8 +232,18 @@ shrub → bare (9), trees → bare / trees → built / water → built (7 each).
 common is a flag for Phase 14 to check (bare spoil labelled built in 2018?).
 
 **Blind labels.** Phase 14 labels the from / to class at the 30 sites without seeing Dynamic World,
-so the app hides the class fields of regions overlapping a labelled site (45 of 504) until those
-labels exist (`CLASSES_UNLOCKED_AT_LABELLED_SITES`), like the Geo-VLM lock (D7).
+so the app hides the class fields of regions with at least 10 % of their area inside a labelled site
+(22 of 504 regions, 93 ha) until those labels exist (`CLASSES_UNLOCKED_AT_LABELLED_SITES`), like the
+Geo-VLM lock (D7). A first version locked every region whose bounding box touched a site: 45 regions
+and 66 % of the changed area, mostly huge regions with 0–0.5 % of their area in a site, whose class
+says nothing about the site.
+
+**First reading of the QN classes.** The largest "type unclear" regions (r239 3,275 ha, r280, r390,
+r108) keep the same class with near-identical shares, so they are probably not land change: r239
+alone is 41 % of all changed area, which is a detector issue to report. Real changes stand out:
+r363 water → built (coastal reclamation, south), r289 bare → trees (revegetation). Some coastal
+regions keep "water" as their class while its share falls (r435: 47 % → 28 %), so the shares carry
+information the class alone hides.
 
 ## D11 — Monthly change, shoreline and coastal buildings (2026-10-08, proposed)
 
