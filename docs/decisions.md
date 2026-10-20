@@ -300,6 +300,14 @@ day per month for 24 months is ≈ 6,000 km²: Oct 2024 – Sep 2025 on the Octo
 2025 – Sep 2026 on November's. Nothing is ordered without an explicit `--confirm` after the km²
 total is shown. Extra monsoon days are ordered only from leftover quota.
 
+**Quota counting (2026-10-19).** The quota is not the clipped AOI area: the first 11 orders covered
+2,567 km² of AOI but used 3,131 km², and the 12th (Feb 2025) was refused as over quota. Overlapping
+scenes are charged more than once (October 2024's 9 scenes added up to 932 km² inside the AOI).
+The script now keeps only the scenes needed to cover the AOI (year 1 would have been 3,460 instead
+of 4,275 km² of per-scene area), prefers the cheaper of two near-equal days, and checks the quota
+against the per-scene sum, an upper bound. Year 2 may therefore need two quota months; Feb 2025
+goes into November's order.
+
 ## D13 — Extended evaluation: classes, shoreline and coastal buildings (2026-10-08, proposed)
 
 **Decision.** The new outputs are also evaluated, not only shown, using the same two-axis design

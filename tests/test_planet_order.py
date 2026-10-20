@@ -176,3 +176,67 @@ def test_fetch_gives_up_without_crashing(tmp_path, monkeypatch):
             return Stream(b"0123456789", cut=0)
     target = tmp_path / "x.tif"
     assert po.fetch(Dead(), "https://x", target, attempts=3) is False and not target.exists()
+
+
+class FailingPlanet(FakePlanet):
+    """Orders whose id is in `failed` report state 'failed' with Planet-style error details."""
+    def __init__(self, by_month, failed=()):
+        super().__init__(by_month)
+        self.failed = set(failed)
+
+    def get(self, url, **kw):
+        oid = url.rsplit("/", 1)[-1]
+        if oid in self.failed:
+            return Resp({"state": "failed", "last_message": "Order failed", "error_hints": ["harmonize: unsupported item"]})
+        return Resp({"state": "success"})
+
+
+def test_retry_failed_reorders_only_failed_months(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(po, "OUT", tmp_path); monkeypatch.setattr(po, "ORDERS_LOG", tmp_path / "orders.json")
+    fake = FailingPlanet({"2025-01": [item("jan", "2025-01-12T03:00:00Z", ALL)],
+                          "2025-02": [item("feb", "2025-02-13T03:00:00Z", ALL)]}, failed={"order-2"})
+    plan = po.make_plan(fake, AOI, ["2025-01", "2025-02"], 0.6, today=date(2026, 10, 19))
+    po.place_orders(fake, plan, confirm=True, max_km2=3000)                  # order-1 = Jan, order-2 = Feb (fails)
+    assert po.place_orders(fake, plan, confirm=True, max_km2=3000) == []    # without the flag: nothing re-ordered
+
+    po.show_status(fake)
+    assert "harmonize: unsupported item" in capsys.readouterr().out
+
+    po.place_orders(fake, plan, confirm=False, max_km2=3000, retry_failed=True)   # dry run changes nothing
+    assert po.load_log()["2025-02"]["order_id"] == "order-2"
+
+    assert po.place_orders(fake, plan, confirm=True, max_km2=3000, retry_failed=True, harmonize=False) == ["order-3"]
+    feb = po.load_log()["2025-02"]
+    assert feb["order_id"] == "order-3" and feb["harmonized"] is False
+    assert feb["failed_orders"][0]["order_id"] == "order-2"
+    assert fake.orders[-1]["tools"] == [{"clip": {"aoi": AOI}}]               # no harmonize tool
+    assert po.load_log()["2025-01"]["order_id"] == "order-1"                  # January untouched
+
+
+def test_redundant_scenes_are_dropped_and_quota_estimated():
+    grid = po.aoi_grid(AOI)
+    items = [item("all", "2024-10-05T03:00:00Z", ALL), item("west", "2024-10-05T03:00:01Z", WEST_HALF),
+             item("east", "2024-10-05T03:00:02Z", EAST_HALF)]          # one scene already covers everything
+    best = po.pick_day(items, grid, aoi_km2=250.0)
+    assert best["item_ids"] == ["all"] and best["coverage"] == 1.0 and best["scenes_found"] == 3
+    assert best["quota_km2"] == 250.0
+
+
+def test_near_tie_prefers_the_cheaper_day():
+    grid = po.aoi_grid(AOI)
+    overlap = {"type": "Polygon", "coordinates": [[[107.25, 20.9], [107.6, 20.9], [107.6, 21.2], [107.25, 21.2], [107.25, 20.9]]]}
+    items = [item("w", "2024-10-03T03:00:00Z", WEST_HALF, clear=100), item("o", "2024-10-03T03:00:01Z", overlap, clear=100),
+             item("one", "2024-10-20T03:00:00Z", ALL, clear=97)]       # 3% less clear, but one scene
+    best = po.pick_day(items, grid, aoi_km2=250.0)
+    assert best["date"] == "2024-10-20" and best["quota_km2"] == 250.0
+    strict = po.pick_day(items, grid, aoi_km2=250.0, near=1.0)          # without the tolerance: the clearer day
+    assert strict["date"] == "2024-10-03" and strict["quota_km2"] > 250.0
+
+
+def test_old_plans_without_quota_estimate_still_order(tmp_path, monkeypatch):
+    monkeypatch.setattr(po, "OUT", tmp_path); monkeypatch.setattr(po, "ORDERS_LOG", tmp_path / "orders.json")
+    plan = {"aoi": AOI, "item_type": "PSScene", "product_bundle": "analytic_8b_sr_udm2",
+            "months": [{"month": "2025-02", "date": "2025-02-13", "item_ids": ["a"], "coverage": 0.85, "km2": 211.9}]}
+    fake = FakePlanet({})
+    assert po.place_orders(fake, plan, confirm=True, max_km2=3000) == ["order-1"]
+    assert po.quota_km2(plan["months"][0]) == 211.9
