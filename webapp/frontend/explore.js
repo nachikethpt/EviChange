@@ -24,6 +24,20 @@ const TYPE_INFO = {
   unclear:           { color: '#9ca3af', icon: '❔', short: 'Type unclear',
     plain: 'Detected as change, but no index moved past the threshold, so what kind of change it is is not clear.' },
 };
+// Land-cover classes (D10, Phase 9): Dynamic World V1, its own palette. `words` are what a typed
+// search may call the class ("trees to built", "from forest", "became water").
+const LC_INFO = {
+  water:              { color: '#419bdf', short: 'Water',              words: 'water|sea|lakes?|ponds?|rivers?' },
+  trees:              { color: '#397d49', short: 'Trees',              words: 'trees?|forests?|woods?|woodland' },
+  grass:              { color: '#88b053', short: 'Grass',              words: 'grass(?:land)?' },
+  flooded_vegetation: { color: '#7a87c6', short: 'Flooded vegetation', words: 'flooded vegetation|mangroves?|wetlands?' },
+  crops:              { color: '#e49635', short: 'Crops',              words: 'crops?|cropland|farm(?:land)?s?|fields?' },
+  shrub_and_scrub:    { color: '#dfc35a', short: 'Shrub & scrub',      words: 'shrubs?|scrub(?:land)?|bush(?:es)?' },
+  built:              { color: '#c4281b', short: 'Built',              words: 'built(?:[- ]up)?|buildings?|urban|settlements?|city|town' },
+  bare:               { color: '#a59b8f', short: 'Bare ground',        words: 'bare(?: ground| soil| land)?|soil|sand|rock' },
+  snow_and_ice:       { color: '#b39fe1', short: 'Snow & ice',         words: 'snow|ice' },
+};
+const LC_WORD = Object.entries(LC_INFO).map(([k, v]) => `(?<${k}>\\b(?:${v.words})\\b)`).join('|');
 const INDEX_LABELS = { dNDVI: 'Vegetation (dNDVI)', dNDBI: 'Bare / built-up (dNDBI)', dMNDWI: 'Water (dMNDWI)' };
 // Used only if /api/change_types cannot be reached; mirrors agents/schema.py.
 const FALLBACK_TYPES = {
@@ -31,7 +45,7 @@ const FALLBACK_TYPES = {
   built_up_increase: { field: 'dNDBI', sign: 1 }, built_up_decrease: { field: 'dNDBI', sign: -1 },
   water_increase: { field: 'dMNDWI', sign: 1 }, water_decrease: { field: 'dMNDWI', sign: -1 },
 };
-const EXAMPLES = ['vegetation loss bigger than 10 ha', 'new water in the north', 'mining-like changes in this area', 'largest 5 changes', 'select new water bigger than 5 ha'];
+const EXAMPLES = ['vegetation loss bigger than 10 ha', 'trees to built', 'new water in the north', 'mining-like changes in this area', 'largest 5 changes', 'select new water bigger than 5 ha'];
 
 const explore = {
   types: FALLBACK_TYPES, tIdx: 0.1,
@@ -45,7 +59,7 @@ const explore = {
   cardMaps: [],
   hoverFid: null,
 };
-function emptyFilter() { return { types: null, minHa: null, maxHa: null, locations: null, top: null }; }
+function emptyFilter() { return { types: null, minHa: null, maxHa: null, locations: null, top: null, classFrom: null, classTo: null }; }
 
 // ---------- classification ----------
 async function loadChangeTypes() {
@@ -77,6 +91,13 @@ function allRegions() { return changeLayer()?.data.features ?? []; }
 function regionById(id) { return allRegions().find(f => f.properties.id === id); }
 function info(type) { return TYPE_INFO[type] ?? TYPE_INFO.unclear; }
 function typesOf(f) { return f.properties.change_types?.length ? f.properties.change_types : ['unclear']; }
+function lcName(c) { return LC_INFO[c]?.short ?? 'unknown'; }
+function lcChip(c) { return `<span class="lc-chip" style="background:${LC_INFO[c]?.color ?? '#9ca3af'}">${esc(lcName(c))}</span>`; }
+/** 'Trees → Built', 'Water' (no class change), or '' when a class is unknown or hidden. */
+function lcTransition(p) {
+  if (!p.class_before || !p.class_after) return '';
+  return p.class_before === p.class_after ? lcName(p.class_before) : `${lcName(p.class_before)} → ${lcName(p.class_after)}`;
+}
 function fmtHa(ha) { return ha >= 100 ? `${Math.round(ha).toLocaleString()} ha` : `${(+ha).toFixed(1)} ha`; }
 
 function changeTypePaint(hl) {
@@ -117,10 +138,12 @@ function matchesFilter(f, flt = explore.filter) {
   if (flt.minHa != null && p.area_ha < flt.minHa) return false;
   if (flt.maxHa != null && p.area_ha > flt.maxHa) return false;
   if (flt.locations && !flt.locations.has(p.location)) return false;
+  if (flt.classFrom && p.class_before !== flt.classFrom) return false;   // unknown / hidden classes never match
+  if (flt.classTo && p.class_after !== flt.classTo) return false;
   return true;
 }
 
-function filterActive() { const f = explore.filter; return !!(f.types || f.minHa != null || f.maxHa != null || f.locations || f.top); }
+function filterActive() { const f = explore.filter; return !!(f.types || f.minHa != null || f.maxHa != null || f.locations || f.top || f.classFrom || f.classTo); }
 
 /** Regions in the scope that match the filter, largest first (defaults: the panel's current search). */
 function currentResults(flt = explore.filter, scope = explore.scope) {
@@ -143,6 +166,8 @@ function filterSql(flt, scope) {
   if (flt.minHa != null) conds.push(`area_ha >= ${+flt.minHa}`);
   if (flt.maxHa != null) conds.push(`area_ha <= ${+flt.maxHa}`);
   if (flt.locations) conds.push(`location IN (${[...flt.locations].map(l => `'${l}'`).join(', ')})`);
+  if (flt.classFrom) conds.push(`class_before = '${flt.classFrom}'`);
+  if (flt.classTo) conds.push(`class_after = '${flt.classTo}'`);
   let sql = conds.length ? `WHERE ${conds.join('\n  AND ')}` : 'WHERE TRUE   -- every region';
   const where = { view: 'inside the current map view', drawn: 'intersecting the drawn area', selection: 'among the selected regions' }[scope];
   if (where) sql += `\n  -- ${where}`;
@@ -280,6 +305,20 @@ function parseQuery(text) {
   else if ((m = q.match(/\b(in view|on screen|visible|this view|current view|on the map)\b/))) { scope = 'view'; cut(m); }
   else if ((m = q.match(/\b(whole|entire|everywhere|all over|study area)\b/))) { scope = 'all'; cut(m); }
 
+  // Land-cover transitions (D10) before the topic words, so "water to built" isn't read as two topics.
+  const lcOf = mm => Object.keys(LC_INFO).find(k => mm.groups?.[k]);
+  const TRANS_RE = new RegExp(`(?:from\\s+)?(?:${LC_WORD})\\s*(?:to|into|→|->|became|turned into|replaced by)\\s*(?:${LC_WORD.replace(/\?<(\w+)>/g, '?<$1_2>')})`);
+  if ((m = q.match(TRANS_RE))) {
+    flt.classFrom = lcOf(m);
+    flt.classTo = Object.keys(LC_INFO).find(k => m.groups?.[`${k}_2`]);
+    cut(m);
+  } else {
+    const FROM_RE = new RegExp(`\\b(?:from|was|used to be|formerly)\\s+(?:${LC_WORD})`);
+    const TO_RE = new RegExp(`\\b(?:became|turned into|now|into|converted to|replaced by)\\s+(?:${LC_WORD})`);
+    if ((m = q.match(FROM_RE))) { flt.classFrom = lcOf(m); cut(m); }
+    if ((m = q.match(TO_RE))) { flt.classTo = lcOf(m); cut(m); }
+  }
+
   const locs = new Set();
   for (const lm of q.matchAll(LOC_RE)) {
     if (lm[1]) locs.add(`${lm[1]}-${lm[2]}`);
@@ -311,7 +350,9 @@ function schemaLocations() { return ['north', 'north-east', 'east', 'south-east'
 
 function describeFilter(flt, scope) {
   const parts = [];
-  parts.push(flt.types ? [...flt.types].map(t => `${info(t).icon} ${info(t).short.toLowerCase()}`).join(' or ') : 'any kind of change');
+  parts.push(flt.types ? [...flt.types].map(t => `${info(t).icon} ${info(t).short.toLowerCase()}`).join(' or ')
+    : flt.classFrom || flt.classTo ? 'land cover' : 'any kind of change');
+  if (flt.classFrom || flt.classTo) parts.push(`${flt.classFrom ? lcName(flt.classFrom).toLowerCase() : 'anything'} → ${flt.classTo ? lcName(flt.classTo).toLowerCase() : 'anything'}`);
   if (flt.minHa != null && flt.maxHa != null) parts.push(`between ${fmtHa(flt.minHa)} and ${fmtHa(flt.maxHa)}`);
   else if (flt.minHa != null) parts.push(`at least ${fmtHa(flt.minHa)}`);
   else if (flt.maxHa != null) parts.push(`at most ${fmtHa(flt.maxHa)}`);
@@ -464,7 +505,7 @@ function renderChangesPanel(body) {
         return `<button class="region-row" data-id="${esc(p.id)}">
           <span class="swatch" style="background:${info(p.primary_type).color}">${info(p.primary_type).icon}</span>
           <span><b>${esc(typesOf(f).map(t => info(t).short).join(' + '))}</b><br>
-          <span class="muted">${esc(p.id)} · ${fmtHa(p.area_ha)} · ${esc(p.location)}</span> ${vlmBadge(p.id)}</span></button>`;
+          <span class="muted">${esc(p.id)} · ${fmtHa(p.area_ha)} · ${esc(p.location)}${lcTransition(p) ? ` · ${esc(lcTransition(p))}` : ''}</span> ${vlmBadge(p.id)}</span></button>`;
       }).join('')}</div>
       ${results.length > 100 ? `<p class="muted">…and ${results.length - 100} smaller regions. Narrow the search to see them.</p>` : ''}</div>
       <div class="section card-actions">
@@ -516,6 +557,21 @@ function indexBar(field, v) {
     </div></div>`;
 }
 
+/** "Land cover" block of the region card (D10): from → to class and the class shares per window. */
+function landcoverHtml(p) {
+  const head = '<div class="section"><div class="pane-subtitle">Land cover (Dynamic World)</div>';
+  if (p.class_hidden) return `${head}<p class="muted">🔒 Hidden at labelled evaluation sites until the land-cover labels (Phase 14) are done.</p></div>`;
+  if (!('class_before' in p)) return '';            // regions made before Phase 9
+  if (!p.class_before && !p.class_after) return `${head}<p class="muted">No Dynamic World image in these date windows, so no class (never guessed).</p></div>`;
+  const bar = (frac, label) => frac ? `<div class="lc-bar-row"><span class="muted small">${label}</span><div class="lc-bar">${
+    Object.entries(frac).filter(([, v]) => v >= 0.02).sort((a, b) => b[1] - a[1]).map(([c, v]) =>
+      `<span style="width:${(100 * v).toFixed(1)}%;background:${LC_INFO[c]?.color}" title="${esc(lcName(c))} ${(100 * v).toFixed(0)}%"></span>`).join('')}</div></div>` : '';
+  return `${head}
+    <p class="lc-trans">${p.class_before ? lcChip(p.class_before) : '<span class="muted">unknown</span>'} → ${p.class_after ? lcChip(p.class_after) : '<span class="muted">unknown</span>'}</p>
+    ${bar(p.class_frac_before, 'Before')}${bar(p.class_frac_after, 'After')}
+    <p class="muted small">Most common Dynamic World class in the region per window; bars = mean class probabilities (hover for %). Classes describe the change; the detector decided where it is.</p></div>`;
+}
+
 function renderRegionCard(body, f) {
   const p = f.properties, types = typesOf(f);
   $('#panelTitle').textContent = `Change region ${p.id}`;
@@ -534,6 +590,7 @@ function renderRegionCard(body, f) {
     <p class="muted small">Images: Sentinel-2 cloudless yearly mosaics (EOX). The detector compared ${esc(fmtWindow(p.date_before))} with ${esc(fmtWindow(p.date_after))}.</p>
     <div class="section"><div class="pane-subtitle">What changed</div>
       ${types.map(t => `<p class="explain"><span class="swatch" style="background:${info(t).color}">${info(t).icon}</span> ${esc(info(t).plain)}</p>`).join('')}</div>
+    ${landcoverHtml(p)}
     <div class="section"><div class="pane-subtitle">Index changes (after − before)</div>
       ${['dNDVI', 'dNDBI', 'dMNDWI'].map(k => indexBar(k, p[k] ?? 0)).join('')}
       <p class="muted small">Grey band = ±${explore.tIdx}: changes inside it are too small to count as evidence.</p></div>

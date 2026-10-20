@@ -204,7 +204,7 @@ or searched area, never from coordinates the model writes (D7).
 **Evaluation.** None. Like D5 and D7, the assistant is a tool capability, not a reported result.
 Its prompts are separate from the frozen Phase-4 report prompts.
 
-## D10 — Specific land-cover classes from Dynamic World (2026-10-08, proposed)
+## D10 — Specific land-cover classes from Dynamic World (2026-10-08; implemented 2026-10-20)
 
 **Decision.** Change regions get land-cover classes from Google Dynamic World V1
 (`GOOGLE/DYNAMICWORLD/V1`, 10 m, one classification per Sentinel-2 scene): water, trees, grass,
@@ -220,6 +220,20 @@ coastal classes can be added later on top of Dynamic World, once Planet data and
 **What doesn't change.** The detector (D6) still decides *where* change is; classes describe *what*
 it is. Index types (`dNDVI` …) stay as evidence. Dynamic World only exists for scenes with ≤ 35 %
 cloud, so a window with no usable scene gets `class_* = null`, never a guess.
+
+**As implemented (Phase 9, `agents/landcover.py`).** Fields: `class_before`, `class_after` (a class
+name or null) and `class_frac_before`, `class_frac_after` ({class: mean probability}). Each pixel's
+class is its mode over the window's Dynamic World images; the region's class is the mode of those
+over its pixels. New detector runs add the fields (a Dynamic World failure is recorded in the
+metadata, never loses the detection); `scripts/add_landcover.py` adds them to an existing regions
+file without touching ids or geometry. QN v3 (Nov 2018 – Mar 2019 vs Nov 2022 – Mar 2023): all 504
+regions got both classes; 105 change class, most often built → trees (15), shrub → trees (10),
+shrub → bare (9), trees → bare / trees → built / water → built (7 each). "Built → trees" being most
+common is a flag for Phase 14 to check (bare spoil labelled built in 2018?).
+
+**Blind labels.** Phase 14 labels the from / to class at the 30 sites without seeing Dynamic World,
+so the app hides the class fields of regions overlapping a labelled site (45 of 504) until those
+labels exist (`CLASSES_UNLOCKED_AT_LABELLED_SITES`), like the Geo-VLM lock (D7).
 
 ## D11 — Monthly change, shoreline and coastal buildings (2026-10-08, proposed)
 
