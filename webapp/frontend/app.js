@@ -26,6 +26,7 @@ const TILES = {
 };
 const BASEMAPS = ['s2_2022', 's2_2018', 'osm', 'topo', 'none'];
 const HOME = { center: [107.31, 21.04], zoom: 11.3 };
+const VIETNAM = { center: [106.0, 16.0], zoom: 5.1 };
 
 const state = {
   basemap: 's2_2022',
