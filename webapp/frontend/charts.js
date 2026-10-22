@@ -57,7 +57,7 @@ function chartSvg(groups, horizontal) {
       const y = i * row + 4, w = Math.max(2, g.value / max * plotW), sw = g.selValue / max * plotW;
       return `<g class="bar" data-i="${i}">
         <rect class="hit" x="0" y="${y - 3}" width="${W}" height="${row}" fill="transparent"/>
-        <text x="${labelW - 6}" y="${y + bar / 2 + 4}" text-anchor="end" fill="${CHART_INK}" font-size="11">${esc(g.label.length > 19 ? g.label.slice(0, 18) + '…' : g.label)}</text>
+        <text x="${labelW - 6}" y="${y + bar / 2 + 4}" class="ink" text-anchor="end" fill="${CHART_INK}" font-size="11">${esc(g.label.length > 19 ? g.label.slice(0, 18) + '…' : g.label)}</text>
         ${shade(g, labelW, y, w, bar)}
         ${g.selValue ? `<rect x="${labelW}" y="${y}" width="${Math.max(2, sw)}" height="${bar}" rx="2" fill="${g.color}"/>` : ''}
         <text x="${labelW + w + 4}" y="${y + bar / 2 + 4}" fill="${CHART_MUTED}" font-size="11">${chartFmt(g.value)}</text>
