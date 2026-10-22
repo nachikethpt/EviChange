@@ -1,0 +1,2290 @@
+{
+ "period": [
+  "2024-10",
+  "2026-09"
+ ],
+ "baseline": "2024-10",
+ "months": [
+  {
+   "month": "2024-10",
+   "dw_images": 4,
+   "s1_scenes": 3,
+   "s2_scenes": 7,
+   "s1_thresholds_db": {
+    "S1A_IW_GRDH_1SDV_20241004T105809_20241004T105834_055952_06D768_D550": {
+     "db": -14.0,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20241016T105809_20241016T105834_056127_06DE46_3897": {
+     "db": -13.5,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20241028T105809_20241028T105834_056302_06E538_4C9C": {
+     "db": -13.5,
+     "fallback": false
+    }
+   },
+   "clear_share": 1.0,
+   "class_cover": 1.0,
+   "class_status": "clear",
+   "water_ha": 5245.3,
+   "water_s2_agree": 0.97,
+   "class_ha": {
+    "water": 6536.5,
+    "trees": 7185.3,
+    "grass": 362.8,
+    "flooded_vegetation": 123.1,
+    "crops": 56.6,
+    "shrub_and_scrub": 2992.0,
+    "built": 5023.9,
+    "bare": 2580.6,
+    "snow_and_ice": 0.1
+   },
+   "vs_prev": null,
+   "vs_base": null
+  },
+  {
+   "month": "2024-11",
+   "dw_images": 4,
+   "s1_scenes": 2,
+   "s2_scenes": 6,
+   "s1_thresholds_db": {
+    "S1A_IW_GRDH_1SDV_20241109T105809_20241109T105834_056477_06EC24_5A56": {
+     "db": -15.75,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20241121T105808_20241121T105833_056652_06F32E_70DC": {
+     "db": -13.25,
+     "fallback": false
+    }
+   },
+   "clear_share": 1.0,
+   "class_cover": 1.0,
+   "class_status": "clear",
+   "water_ha": 5222.0,
+   "water_s2_agree": 0.961,
+   "class_ha": {
+    "water": 6554.9,
+    "trees": 7675.7,
+    "grass": 255.6,
+    "flooded_vegetation": 74.1,
+    "crops": 79.9,
+    "shrub_and_scrub": 2465.6,
+    "built": 4758.8,
+    "bare": 2996.4
+   },
+   "vs_prev": {
+    "ref": "2024-10",
+    "water": {
+     "gained_ha": 251.3,
+     "lost_ha": 274.6,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 24860.9,
+     "changed_ha": 3027.1,
+     "top": [
+      {
+       "from": "shrub_and_scrub",
+       "to": "trees",
+       "ha": 710.4
+      },
+      {
+       "from": "built",
+       "to": "bare",
+       "ha": 313.9
+      },
+      {
+       "from": "trees",
+       "to": "shrub_and_scrub",
+       "ha": 309.9
+      },
+      {
+       "from": "water",
+       "to": "bare",
+       "ha": 174.0
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "bare",
+       "ha": 171.8
+      },
+      {
+       "from": "bare",
+       "to": "water",
+       "ha": 124.5
+      }
+     ]
+    }
+   },
+   "vs_base": {
+    "ref": "2024-10",
+    "water": {
+     "gained_ha": 251.3,
+     "lost_ha": 274.6,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 24860.9,
+     "changed_ha": 3027.1,
+     "top": [
+      {
+       "from": "shrub_and_scrub",
+       "to": "trees",
+       "ha": 710.4
+      },
+      {
+       "from": "built",
+       "to": "bare",
+       "ha": 313.9
+      },
+      {
+       "from": "trees",
+       "to": "shrub_and_scrub",
+       "ha": 309.9
+      },
+      {
+       "from": "water",
+       "to": "bare",
+       "ha": 174.0
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "bare",
+       "ha": 171.8
+      },
+      {
+       "from": "bare",
+       "to": "water",
+       "ha": 124.5
+      }
+     ]
+    }
+   }
+  },
+  {
+   "month": "2024-12",
+   "dw_images": 2,
+   "s1_scenes": 3,
+   "s2_scenes": 5,
+   "s1_thresholds_db": {
+    "S1A_IW_GRDH_1SDV_20241203T105807_20241203T105832_056827_06FA1F_4575": {
+     "db": -13.5,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20241215T105806_20241215T105831_057002_070102_1C83": {
+     "db": -16.5,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20241227T105805_20241227T105830_057177_0707FD_B8D1": {
+     "db": -12.5,
+     "fallback": false
+    }
+   },
+   "clear_share": 1.0,
+   "class_cover": 1.0,
+   "class_status": "clear",
+   "water_ha": 4778.9,
+   "water_s2_agree": 0.934,
+   "class_ha": {
+    "water": 6719.9,
+    "trees": 7120.9,
+    "grass": 284.8,
+    "flooded_vegetation": 55.1,
+    "crops": 248.3,
+    "shrub_and_scrub": 2464.8,
+    "built": 3787.5,
+    "bare": 4142.0,
+    "snow_and_ice": 37.7
+   },
+   "vs_prev": {
+    "ref": "2024-11",
+    "water": {
+     "gained_ha": 115.2,
+     "lost_ha": 558.3,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 24860.9,
+     "changed_ha": 3625.4,
+     "top": [
+      {
+       "from": "built",
+       "to": "bare",
+       "ha": 646.4
+      },
+      {
+       "from": "trees",
+       "to": "shrub_and_scrub",
+       "ha": 527.8
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "bare",
+       "ha": 372.3
+      },
+      {
+       "from": "water",
+       "to": "bare",
+       "ha": 247.5
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "trees",
+       "ha": 224.5
+      },
+      {
+       "from": "built",
+       "to": "shrub_and_scrub",
+       "ha": 177.6
+      }
+     ]
+    }
+   },
+   "vs_base": {
+    "ref": "2024-10",
+    "water": {
+     "gained_ha": 170.6,
+     "lost_ha": 637.0,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 24860.9,
+     "changed_ha": 4977.9,
+     "top": [
+      {
+       "from": "built",
+       "to": "bare",
+       "ha": 871.7
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "trees",
+       "ha": 667.2
+      },
+      {
+       "from": "trees",
+       "to": "shrub_and_scrub",
+       "ha": 567.2
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "bare",
+       "ha": 503.3
+      },
+      {
+       "from": "water",
+       "to": "bare",
+       "ha": 326.0
+      },
+      {
+       "from": "built",
+       "to": "trees",
+       "ha": 194.9
+      }
+     ]
+    }
+   }
+  },
+  {
+   "month": "2025-01",
+   "dw_images": 2,
+   "s1_scenes": 2,
+   "s2_scenes": 6,
+   "s1_thresholds_db": {
+    "S1A_IW_GRDH_1SDV_20250108T105804_20250108T105829_057352_070EE2_18F8": {
+     "db": -13.0,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20250120T105803_20250120T105828_057527_0715D1_3605": {
+     "db": -15.0,
+     "fallback": false
+    }
+   },
+   "clear_share": 0.999,
+   "class_cover": 0.987,
+   "class_status": "clear",
+   "water_ha": 5581.7,
+   "water_s2_agree": 0.941,
+   "class_ha": {
+    "water": 7015.8,
+    "trees": 6562.3,
+    "grass": 224.8,
+    "flooded_vegetation": 85.5,
+    "crops": 393.7,
+    "shrub_and_scrub": 2334.0,
+    "built": 3714.7,
+    "bare": 4200.0,
+    "snow_and_ice": 12.4
+   },
+   "vs_prev": {
+    "ref": "2024-12",
+    "water": {
+     "gained_ha": 875.8,
+     "lost_ha": 73.0,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 24543.2,
+     "changed_ha": 2863.8,
+     "top": [
+      {
+       "from": "trees",
+       "to": "shrub_and_scrub",
+       "ha": 329.2
+      },
+      {
+       "from": "bare",
+       "to": "water",
+       "ha": 317.8
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "trees",
+       "ha": 256.7
+      },
+      {
+       "from": "built",
+       "to": "bare",
+       "ha": 200.2
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "built",
+       "ha": 180.8
+      },
+      {
+       "from": "built",
+       "to": "shrub_and_scrub",
+       "ha": 161.1
+      }
+     ]
+    }
+   },
+   "vs_base": {
+    "ref": "2024-10",
+    "water": {
+     "gained_ha": 473.9,
+     "lost_ha": 137.6,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 24543.2,
+     "changed_ha": 5797.8,
+     "top": [
+      {
+       "from": "built",
+       "to": "bare",
+       "ha": 957.9
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "trees",
+       "ha": 661.8
+      },
+      {
+       "from": "trees",
+       "to": "shrub_and_scrub",
+       "ha": 627.2
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "bare",
+       "ha": 580.3
+      },
+      {
+       "from": "bare",
+       "to": "water",
+       "ha": 309.2
+      },
+      {
+       "from": "water",
+       "to": "bare",
+       "ha": 285.2
+      }
+     ]
+    }
+   }
+  },
+  {
+   "month": "2025-02",
+   "dw_images": 1,
+   "s1_scenes": 3,
+   "s2_scenes": 6,
+   "s1_thresholds_db": {
+    "S1A_IW_GRDH_1SDV_20250201T105802_20250201T105827_057702_071CC0_59B5": {
+     "db": -13.25,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20250213T105802_20250213T105827_057877_0723BF_DAF6": {
+     "db": -13.25,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20250225T105802_20250225T105827_058052_072AE3_F225": {
+     "db": -12.25,
+     "fallback": false
+    }
+   },
+   "clear_share": 0.904,
+   "class_cover": 0.748,
+   "class_status": "clear",
+   "water_ha": 5095.5,
+   "water_s2_agree": 0.916,
+   "class_ha": {
+    "water": 7949.2,
+    "trees": 2249.1,
+    "grass": 40.3,
+    "flooded_vegetation": 91.4,
+    "crops": 127.4,
+    "shrub_and_scrub": 2037.5,
+    "built": 2442.6,
+    "bare": 3615.4,
+    "snow_and_ice": 83.7
+   },
+   "vs_prev": {
+    "ref": "2025-01",
+    "water": {
+     "gained_ha": 134.6,
+     "lost_ha": 620.8,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 18636.4,
+     "changed_ha": 4527.7,
+     "top": [
+      {
+       "from": "bare",
+       "to": "water",
+       "ha": 1190.6
+      },
+      {
+       "from": "trees",
+       "to": "shrub_and_scrub",
+       "ha": 840.3
+      },
+      {
+       "from": "built",
+       "to": "bare",
+       "ha": 550.8
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "bare",
+       "ha": 368.1
+      },
+      {
+       "from": "built",
+       "to": "shrub_and_scrub",
+       "ha": 208.5
+      },
+      {
+       "from": "built",
+       "to": "water",
+       "ha": 142.2
+      }
+     ]
+    }
+   },
+   "vs_base": {
+    "ref": "2024-10",
+    "water": {
+     "gained_ha": 295.2,
+     "lost_ha": 445.0,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 18636.4,
+     "changed_ha": 6264.5,
+     "top": [
+      {
+       "from": "built",
+       "to": "bare",
+       "ha": 1258.5
+      },
+      {
+       "from": "bare",
+       "to": "water",
+       "ha": 999.0
+      },
+      {
+       "from": "trees",
+       "to": "shrub_and_scrub",
+       "ha": 882.1
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "bare",
+       "ha": 719.4
+      },
+      {
+       "from": "built",
+       "to": "water",
+       "ha": 520.6
+      },
+      {
+       "from": "trees",
+       "to": "water",
+       "ha": 310.3
+      }
+     ]
+    }
+   }
+  },
+  {
+   "month": "2025-03",
+   "dw_images": 2,
+   "s1_scenes": 2,
+   "s2_scenes": 6,
+   "s1_thresholds_db": {
+    "S1A_IW_GRDH_1SDV_20250309T105802_20250309T105827_058227_073206_8B12": {
+     "db": -13.5,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20250321T105802_20250321T105827_058402_0738F3_F0D6": {
+     "db": -14.75,
+     "fallback": false
+    }
+   },
+   "clear_share": 0.996,
+   "class_cover": 1.0,
+   "class_status": "clear",
+   "water_ha": 5376.2,
+   "water_s2_agree": 0.954,
+   "class_ha": {
+    "water": 8180.1,
+    "trees": 4612.5,
+    "grass": 99.9,
+    "flooded_vegetation": 42.0,
+    "crops": 207.4,
+    "shrub_and_scrub": 5972.6,
+    "built": 1605.4,
+    "bare": 4109.4,
+    "snow_and_ice": 31.7
+   },
+   "vs_prev": {
+    "ref": "2025-02",
+    "water": {
+     "gained_ha": 494.2,
+     "lost_ha": 213.5,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 18636.4,
+     "changed_ha": 4245.9,
+     "top": [
+      {
+       "from": "built",
+       "to": "shrub_and_scrub",
+       "ha": 735.3
+      },
+      {
+       "from": "water",
+       "to": "bare",
+       "ha": 677.5
+      },
+      {
+       "from": "bare",
+       "to": "shrub_and_scrub",
+       "ha": 439.6
+      },
+      {
+       "from": "bare",
+       "to": "water",
+       "ha": 408.6
+      },
+      {
+       "from": "trees",
+       "to": "shrub_and_scrub",
+       "ha": 333.4
+      },
+      {
+       "from": "built",
+       "to": "bare",
+       "ha": 237.9
+      }
+     ]
+    }
+   },
+   "vs_base": {
+    "ref": "2024-10",
+    "water": {
+     "gained_ha": 282.4,
+     "lost_ha": 151.5,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 24860.9,
+     "changed_ha": 9559.3,
+     "top": [
+      {
+       "from": "trees",
+       "to": "shrub_and_scrub",
+       "ha": 2406.3
+      },
+      {
+       "from": "built",
+       "to": "shrub_and_scrub",
+       "ha": 1355.9
+      },
+      {
+       "from": "built",
+       "to": "bare",
+       "ha": 1325.5
+      },
+      {
+       "from": "bare",
+       "to": "water",
+       "ha": 934.3
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "bare",
+       "ha": 702.2
+      },
+      {
+       "from": "built",
+       "to": "water",
+       "ha": 483.8
+      }
+     ]
+    }
+   }
+  },
+  {
+   "month": "2025-04",
+   "dw_images": 0,
+   "s1_scenes": 3,
+   "s2_scenes": 7,
+   "s1_thresholds_db": {
+    "S1A_IW_GRDH_1SDV_20250402T105803_20250402T105828_058577_073FF7_307C": {
+     "db": -14.75,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20250414T105802_20250414T105827_058752_074727_81CA": {
+     "db": -14.5,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20250426T105803_20250426T105828_058927_074E48_DAB5": {
+     "db": -13.5,
+     "fallback": false
+    }
+   },
+   "clear_share": 0.296,
+   "class_cover": 0.0,
+   "class_status": "none",
+   "water_ha": 5131.0,
+   "water_s2_agree": 0.887,
+   "class_ha": null,
+   "vs_prev": {
+    "ref": "2025-03",
+    "water": {
+     "gained_ha": 73.7,
+     "lost_ha": 318.9,
+     "compared_ha": 24860.9
+    },
+    "classes": null
+   },
+   "vs_base": {
+    "ref": "2024-10",
+    "water": {
+     "gained_ha": 137.6,
+     "lost_ha": 251.9,
+     "compared_ha": 24860.9
+    },
+    "classes": null
+   }
+  },
+  {
+   "month": "2025-05",
+   "dw_images": 0,
+   "s1_scenes": 2,
+   "s2_scenes": 8,
+   "s1_thresholds_db": {
+    "S1A_IW_GRDH_1SDV_20250508T105802_20250508T105827_059102_07552F_8023": {
+     "db": -14.0,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20250520T105802_20250520T105827_059277_075B34_7DD5": {
+     "db": -14.0,
+     "fallback": false
+    }
+   },
+   "clear_share": 0.003,
+   "class_cover": 0.0,
+   "class_status": "none",
+   "water_ha": 5323.6,
+   "water_s2_agree": 0.716,
+   "class_ha": null,
+   "vs_prev": {
+    "ref": "2025-04",
+    "water": {
+     "gained_ha": 288.5,
+     "lost_ha": 95.9,
+     "compared_ha": 24860.9
+    },
+    "classes": null
+   },
+   "vs_base": {
+    "ref": "2024-10",
+    "water": {
+     "gained_ha": 241.5,
+     "lost_ha": 163.3,
+     "compared_ha": 24860.9
+    },
+    "classes": null
+   }
+  },
+  {
+   "month": "2025-06",
+   "dw_images": 0,
+   "s1_scenes": 2,
+   "s2_scenes": 8,
+   "s1_thresholds_db": {
+    "S1A_IW_GRDH_1SDV_20250601T105802_20250601T105827_059452_07614D_97CA": {
+     "db": -13.25,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20250625T105800_20250625T105825_059802_076D56_A9EE": {
+     "db": -14.25,
+     "fallback": false
+    }
+   },
+   "clear_share": 0.495,
+   "class_cover": 0.0,
+   "class_status": "none",
+   "water_ha": 5593.7,
+   "water_s2_agree": 0.953,
+   "class_ha": null,
+   "vs_prev": {
+    "ref": "2025-05",
+    "water": {
+     "gained_ha": 380.7,
+     "lost_ha": 110.6,
+     "compared_ha": 24860.9
+    },
+    "classes": null
+   },
+   "vs_base": {
+    "ref": "2024-10",
+    "water": {
+     "gained_ha": 446.1,
+     "lost_ha": 97.8,
+     "compared_ha": 24860.9
+    },
+    "classes": null
+   }
+  },
+  {
+   "month": "2025-07",
+   "dw_images": 0,
+   "s1_scenes": 4,
+   "s2_scenes": 6,
+   "s1_thresholds_db": {
+    "S1A_IW_GRDH_1SDV_20250707T105800_20250707T105825_059977_077363_E05B": {
+     "db": -13.25,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20250719T105759_20250719T105824_060152_077968_3057": {
+     "db": -14.0,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20250731T105759_20250731T105824_060327_077F6B_E360": {
+     "db": -14.75,
+     "fallback": false
+    },
+    "S1C_IW_GRDH_1SDV_20250725T105702_20250725T105727_003376_006CAC_E516": {
+     "db": -16.25,
+     "fallback": false
+    }
+   },
+   "clear_share": 0.667,
+   "class_cover": 0.0,
+   "class_status": "none",
+   "water_ha": 5180.3,
+   "water_s2_agree": 0.953,
+   "class_ha": null,
+   "vs_prev": {
+    "ref": "2025-06",
+    "water": {
+     "gained_ha": 43.9,
+     "lost_ha": 457.3,
+     "compared_ha": 24860.9
+    },
+    "classes": null
+   },
+   "vs_base": {
+    "ref": "2024-10",
+    "water": {
+     "gained_ha": 148.8,
+     "lost_ha": 213.9,
+     "compared_ha": 24860.9
+    },
+    "classes": null
+   }
+  },
+  {
+   "month": "2025-08",
+   "dw_images": 0,
+   "s1_scenes": 2,
+   "s2_scenes": 8,
+   "s1_thresholds_db": {
+    "S1A_IW_GRDH_1SDV_20250812T105759_20250812T105824_060502_0785E4_B63E": {
+     "db": -14.75,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20250824T105759_20250824T105824_060677_078CC7_F357": {
+     "db": -13.0,
+     "fallback": false
+    }
+   },
+   "clear_share": 0.704,
+   "class_cover": 0.0,
+   "class_status": "none",
+   "water_ha": 5374.2,
+   "water_s2_agree": 0.962,
+   "class_ha": null,
+   "vs_prev": {
+    "ref": "2025-07",
+    "water": {
+     "gained_ha": 261.2,
+     "lost_ha": 67.3,
+     "compared_ha": 24860.9
+    },
+    "classes": null
+   },
+   "vs_base": {
+    "ref": "2024-10",
+    "water": {
+     "gained_ha": 281.4,
+     "lost_ha": 152.5,
+     "compared_ha": 24860.9
+    },
+    "classes": null
+   }
+  },
+  {
+   "month": "2025-09",
+   "dw_images": 1,
+   "s1_scenes": 3,
+   "s2_scenes": 7,
+   "s1_thresholds_db": {
+    "S1A_IW_GRDH_1SDV_20250905T105759_20250905T105824_060852_0793B5_F3EC": {
+     "db": -14.75,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20250917T105759_20250917T105824_061027_079ABB_E1CE": {
+     "db": -14.0,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20250929T105800_20250929T105825_061202_07A1C8_F30E": {
+     "db": -18.0,
+     "fallback": true
+    }
+   },
+   "clear_share": 0.696,
+   "class_cover": 0.226,
+   "class_status": "patchy",
+   "water_ha": 4902.9,
+   "water_s2_agree": 0.965,
+   "class_ha": {
+    "water": 3092.3,
+    "trees": 1099.7,
+    "grass": 71.6,
+    "flooded_vegetation": 16.5,
+    "crops": 0.7,
+    "shrub_and_scrub": 152.9,
+    "built": 1009.0,
+    "bare": 175.9,
+    "snow_and_ice": 53.9
+   },
+   "vs_prev": {
+    "ref": "2025-08",
+    "water": {
+     "gained_ha": 24.3,
+     "lost_ha": 495.5,
+     "compared_ha": 24860.9
+    },
+    "classes": null
+   },
+   "vs_base": {
+    "ref": "2024-10",
+    "water": {
+     "gained_ha": 67.6,
+     "lost_ha": 410.0,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 5672.5,
+     "changed_ha": 884.7,
+     "top": [
+      {
+       "from": "built",
+       "to": "trees",
+       "ha": 157.6
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "trees",
+       "ha": 149.0
+      },
+      {
+       "from": "bare",
+       "to": "water",
+       "ha": 66.3
+      },
+      {
+       "from": "built",
+       "to": "bare",
+       "ha": 44.0
+      },
+      {
+       "from": "bare",
+       "to": "built",
+       "ha": 41.5
+      },
+      {
+       "from": "built",
+       "to": "water",
+       "ha": 39.9
+      }
+     ]
+    }
+   }
+  },
+  {
+   "month": "2025-10",
+   "dw_images": 4,
+   "s1_scenes": 3,
+   "s2_scenes": 9,
+   "s1_thresholds_db": {
+    "S1A_IW_GRDH_1SDV_20251011T105800_20251011T105825_061377_07A8D5_9DC2": {
+     "db": -14.0,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20251023T105757_20251023T105822_061552_07AFDF_594F": {
+     "db": -13.5,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20251023T105822_20251023T105847_061552_07AFDF_B213": {
+     "db": -18.0,
+     "fallback": true
+    }
+   },
+   "clear_share": 0.931,
+   "class_cover": 0.547,
+   "class_status": "clear",
+   "water_ha": 5284.5,
+   "water_s2_agree": 0.965,
+   "class_ha": {
+    "water": 5787.0,
+    "trees": 2308.4,
+    "grass": 81.5,
+    "flooded_vegetation": 54.2,
+    "crops": 474.1,
+    "shrub_and_scrub": 274.5,
+    "built": 3425.3,
+    "bare": 1195.2,
+    "snow_and_ice": 70.5
+   },
+   "vs_prev": {
+    "ref": "2025-09",
+    "water": {
+     "gained_ha": 479.2,
+     "lost_ha": 97.7,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 4740.3,
+     "changed_ha": 541.4,
+     "top": [
+      {
+       "from": "trees",
+       "to": "built",
+       "ha": 90.9
+      },
+      {
+       "from": "bare",
+       "to": "built",
+       "ha": 60.4
+      },
+      {
+       "from": "trees",
+       "to": "crops",
+       "ha": 49.6
+      },
+      {
+       "from": "water",
+       "to": "bare",
+       "ha": 28.1
+      },
+      {
+       "from": "water",
+       "to": "built",
+       "ha": 21.1
+      },
+      {
+       "from": "snow_and_ice",
+       "to": "built",
+       "ha": 20.2
+      }
+     ]
+    }
+   },
+   "vs_base": {
+    "ref": "2024-10",
+    "water": {
+     "gained_ha": 251.4,
+     "lost_ha": 212.3,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 13670.7,
+     "changed_ha": 3165.3,
+     "top": [
+      {
+       "from": "shrub_and_scrub",
+       "to": "trees",
+       "ha": 486.2
+      },
+      {
+       "from": "bare",
+       "to": "built",
+       "ha": 473.2
+      },
+      {
+       "from": "bare",
+       "to": "water",
+       "ha": 289.1
+      },
+      {
+       "from": "trees",
+       "to": "crops",
+       "ha": 235.1
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "built",
+       "ha": 194.3
+      },
+      {
+       "from": "built",
+       "to": "trees",
+       "ha": 166.8
+      }
+     ]
+    }
+   }
+  },
+  {
+   "month": "2025-11",
+   "dw_images": 3,
+   "s1_scenes": 3,
+   "s2_scenes": 7,
+   "s1_thresholds_db": {
+    "S1A_IW_GRDH_1SDV_20251104T105759_20251104T105824_061727_07B6CD_DB33": {
+     "db": -14.0,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20251116T105759_20251116T105824_061902_07BD95_BE25": {
+     "db": -15.25,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20251128T105758_20251128T105823_062077_07C46D_5F62": {
+     "db": -14.25,
+     "fallback": false
+    }
+   },
+   "clear_share": 1.0,
+   "class_cover": 1.0,
+   "class_status": "clear",
+   "water_ha": 4990.4,
+   "water_s2_agree": 0.972,
+   "class_ha": {
+    "water": 6144.9,
+    "trees": 10052.4,
+    "grass": 482.4,
+    "flooded_vegetation": 44.4,
+    "crops": 60.8,
+    "shrub_and_scrub": 858.4,
+    "built": 4169.5,
+    "bare": 3043.4,
+    "snow_and_ice": 4.8
+   },
+   "vs_prev": {
+    "ref": "2025-10",
+    "water": {
+     "gained_ha": 76.7,
+     "lost_ha": 370.8,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 13670.7,
+     "changed_ha": 2728.6,
+     "top": [
+      {
+       "from": "built",
+       "to": "bare",
+       "ha": 574.5
+      },
+      {
+       "from": "water",
+       "to": "bare",
+       "ha": 450.8
+      },
+      {
+       "from": "crops",
+       "to": "trees",
+       "ha": 396.8
+      },
+      {
+       "from": "built",
+       "to": "trees",
+       "ha": 304.2
+      },
+      {
+       "from": "built",
+       "to": "shrub_and_scrub",
+       "ha": 162.2
+      },
+      {
+       "from": "bare",
+       "to": "built",
+       "ha": 112.7
+      }
+     ]
+    }
+   },
+   "vs_base": {
+    "ref": "2024-10",
+    "water": {
+     "gained_ha": 77.9,
+     "lost_ha": 332.8,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 24860.9,
+     "changed_ha": 5724.4,
+     "top": [
+      {
+       "from": "shrub_and_scrub",
+       "to": "trees",
+       "ha": 2084.9
+      },
+      {
+       "from": "built",
+       "to": "trees",
+       "ha": 611.6
+      },
+      {
+       "from": "water",
+       "to": "bare",
+       "ha": 396.3
+      },
+      {
+       "from": "built",
+       "to": "bare",
+       "ha": 388.9
+      },
+      {
+       "from": "grass",
+       "to": "trees",
+       "ha": 303.2
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "grass",
+       "ha": 239.4
+      }
+     ]
+    }
+   }
+  },
+  {
+   "month": "2025-12",
+   "dw_images": 1,
+   "s1_scenes": 2,
+   "s2_scenes": 7,
+   "s1_thresholds_db": {
+    "S1A_IW_GRDH_1SDV_20251210T105757_20251210T105822_062252_07CB4A_EA66": {
+     "db": -14.0,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20251222T105755_20251222T105820_062427_07D20F_C513": {
+     "db": -13.75,
+     "fallback": false
+    }
+   },
+   "clear_share": 0.911,
+   "class_cover": 0.114,
+   "class_status": "patchy",
+   "water_ha": 5127.3,
+   "water_s2_agree": 0.947,
+   "class_ha": {
+    "water": 1802.1,
+    "trees": 254.1,
+    "grass": 17.8,
+    "flooded_vegetation": 2.0,
+    "crops": 46.6,
+    "shrub_and_scrub": 63.7,
+    "built": 581.3,
+    "bare": 72.9,
+    "snow_and_ice": 32.8
+   },
+   "vs_prev": {
+    "ref": "2025-11",
+    "water": {
+     "gained_ha": 338.5,
+     "lost_ha": 201.7,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 2873.4,
+     "changed_ha": 348.3,
+     "top": [
+      {
+       "from": "trees",
+       "to": "built",
+       "ha": 49.7
+      },
+      {
+       "from": "trees",
+       "to": "crops",
+       "ha": 32.4
+      },
+      {
+       "from": "trees",
+       "to": "water",
+       "ha": 28.7
+      },
+      {
+       "from": "trees",
+       "to": "snow_and_ice",
+       "ha": 20.8
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "built",
+       "ha": 18.9
+      },
+      {
+       "from": "built",
+       "to": "water",
+       "ha": 18.3
+      }
+     ]
+    }
+   },
+   "vs_base": {
+    "ref": "2024-10",
+    "water": {
+     "gained_ha": 233.3,
+     "lost_ha": 351.4,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 2873.4,
+     "changed_ha": 386.8,
+     "top": [
+      {
+       "from": "built",
+       "to": "water",
+       "ha": 31.6
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "trees",
+       "ha": 28.8
+      },
+      {
+       "from": "trees",
+       "to": "crops",
+       "ha": 24.0
+      },
+      {
+       "from": "trees",
+       "to": "water",
+       "ha": 21.8
+      },
+      {
+       "from": "built",
+       "to": "trees",
+       "ha": 21.3
+      },
+      {
+       "from": "built",
+       "to": "bare",
+       "ha": 20.1
+      }
+     ]
+    }
+   }
+  },
+  {
+   "month": "2026-01",
+   "dw_images": 2,
+   "s1_scenes": 2,
+   "s2_scenes": 6,
+   "s1_thresholds_db": {
+    "S1A_IW_GRDH_1SDV_20260103T105754_20260103T105819_062602_07D8D1_136C": {
+     "db": -13.0,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20260115T105753_20260115T105818_062777_07DF91_40EE": {
+     "db": -15.5,
+     "fallback": false
+    }
+   },
+   "clear_share": 1.0,
+   "class_cover": 1.0,
+   "class_status": "clear",
+   "water_ha": 5185.4,
+   "water_s2_agree": 0.955,
+   "class_ha": {
+    "water": 6401.4,
+    "trees": 9132.2,
+    "grass": 636.1,
+    "flooded_vegetation": 41.6,
+    "crops": 273.7,
+    "shrub_and_scrub": 1231.4,
+    "built": 3910.7,
+    "bare": 3233.8,
+    "snow_and_ice": 0.1
+   },
+   "vs_prev": {
+    "ref": "2025-12",
+    "water": {
+     "gained_ha": 276.0,
+     "lost_ha": 217.8,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 2873.4,
+     "changed_ha": 334.7,
+     "top": [
+      {
+       "from": "built",
+       "to": "shrub_and_scrub",
+       "ha": 50.4
+      },
+      {
+       "from": "built",
+       "to": "trees",
+       "ha": 42.4
+      },
+      {
+       "from": "crops",
+       "to": "trees",
+       "ha": 27.4
+      },
+      {
+       "from": "snow_and_ice",
+       "to": "trees",
+       "ha": 20.0
+      },
+      {
+       "from": "bare",
+       "to": "built",
+       "ha": 17.4
+      },
+      {
+       "from": "water",
+       "to": "bare",
+       "ha": 15.9
+      }
+     ]
+    }
+   },
+   "vs_base": {
+    "ref": "2024-10",
+    "water": {
+     "gained_ha": 355.9,
+     "lost_ha": 415.8,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 24860.9,
+     "changed_ha": 6119.0,
+     "top": [
+      {
+       "from": "shrub_and_scrub",
+       "to": "trees",
+       "ha": 1699.4
+      },
+      {
+       "from": "built",
+       "to": "trees",
+       "ha": 541.4
+      },
+      {
+       "from": "built",
+       "to": "bare",
+       "ha": 476.7
+      },
+      {
+       "from": "water",
+       "to": "bare",
+       "ha": 376.7
+      },
+      {
+       "from": "built",
+       "to": "shrub_and_scrub",
+       "ha": 336.4
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "grass",
+       "ha": 281.2
+      }
+     ]
+    }
+   }
+  },
+  {
+   "month": "2026-02",
+   "dw_images": 1,
+   "s1_scenes": 2,
+   "s2_scenes": 6,
+   "s1_thresholds_db": {
+    "S1A_IW_GRDH_1SDV_20260208T105751_20260208T105816_063127_07EC77_EA4F": {
+     "db": -12.75,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20260220T105751_20260220T105816_063302_07F2FF_4A29": {
+     "db": -14.75,
+     "fallback": false
+    }
+   },
+   "clear_share": 0.712,
+   "class_cover": 0.455,
+   "class_status": "patchy",
+   "water_ha": 5608.9,
+   "water_s2_agree": 0.955,
+   "class_ha": {
+    "water": 3363.9,
+    "trees": 1786.3,
+    "grass": 41.2,
+    "crops": 2.5,
+    "shrub_and_scrub": 1132.7,
+    "built": 834.8,
+    "bare": 3929.9,
+    "snow_and_ice": 259.5
+   },
+   "vs_prev": {
+    "ref": "2026-01",
+    "water": {
+     "gained_ha": 619.1,
+     "lost_ha": 195.7,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 11350.8,
+     "changed_ha": 3222.4,
+     "top": [
+      {
+       "from": "built",
+       "to": "bare",
+       "ha": 1230.9
+      },
+      {
+       "from": "built",
+       "to": "shrub_and_scrub",
+       "ha": 385.6
+      },
+      {
+       "from": "trees",
+       "to": "shrub_and_scrub",
+       "ha": 383.0
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "bare",
+       "ha": 237.5
+      },
+      {
+       "from": "bare",
+       "to": "water",
+       "ha": 154.2
+      },
+      {
+       "from": "water",
+       "to": "snow_and_ice",
+       "ha": 152.9
+      }
+     ]
+    }
+   },
+   "vs_base": {
+    "ref": "2024-10",
+    "water": {
+     "gained_ha": 488.8,
+     "lost_ha": 125.3,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 11350.8,
+     "changed_ha": 4069.5,
+     "top": [
+      {
+       "from": "built",
+       "to": "bare",
+       "ha": 1427.6
+      },
+      {
+       "from": "built",
+       "to": "shrub_and_scrub",
+       "ha": 504.2
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "bare",
+       "ha": 411.1
+      },
+      {
+       "from": "water",
+       "to": "bare",
+       "ha": 300.5
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "trees",
+       "ha": 296.6
+      },
+      {
+       "from": "trees",
+       "to": "shrub_and_scrub",
+       "ha": 189.4
+      }
+     ]
+    }
+   }
+  },
+  {
+   "month": "2026-03",
+   "dw_images": 3,
+   "s1_scenes": 3,
+   "s2_scenes": 7,
+   "s1_thresholds_db": {
+    "S1A_IW_GRDH_1SDV_20260304T105751_20260304T105816_063477_07F9B2_254C": {
+     "db": -13.25,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20260316T105751_20260316T105816_063652_08004A_DC84": {
+     "db": -14.5,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20260328T105751_20260328T105816_063827_0806D4_0F7D": {
+     "db": -15.75,
+     "fallback": false
+    }
+   },
+   "clear_share": 0.897,
+   "class_cover": 0.497,
+   "class_status": "patchy",
+   "water_ha": 4827.6,
+   "water_s2_agree": 0.923,
+   "class_ha": {
+    "water": 4813.2,
+    "trees": 2578.9,
+    "grass": 45.7,
+    "flooded_vegetation": 7.6,
+    "crops": 14.2,
+    "shrub_and_scrub": 1089.2,
+    "built": 2085.0,
+    "bare": 1765.2,
+    "snow_and_ice": 91.2
+   },
+   "vs_prev": {
+    "ref": "2026-02",
+    "water": {
+     "gained_ha": 29.1,
+     "lost_ha": 810.4,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 7217.9,
+     "changed_ha": 1804.3,
+     "top": [
+      {
+       "from": "bare",
+       "to": "built",
+       "ha": 571.4
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "built",
+       "ha": 222.0
+      },
+      {
+       "from": "bare",
+       "to": "water",
+       "ha": 136.0
+      },
+      {
+       "from": "snow_and_ice",
+       "to": "water",
+       "ha": 134.9
+      },
+      {
+       "from": "water",
+       "to": "bare",
+       "ha": 124.7
+      },
+      {
+       "from": "trees",
+       "to": "shrub_and_scrub",
+       "ha": 109.7
+      }
+     ]
+    }
+   },
+   "vs_base": {
+    "ref": "2024-10",
+    "water": {
+     "gained_ha": 83.4,
+     "lost_ha": 501.2,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 12490.2,
+     "changed_ha": 3235.7,
+     "top": [
+      {
+       "from": "built",
+       "to": "bare",
+       "ha": 527.3
+      },
+      {
+       "from": "built",
+       "to": "shrub_and_scrub",
+       "ha": 454.4
+      },
+      {
+       "from": "trees",
+       "to": "shrub_and_scrub",
+       "ha": 293.4
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "trees",
+       "ha": 286.0
+      },
+      {
+       "from": "water",
+       "to": "bare",
+       "ha": 237.8
+      },
+      {
+       "from": "built",
+       "to": "trees",
+       "ha": 204.1
+      }
+     ]
+    }
+   }
+  },
+  {
+   "month": "2026-04",
+   "dw_images": 2,
+   "s1_scenes": 1,
+   "s2_scenes": 7,
+   "s1_thresholds_db": {
+    "S1A_IW_GRDH_1SDV_20260421T105751_20260421T105816_064177_0813E7_05A2": {
+     "db": -14.25,
+     "fallback": false
+    }
+   },
+   "clear_share": 0.448,
+   "class_cover": 0.08,
+   "class_status": "patchy",
+   "water_ha": 5251.2,
+   "water_s2_agree": 0.842,
+   "class_ha": {
+    "water": 1122.6,
+    "trees": 306.3,
+    "grass": 2.9,
+    "flooded_vegetation": 2.5,
+    "crops": 28.2,
+    "shrub_and_scrub": 48.7,
+    "built": 290.6,
+    "bare": 212.4,
+    "snow_and_ice": 19.0
+   },
+   "vs_prev": {
+    "ref": "2026-03",
+    "water": {
+     "gained_ha": 524.1,
+     "lost_ha": 100.5,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 2033.2,
+     "changed_ha": 399.0,
+     "top": [
+      {
+       "from": "water",
+       "to": "trees",
+       "ha": 57.6
+      },
+      {
+       "from": "built",
+       "to": "bare",
+       "ha": 45.4
+      },
+      {
+       "from": "water",
+       "to": "bare",
+       "ha": 39.9
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "built",
+       "ha": 33.7
+      },
+      {
+       "from": "trees",
+       "to": "built",
+       "ha": 31.8
+      },
+      {
+       "from": "water",
+       "to": "built",
+       "ha": 28.4
+      }
+     ]
+    }
+   },
+   "vs_base": {
+    "ref": "2024-10",
+    "water": {
+     "gained_ha": 249.1,
+     "lost_ha": 243.2,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 2033.2,
+     "changed_ha": 390.5,
+     "top": [
+      {
+       "from": "built",
+       "to": "bare",
+       "ha": 118.2
+      },
+      {
+       "from": "water",
+       "to": "bare",
+       "ha": 34.5
+      },
+      {
+       "from": "trees",
+       "to": "shrub_and_scrub",
+       "ha": 26.8
+      },
+      {
+       "from": "trees",
+       "to": "built",
+       "ha": 24.3
+      },
+      {
+       "from": "trees",
+       "to": "bare",
+       "ha": 23.3
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "trees",
+       "ha": 22.8
+      }
+     ]
+    }
+   }
+  },
+  {
+   "month": "2026-05",
+   "dw_images": 2,
+   "s1_scenes": 3,
+   "s2_scenes": 9,
+   "s1_thresholds_db": {
+    "S1A_IW_GRDH_1SDV_20260503T105751_20260503T105816_064352_081A64_1A62": {
+     "db": -12.5,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20260515T105750_20260515T105815_064527_0820A0_3F9E": {
+     "db": -14.5,
+     "fallback": false
+    },
+    "S1A_IW_GRDH_1SDV_20260527T105750_20260527T105815_064702_0826BD_C4EB": {
+     "db": -14.5,
+     "fallback": false
+    }
+   },
+   "clear_share": 1.0,
+   "class_cover": 0.978,
+   "class_status": "clear",
+   "water_ha": 5076.1,
+   "water_s2_agree": 0.967,
+   "class_ha": {
+    "water": 6295.1,
+    "trees": 7146.7,
+    "grass": 1192.9,
+    "flooded_vegetation": 90.1,
+    "crops": 185.5,
+    "shrub_and_scrub": 1467.1,
+    "built": 5841.0,
+    "bare": 2120.9,
+    "snow_and_ice": 1.0
+   },
+   "vs_prev": {
+    "ref": "2026-04",
+    "water": {
+     "gained_ha": 127.4,
+     "lost_ha": 302.5,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 2033.2,
+     "changed_ha": 308.9,
+     "top": [
+      {
+       "from": "bare",
+       "to": "built",
+       "ha": 90.6
+      },
+      {
+       "from": "water",
+       "to": "built",
+       "ha": 34.5
+      },
+      {
+       "from": "bare",
+       "to": "water",
+       "ha": 28.1
+      },
+      {
+       "from": "trees",
+       "to": "built",
+       "ha": 24.4
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "trees",
+       "ha": 10.5
+      },
+      {
+       "from": "crops",
+       "to": "shrub_and_scrub",
+       "ha": 10.0
+      }
+     ]
+    }
+   },
+   "vs_base": {
+    "ref": "2024-10",
+    "water": {
+     "gained_ha": 124.4,
+     "lost_ha": 293.6,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 24340.2,
+     "changed_ha": 6772.4,
+     "top": [
+      {
+       "from": "shrub_and_scrub",
+       "to": "trees",
+       "ha": 1427.5
+      },
+      {
+       "from": "trees",
+       "to": "grass",
+       "ha": 719.1
+      },
+      {
+       "from": "bare",
+       "to": "built",
+       "ha": 667.4
+      },
+      {
+       "from": "trees",
+       "to": "shrub_and_scrub",
+       "ha": 542.1
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "grass",
+       "ha": 354.7
+      },
+      {
+       "from": "built",
+       "to": "bare",
+       "ha": 298.9
+      }
+     ]
+    }
+   }
+  },
+  {
+   "month": "2026-06",
+   "dw_images": 0,
+   "s1_scenes": 2,
+   "s2_scenes": 7,
+   "s1_thresholds_db": {
+    "S1A_IW_GRDH_1SDV_20260608T105749_20260608T105814_064877_082CDE_B121": {
+     "db": -18.0,
+     "fallback": true
+    },
+    "S1A_IW_GRDH_1SDV_20260620T105749_20260620T105814_065052_083303_E816": {
+     "db": -14.0,
+     "fallback": false
+    }
+   },
+   "clear_share": 0.341,
+   "class_cover": 0.0,
+   "class_status": "none",
+   "water_ha": 5098.4,
+   "water_s2_agree": 0.943,
+   "class_ha": null,
+   "vs_prev": {
+    "ref": "2026-05",
+    "water": {
+     "gained_ha": 189.0,
+     "lost_ha": 166.7,
+     "compared_ha": 24860.9
+    },
+    "classes": null
+   },
+   "vs_base": {
+    "ref": "2024-10",
+    "water": {
+     "gained_ha": 159.5,
+     "lost_ha": 306.4,
+     "compared_ha": 24860.9
+    },
+    "classes": null
+   }
+  },
+  {
+   "month": "2026-07",
+   "dw_images": 0,
+   "s1_scenes": 2,
+   "s2_scenes": 8,
+   "s1_thresholds_db": {
+    "S1D_IW_GRDH_1SDV_20260721T105710_20260721T105735_003771_006C51_BB35": {
+     "db": -15.25,
+     "fallback": false
+    },
+    "S1D_IW_GRDH_1SDV_20260721T105710_20260721T105735_003771_006C51_DD83": {
+     "db": -15.25,
+     "fallback": false
+    }
+   },
+   "clear_share": 0.774,
+   "class_cover": 0.0,
+   "class_status": "none",
+   "water_ha": 4902.3,
+   "water_s2_agree": 0.96,
+   "class_ha": null,
+   "vs_prev": {
+    "ref": "2026-06",
+    "water": {
+     "gained_ha": 115.3,
+     "lost_ha": 311.3,
+     "compared_ha": 24860.9
+    },
+    "classes": null
+   },
+   "vs_base": {
+    "ref": "2024-10",
+    "water": {
+     "gained_ha": 84.3,
+     "lost_ha": 427.4,
+     "compared_ha": 24860.9
+    },
+    "classes": null
+   }
+  },
+  {
+   "month": "2026-08",
+   "dw_images": 1,
+   "s1_scenes": 1,
+   "s2_scenes": 7,
+   "s1_thresholds_db": {
+    "S1D_IW_GRDH_1SDV_20260802T105710_20260802T105735_003946_00726D_7FD6": {
+     "db": -15.0,
+     "fallback": false
+    }
+   },
+   "clear_share": 0.966,
+   "class_cover": 0.657,
+   "class_status": "clear",
+   "water_ha": 4996.3,
+   "water_s2_agree": 0.966,
+   "class_ha": {
+    "water": 6126.5,
+    "trees": 4524.4,
+    "grass": 95.5,
+    "flooded_vegetation": 26.1,
+    "crops": 15.8,
+    "shrub_and_scrub": 399.9,
+    "built": 4219.9,
+    "bare": 950.8,
+    "snow_and_ice": 14.1
+   },
+   "vs_prev": {
+    "ref": "2026-07",
+    "water": {
+     "gained_ha": 233.6,
+     "lost_ha": 139.7,
+     "compared_ha": 24860.9
+    },
+    "classes": null
+   },
+   "vs_base": {
+    "ref": "2024-10",
+    "water": {
+     "gained_ha": 109.7,
+     "lost_ha": 358.8,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 16373.0,
+     "changed_ha": 3856.4,
+     "top": [
+      {
+       "from": "shrub_and_scrub",
+       "to": "trees",
+       "ha": 925.4
+      },
+      {
+       "from": "bare",
+       "to": "built",
+       "ha": 630.5
+      },
+      {
+       "from": "built",
+       "to": "trees",
+       "ha": 458.1
+      },
+      {
+       "from": "bare",
+       "to": "water",
+       "ha": 384.3
+      },
+      {
+       "from": "water",
+       "to": "built",
+       "ha": 148.3
+      },
+      {
+       "from": "shrub_and_scrub",
+       "to": "built",
+       "ha": 131.8
+      }
+     ]
+    }
+   }
+  },
+  {
+   "month": "2026-09",
+   "dw_images": 6,
+   "s1_scenes": 2,
+   "s2_scenes": 8,
+   "s1_thresholds_db": {
+    "S1D_IW_GRDH_1SDV_20260907T105711_20260907T105736_004471_0084B6_B422": {
+     "db": -15.5,
+     "fallback": false
+    },
+    "S1D_IW_GRDH_1SDV_20260919T105712_20260919T105737_004646_008AC1_B240": {
+     "db": -15.0,
+     "fallback": false
+    }
+   },
+   "clear_share": 1.0,
+   "class_cover": 1.0,
+   "class_status": "clear",
+   "water_ha": 5054.8,
+   "water_s2_agree": 0.972,
+   "class_ha": {
+    "water": 6742.6,
+    "trees": 10672.4,
+    "grass": 167.0,
+    "flooded_vegetation": 47.5,
+    "crops": 106.1,
+    "shrub_and_scrub": 529.7,
+    "built": 4945.4,
+    "bare": 1650.0,
+    "snow_and_ice": 0.1
+   },
+   "vs_prev": {
+    "ref": "2026-08",
+    "water": {
+     "gained_ha": 197.2,
+     "lost_ha": 138.7,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 16373.0,
+     "changed_ha": 1689.3,
+     "top": [
+      {
+       "from": "built",
+       "to": "bare",
+       "ha": 302.2
+      },
+      {
+       "from": "water",
+       "to": "bare",
+       "ha": 210.4
+      },
+      {
+       "from": "bare",
+       "to": "built",
+       "ha": 151.3
+      },
+      {
+       "from": "built",
+       "to": "water",
+       "ha": 123.1
+      },
+      {
+       "from": "trees",
+       "to": "built",
+       "ha": 121.1
+      },
+      {
+       "from": "trees",
+       "to": "water",
+       "ha": 119.9
+      }
+     ]
+    }
+   },
+   "vs_base": {
+    "ref": "2024-10",
+    "water": {
+     "gained_ha": 113.6,
+     "lost_ha": 304.1,
+     "compared_ha": 24860.9
+    },
+    "classes": {
+     "compared_ha": 24860.9,
+     "changed_ha": 6504.3,
+     "top": [
+      {
+       "from": "shrub_and_scrub",
+       "to": "trees",
+       "ha": 2428.5
+      },
+      {
+       "from": "built",
+       "to": "trees",
+       "ha": 669.3
+      },
+      {
+       "from": "bare",
+       "to": "built",
+       "ha": 643.7
+      },
+      {
+       "from": "bare",
+       "to": "water",
+       "ha": 332.9
+      },
+      {
+       "from": "grass",
+       "to": "trees",
+       "ha": 330.5
+      },
+      {
+       "from": "bare",
+       "to": "shrub_and_scrub",
+       "ha": 201.0
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "method": {
+  "water": "Sentinel-1 VV, 30 m focal median, Otsu per scene in [-24.0, -12.0] dB (else -18.0 dB); water in >= half the month's looks; never water at slope >= 15 deg or elevation >= 40 m (SRTM)",
+  "class": "Dynamic World V1 label, per-pixel mode over the month; gaps where no image (D10, D11)",
+  "clear": "Sentinel-2 SR looks with SCL in [2, 4, 5, 6, 7] per pixel; clear_share = AOI share seen clear at least once",
+  "compare": "only over pixels observed in both months; vs_prev = previous calendar month, vs_base = first month",
+  "seasons": "class change between dry-season (Oct-Mar) Dynamic World modes; single months are too noisy for class change",
+  "areas": "at 20 m",
+  "tide": "monthly water extent includes tide differences (several m range, D11); use trends, not single months"
+ },
+ "seasons": [
+  {
+   "from": "2024-25",
+   "to": "2025-26",
+   "windows": [
+    [
+     "2024-10-01",
+     "2025-04-01"
+    ],
+    [
+     "2025-10-01",
+     "2026-04-01"
+    ]
+   ],
+   "cover": {
+    "2024-25": 1.0,
+    "2025-26": 1.0
+   },
+   "compared_ha": 24860.9,
+   "changed_ha": 4815.3,
+   "top": [
+    {
+     "from": "shrub_and_scrub",
+     "to": "trees",
+     "ha": 1850.5
+    },
+    {
+     "from": "built",
+     "to": "trees",
+     "ha": 433.3
+    },
+    {
+     "from": "water",
+     "to": "bare",
+     "ha": 300.9
+    },
+    {
+     "from": "bare",
+     "to": "built",
+     "ha": 243.8
+    },
+    {
+     "from": "shrub_and_scrub",
+     "to": "grass",
+     "ha": 200.8
+    },
+    {
+     "from": "built",
+     "to": "bare",
+     "ha": 189.5
+    },
+    {
+     "from": "grass",
+     "to": "trees",
+     "ha": 170.5
+    },
+    {
+     "from": "trees",
+     "to": "grass",
+     "ha": 166.8
+    },
+    {
+     "from": "trees",
+     "to": "shrub_and_scrub",
+     "ha": 166.4
+    },
+    {
+     "from": "bare",
+     "to": "shrub_and_scrub",
+     "ha": 147.9
+    }
+   ]
+  }
+ ]
+}

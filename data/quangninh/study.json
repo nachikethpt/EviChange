@@ -14,6 +14,7 @@
   },
   "before_window": ["2018-11-01", "2019-03-31"],
   "after_window": ["2022-11-01", "2023-03-31"],
+  "monthly": {"start": "2024-10", "end": "2026-09"},
   "thresholds": {
     "max_cloud_pct": 30,
     "index_delta": 0.1,

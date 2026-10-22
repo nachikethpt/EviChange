@@ -34,9 +34,10 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from agents import ee_engine, landcover, vlm_check
+from agents import ee_engine, landcover, monthly, vlm_check
 from agents.vlm_client import VLMClient, VLMUnavailable
 from agents.graph import run_pipeline
+from agents.study import REPO_ROOT, load_study_config
 from agents.schema import CHANGE_TYPES, CONDITIONS, CONF_MIN, T_IDX, validate_aoi, validate_windows
 
 from . import data_store
@@ -159,6 +160,89 @@ def index_layer(index: str, kind: str, run_id: Optional[str] = None):
     layer.update(index=index, kind=kind, before_window=params["before_window"], after_window=params["after_window"])
     _index_tiles[key] = (time.time(), layer)
     return layer
+
+
+# ---------- Phase 10 (D11): monthly time series of the QN AOI ----------
+_MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+_monthly_tiles: dict = {}
+
+
+def _monthly_summary() -> dict:
+    summary = monthly.load(monthly.SUMMARY_FILE)
+    if summary is None:
+        raise HTTPException(404, "no monthly time series yet: run scripts/make_monthly.py")
+    return summary
+
+
+@app.get("/api/monthly")
+def monthly_summary():
+    """Per month: scene counts, share seen clear, Dynamic World cover / class areas (gaps as null),
+    water area, change vs the previous month and the first month. See agents/monthly.py."""
+    return _monthly_summary()
+
+
+@app.get("/api/monthly/layer")
+def monthly_layer(month: str, layer: str, vs: Literal["base", "prev"] = "base"):
+    """XYZ tiles for one month: class, water, clear, or water_change / class_change against the first
+    month (vs=base) or the previous month (vs=prev). Class layers are masked at the labelled sites (D10)."""
+    if not _MONTH_RE.match(month) or layer not in monthly.LAYERS:
+        raise HTTPException(400, f"month must be YYYY-MM, layer one of {monthly.LAYERS}")
+    summary = _monthly_summary()
+    row = monthly.month_row(summary, month)
+    if row is None:
+        raise HTTPException(404, f"{month} is outside the series {summary['period']}")
+    ref_key = None
+    if layer.endswith("_change"):
+        ref_key = summary["baseline"] if vs == "base" else monthly.previous_month(month)
+        if ref_key == month or monthly.month_row(summary, ref_key) is None:
+            raise HTTPException(404, f"nothing to compare {month} with (vs={vs})")
+    gap = ((layer in ("class", "class_change") and row["dw_images"] == 0)
+           or (layer in ("water", "water_change") and not row["s1_thresholds_db"]))
+    if gap:
+        raise HTTPException(404, f"no {layer.split('_')[0]} data in {month}: shown as a gap")
+    key = (month, layer, ref_key)
+    hit = _monthly_tiles.get(key)
+    if hit and time.time() - hit[0] < INDEX_TILE_TTL_S:
+        return hit[1]
+    windows = {k: (k, s, e) for k, s, e in monthly.month_windows(*summary["period"])}
+    ref_row = monthly.month_row(summary, ref_key) if ref_key else None
+    try:
+        out = monthly.tile_layer(load_study_config()["aoi"], windows[month], layer, windows.get(ref_key),
+                                 row["s1_thresholds_db"], ref_row and ref_row["s1_thresholds_db"])
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc))
+    except Exception as exc:
+        raise HTTPException(502, f"Earth Engine: {exc}")
+    out.update(month=month, layer=layer, ref=ref_key)
+    _monthly_tiles[key] = (time.time(), out)
+    return out
+
+
+_hidden_ids: dict = {}
+
+
+def _class_locked_ids(regions_file: str) -> set:
+    """Region ids whose classes are hidden at the labelled sites (D10), for the monthly class series."""
+    if regions_file not in _hidden_ids:
+        path = REPO_ROOT / regions_file
+        fc = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"features": []}
+        _hidden_ids[regions_file] = {f["properties"]["id"] for f in landcover.hide_at_labelled_sites(fc)["features"]
+                                     if f["properties"].get("class_hidden")}
+    return _hidden_ids[regions_file]
+
+
+@app.get("/api/monthly/regions/{region_id}")
+def monthly_region(region_id: str):
+    """One change region's monthly series: Dynamic World class (null in gaps), water share, share seen clear."""
+    series = monthly.load(monthly.REGIONS_FILE)
+    if series is None:
+        raise HTTPException(404, "no monthly region series yet: run scripts/make_monthly.py")
+    if region_id not in series["regions"]:
+        raise HTTPException(404, f"unknown region id: {region_id}")
+    locked = _class_locked_ids(series.get("regions_file", ""))
+    one = monthly.hide_classes({"regions": {region_id: series["regions"][region_id]}}, locked)
+    return {"id": region_id, "months": series["months"], **one["regions"][region_id]}
+
 
 
 vlm = VLMClient()
