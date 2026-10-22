@@ -245,7 +245,7 @@ r363 water → built (coastal reclamation, south), r289 bare → trees (revegeta
 regions keep "water" as their class while its share falls (r435: 47 % → 28 %), so the shares carry
 information the class alone hides.
 
-## D11 — Monthly change, shoreline and coastal buildings (2026-10-08, proposed)
+## D11 — Monthly change, shoreline and coastal buildings (2026-10-08; monthly maps implemented 2026-10-22)
 
 **Period.** Oct 2024 – Sep 2026 (24 months: two full monsoon cycles, so seasonal swings can be
 told apart from lasting change).
@@ -272,6 +272,48 @@ the Oct 2024 shoreline, per month (where clear) and per dry season; new built pa
 Google Open Buildings temporal (`GOOGLE/Research/open-buildings-temporal/v1`, available over the
 AOI, yearly to 2023) is a pre-period reference only. At 10 m, single houses are below resolution:
 "built area" is reported, not building counts, until Planet (3 m) is integrated.
+
+**As implemented (Phase 10, `agents/monthly.py`, `scripts/make_monthly.py`).** Months come from
+`monthly` in `study.json`; the baseline is the first month (Oct 2024).
+- *Water:* Sentinel-1 IW VV, 30 m focal median against speckle, one Otsu threshold per scene from a
+  0.25 dB histogram over the AOI (computed in Python, so it is unit-tested). A threshold outside
+  −24 … −12 dB means the scene has no land / water split and −18 dB is used instead, recorded as
+  `fallback`. A pixel is water in a month when at least half of that month's looks call it water.
+  Slopes ≥ 15° or ground ≥ 40 m (SRTM) are never water, because radar shadow on the karst hills is as
+  dark as water. Where Sentinel-2 has a clear look, the radar water is compared with MNDWI > 0
+  (`water_s2_agree`).
+- *Classes:* the Dynamic World label, as the per-pixel mode over the month. Pixels with no image stay
+  gaps. A month's `class_status` is `none`, `patchy` (under half the AOI) or `clear`.
+- *Data quality:* clear Sentinel-2 looks per pixel (SCL 2, 4–7). `clear_share` is the share of the AOI
+  seen clear at least once.
+- *Change:* compared with the previous calendar month and with the baseline. Only pixels observed in
+  both months count, and `compared_ha` always goes with the gained / lost / changed areas. A month with
+  no data gives `null`, never a guess.
+- *Per region:* for each change region and month, the class (null under 50 % Dynamic World cover),
+  the water share and the share seen clear.
+- *API:*
+  - `GET /api/monthly`: the summary.
+  - `GET /api/monthly/layer?month=YYYY-MM&layer=class|water|clear|water_change|class_change&vs=base|prev`:
+    tiles. A gap month gives 404.
+  - `GET /api/monthly/regions/{id}`: one region's series.
+
+  The class layers are masked at the labelled sites and the region class series hidden there until
+  Phase 14 (D10).
+
+**First QN run (2026-10-22, Oct 2024 – Sep 2026).**
+- *Radar:* every month has 1–4 Sentinel-1 scenes; 3 of 59 scenes needed the −18 dB fallback.
+- *Water:* 4,780–5,610 ha per month. That ±8 % swing is mostly tide and speckle along the shore, so
+  use trends, not single months. The radar water agrees with Sentinel-2 MNDWI on 92–97 % of
+  clear-look pixels, except in months with almost no clear look (May 2025: 72 % on 0.3 % of the AOI).
+- *Class gaps:* Dynamic World covers Oct–Mar (Feb 2025 and Feb–Mar 2026 only partly). There are no
+  images from Apr to Aug 2025. 2026 is kinder: May and Aug are usable.
+- *Single months are too noisy for class change:* against Oct 2024, 12–38 % of the compared area
+  "changes class" every month, far more than real change. The summary therefore also compares
+  **dry-season modes** (`seasons`).
+- *Dry season 2024-25 → 2025-26:* 4,815 of 24,861 ha change class. The largest move is
+  shrub → trees (1,850 ha), Dynamic World's known shrub / tree confusion. The plausible real changes
+  are smaller: water → bare 301 ha, bare → built 244 ha. Phase 14's class labels will say how much of
+  this is real; until then report class change from the seasons, never from single months.
 
 ## D12 — Planet-ready imagery source (2026-10-08, proposed)
 
