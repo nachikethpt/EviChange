@@ -350,6 +350,24 @@ of 4,275 km² of per-scene area), prefers the cheaper of two near-equal days, an
 against the per-scene sum, an upper bound. Year 2 may therefore need two quota months; Feb 2025
 goes into November's order.
 
+**Into Earth Engine (Phase 13b, 2026-10-22).** The project PC can't run rasterio (Windows Smart App
+Control blocks its GDAL DLLs), so `notebooks/EviChange_planet_to_ee.ipynb` does the raster work on
+Colab (CPU runtime): per month, every scene is masked with Planet's UDM2 clear band, scenes are
+merged clearest first into one 3 m mosaic, and the mosaic goes into the private Earth Engine
+collection `projects/space-510615/assets/planet_qn` as image `m<YYYY>_<MM>` with 9 bands (8 × surface
+reflectance × 10 000, plus `clear`), no-data 0, the acquisition date as start time, and `month`,
+`date`, `item_ids`, `clear_share` and the Planet attribution as properties. Upload is automatic with a
+Cloud Storage bucket, otherwise by hand in the Code Editor (exact asset ids printed); the notebook
+then sets dates and properties. `agents/planet.py` reads the collection, selecting bands by position
+so either upload path works, and gives `month_image()` (reflectance, clear-masked), `indices()`
+(NDVI, NDWI), `water_image()` (NDWI > 0) and `region_chips()` (true colour + NIR false colour).
+Rather than an `ee_engine` `source` switch, Planet gets its own module: its bands, missing SWIR and
+monthly single-day images differ enough from the Sentinel-2 composites that one code path would
+hide the differences. Wiring it into the monthly maps, the shoreline and the Geo-VLM check follows
+once the mosaics are in Earth Engine. **Feb 2025 is skipped for now** (refused over quota): the 11
+delivered months go in first, and rerunning the notebook in November adds February alone.
+Neither the scenes nor the mosaics are committed to either repository (licence).
+
 ## D13 — Extended evaluation: classes, shoreline and coastal buildings (2026-10-08, proposed)
 
 **Decision.** The new outputs are also evaluated, not only shown, using the same two-axis design
