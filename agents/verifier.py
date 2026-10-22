@@ -18,6 +18,9 @@ quoted numbers from the text. Rules run in order; the first decisive one wins:
   6 resolve region(s): region_ref, else location words in the text
   7 L2 extent / location             -> extent_mismatch / location_mismatch / ...
   8 L3 change type vs index sign     -> contradicts_index / below_threshold
+  8b land_cover (D13) vs the region's Dynamic World classes
+                                     -> class_transition_matches / class_transition_mismatch /
+                                        class_not_in_evidence
   9 supported but weak detection     -> uncertain   low_detection_confidence
 """
 from __future__ import annotations
@@ -53,6 +56,52 @@ _BARE = re.compile(r"\b(built|urban|building|construct|bare|soil|exposed|excavat
 _WATER = re.compile(r"\b(water|reservoir|lake|pond|flood|river|wetland|inundat)", re.I)
 _LOSS = re.compile(r"\b(loss|lost|los[ei]|clear|remov|replac|declin|decreas|reduc|destroy|disappear|fewer|less|drain|dr(?:y|ied)|shr[iau]nk|demolish)", re.I)
 _GAIN = re.compile(r"\b(gain|increas|regrow|recover|greener|more|new|expan|appear|planted|reforest)", re.I)
+
+
+# Words that name a Dynamic World class. Deliberately a short, conservative list: a word that is
+# not here makes the claim "uncertain", never "unsupported".
+_CLASS_WORDS = {
+    "trees": r"trees?|forests?|woodland|canopy",
+    "grass": r"grass(?:es|land)?|meadows?|pasture",
+    "crops": r"crops?|cropland|farmland|paddy|paddies|agricultur\w*",
+    "shrub_and_scrub": r"shrub(?:s|land)?|scrub|bush(?:es)?",
+    "flooded_vegetation": r"flooded[\s-]vegetation|mangroves?|marsh(?:es)?|swamp",
+    "built": r"built(?:[\s-]up)?|urban|buildings?|construction|settlements?|roads?|paved|concrete",
+    "bare": r"bare|soil|exposed|excavat\w*|pit|spoil|quarry",
+    "water": r"water|reservoir|lake|pond|river|sea|lagoon",
+    "snow_and_ice": r"snow|ice",
+}
+_CLASS_RES = {name: re.compile(rf"\b(?:{words})\b", re.I) for name, words in _CLASS_WORDS.items()}
+# "A was replaced by / with B", "from A to B", "A became B", "A -> B": the first class is the "before"
+_FORWARD_RE = re.compile(
+    r"\bfrom\b.+\bto\b|→|->"
+    r"|\b(?:became|becomes|becoming|turned\s+into|turned\s+to|convert(?:ed|s|ing)?\s+(?:in)?to"
+    r"|chang(?:ed|es|ing)\s+(?:in)?to|transform(?:ed|s|ing)?\s+(?:in)?to|cleared\s+for|gave\s+way\s+to"
+    r"|replac(?:ed|es|ing)\s+(?:by|with))\b", re.I)
+# "B replaced A", "B took over A": active voice, so the first class is the "after"
+_REVERSE_RE = re.compile(r"\b(?:replac(?:ed|es|ing)|took\s+over|taking\s+over|displac(?:ed|es|ing))\b", re.I)
+
+
+def claimed_class_transition(claim: dict) -> tuple[str | None, str | None]:
+    """(class_before, class_after) a land_cover claim states; None where it states nothing.
+
+    Structured class_before / class_after win. Otherwise the text is read only when it names exactly
+    two classes with a clear direction ("trees were replaced by bare ground", "from trees to built").
+    Anything ambiguous returns (None, None), which the verifier turns into "uncertain".
+    """
+    before, after = claim.get("class_before"), claim.get("class_after")
+    if before is not None or after is not None:
+        return before, after
+    text = claim.get("text", "")
+    found = sorted((m.start(), name) for name, rx in _CLASS_RES.items() if (m := rx.search(text)))
+    names = [name for _, name in found]
+    if len(names) != 2:
+        return None, None
+    if _FORWARD_RE.search(text):
+        return names[0], names[1]
+    if _REVERSE_RE.search(text):
+        return names[1], names[0]
+    return None, None
 
 
 def claimed_locations(text: str) -> set[str]:
@@ -113,6 +162,23 @@ def _check_extent(text: str, area_ha: float, change_frac: float | None) -> Verdi
     return Verdict("supported", "extent_matches") if stated else None
 
 
+def _check_land_cover(claim: dict, pool: list[dict], min_conf: float) -> Verdict:
+    """A land_cover claim against the Dynamic World classes of the region(s) it is about (D10)."""
+    before, after = claimed_class_transition(claim)
+    if before is None and after is None:
+        return Verdict("uncertain", "type_not_checkable")
+    if not pool:
+        return Verdict("unsupported", "change_not_in_evidence")
+    with_classes = [r for r in pool if r.get("class_before") is not None and r.get("class_after") is not None]
+    if not with_classes:
+        return Verdict("uncertain", "class_not_in_evidence")   # no usable Dynamic World scene: never a guess
+    supporting = [r for r in with_classes
+                  if (before is None or r["class_before"] == before) and (after is None or r["class_after"] == after)]
+    if supporting:
+        return _with_confidence(Verdict("supported", "class_transition_matches"), supporting, min_conf)
+    return Verdict("unsupported", "class_transition_mismatch")
+
+
 def _with_confidence(verdict: Verdict, regions: list[dict], min_conf: float) -> Verdict:
     if verdict.verdict == "supported" and regions and max(r["mean_conf"] for r in regions) < min_conf:
         return Verdict("uncertain", "low_detection_confidence")
@@ -163,6 +229,9 @@ def verify(claim: dict, ev: dict, min_conf: float = CONF_MIN) -> Verdict:
         # "no change in the north" — wrong if any region there changed
         return Verdict("unsupported", "denies_detected_change") if (candidates or (not locations and has_change)) \
             else Verdict("supported", "consistent_with_mask")
+
+    if ctype == "land_cover":
+        return _check_land_cover(claim, candidates or regions, min_conf)
 
     if level == "L2":
         if ctype == "extent" or not candidates:

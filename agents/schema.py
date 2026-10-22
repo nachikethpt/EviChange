@@ -10,7 +10,8 @@ here and the tests catch every place that disagrees.
               [class_before, class_after, class_frac_before, class_frac_after] (D10)}
     evidence {pair_id, dates, source, change_frac, regions[]}
     claim    {claim_id, level, type, text, region_ref, evidence_ref[], stated_conf,
-              [change_type], [verdict, verdict_reason]}
+              [change_type], [class_before, class_after] (land_cover claims, D13),
+              [verdict, verdict_reason]}
 """
 from __future__ import annotations
 
@@ -23,7 +24,7 @@ CONF_MIN = 0.2    # detections with mean_conf below this only support "uncertain
 
 CONDITIONS = ("template", "ungated", "gated")
 LEVELS = ("L1", "L2", "L3", "L4")
-CLAIM_TYPES = ("presence", "extent", "location", "change_type", "cause", "other")
+CLAIM_TYPES = ("presence", "extent", "location", "change_type", "land_cover", "cause", "other")
 VERDICTS = ("supported", "unsupported", "uncertain")
 LOCATIONS = ("north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west", "centre")
 INDEX_FIELDS = ("dNDVI", "dNDBI", "dMNDWI")
@@ -32,7 +33,8 @@ REGION_FIELDS = ("id", "area_ha", "mean_conf", "dNDVI", "dNDBI", "dMNDWI", "loca
 LANDCOVER_CLASSES = ("water", "trees", "grass", "flooded_vegetation", "crops", "shrub_and_scrub", "built", "bare",
                      "snow_and_ice")   # Dynamic World V1 (D10); optional region fields, null when unknown
 REGION_PROVENANCE_FIELDS = ("date_before", "date_after", "source")
-EVIDENCE_REF_FIELDS = frozenset({"change_frac", "area_ha", "location", "mean_conf", *INDEX_FIELDS})
+EVIDENCE_REF_FIELDS = frozenset({"change_frac", "area_ha", "location", "mean_conf", *INDEX_FIELDS,
+                                 "class_before", "class_after", "class_frac_before", "class_frac_after"})
 
 # change_type -> (evidence field, sign the field must have beyond T_IDX, human label)
 CHANGE_TYPES = {
@@ -66,6 +68,9 @@ REASONS = {
     "unlocated_claim": "The claim cannot be tied to any detected region.",
     "low_detection_confidence": "The supporting region's detection confidence is below the threshold.",
     "malformed_claim": "The claim is missing required fields.",
+    "class_transition_matches": "The land-cover classes before and after match the evidence.",
+    "class_transition_mismatch": "The stated land-cover change disagrees with the evidence classes.",
+    "class_not_in_evidence": "The region has no land-cover classes in the evidence, so this cannot be checked.",
 }
 
 
@@ -241,6 +246,9 @@ def validate_claim(claim: object) -> list[str]:
         errors.append("'evidence_ref' must be a list")
     if claim.get("change_type") is not None and claim["change_type"] not in CHANGE_TYPES:
         errors.append(f"'change_type' must be one of {tuple(CHANGE_TYPES)}, got {claim['change_type']!r}")
+    for f in ("class_before", "class_after"):
+        if claim.get(f) is not None and claim[f] not in LANDCOVER_CLASSES:
+            errors.append(f"'{f}' must be one of {LANDCOVER_CLASSES} or null, got {claim[f]!r}")
     if claim.get("verdict") is not None and claim["verdict"] not in VERDICTS:
         errors.append(f"'verdict' must be one of {VERDICTS}, got {claim['verdict']!r}")
     if claim.get("verdict_reason") is not None and claim["verdict_reason"] not in REASONS:
