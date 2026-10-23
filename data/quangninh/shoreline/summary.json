@@ -1,0 +1,81 @@
+{
+ "period": [
+  "2024-10",
+  "2026-09"
+ ],
+ "months": [
+  "2024-10",
+  "2024-11",
+  "2024-12",
+  "2025-01",
+  "2025-02",
+  "2025-03",
+  "2025-04",
+  "2025-05",
+  "2025-06",
+  "2025-07",
+  "2025-08",
+  "2025-09",
+  "2025-10",
+  "2025-11",
+  "2025-12",
+  "2026-01",
+  "2026-02",
+  "2026-03",
+  "2026-04",
+  "2026-05",
+  "2026-06",
+  "2026-07",
+  "2026-08",
+  "2026-09"
+ ],
+ "transects": 735,
+ "baseline_km": 90.17,
+ "changes": {
+  "stable": 483,
+  "too_few": 217,
+  "unconfirmed": 30,
+  "advancing": 5
+ },
+ "radar_trends": {
+  "stable": 483,
+  "too_few": 217,
+  "advancing": 30,
+  "retreating": 5
+ },
+ "dry_seasons": [
+  "2024-25",
+  "2025-26"
+ ],
+ "tidal_transects": 78,
+ "quarters": [
+  "2024-10/2024-12",
+  "2025-01/2025-03",
+  "2025-04/2025-06",
+  "2025-07/2025-09",
+  "2025-10/2025-12",
+  "2026-01/2026-03",
+  "2026-04/2026-06",
+  "2026-07/2026-09"
+ ],
+ "month_status": {
+  "ok": 12642,
+  "unclear": 4399,
+  "all_water": 246,
+  "all_land": 353
+ },
+ "fastest_advance_m_yr": 72.86,
+ "fastest_retreat_m_yr": null,
+ "method": {
+  "water": "Phase 10 monthly Sentinel-1 water maps (monthly.water_image)",
+  "sea": "water occurrence >= 0.5 of the months, polygons at 20 m touching the AOI edge, >= 100 ha",
+  "baseline": "sea mask opened by 50 m, boundary minus the AOI cut (60 m), Douglas-Peucker 40 m, smoothed over +-250 m, lines >= 500 m",
+  "transects": "every 100 m, perpendicular over +-100 m, 300 m landward to 500 m seaward, samples every 10 m",
+  "position": "landward edge of the sea-connected water: walk from the seaward end until 3 land samples in a row; none if < 80% agreement, no sea at the seaward end, or water to the landward end",
+  "rate": "from quarterly shorelines (water in >= half of a quarter's radar looks, tide-averaged): linear regression rate (m/yr, seaward +) with a 95 % CI, >= 5 quarters; advancing / retreating only when the CI excludes 0",
+  "nsm": "net shoreline movement: mean of the last 2 quarterly positions minus mean of the first 2",
+  "tidal": "monthly positions with an IQR > 100 m: a wide intertidal flat; monthly lines there move with the tide",
+  "confirmation": "change = radar trend confirmed by the Sentinel-2 dry-season shoreline (median MNDWI > 0) moving the same way by >= 20 m between the first and last dry season; otherwise unconfirmed",
+  "tide": "monthly positions include tide differences (several m range, D11); the 24-month rate is the reported quantity"
+ }
+}

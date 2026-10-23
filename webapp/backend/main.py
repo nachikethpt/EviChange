@@ -27,14 +27,14 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import Any, List, Literal, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from agents import ee_engine, landcover, monthly, ungated, vlm_check
+from agents import ee_engine, landcover, monthly, shoreline, ungated, vlm_check
 from agents.gpt_client import GPTClient
 from agents.vlm_client import VLMClient, VLMUnavailable
 from agents.graph import run_pipeline
@@ -438,6 +438,70 @@ def create_run(req: RunRequest):
 def get_run(run_id: str):
     _require_valid_run(run_id)
     return data_store.get_status(run_id)
+
+
+# ---------- Phase 11 (D11): shoreline change ----------
+def _shoreline(name: str) -> Any:
+    data = shoreline.load(name)
+    if data is None:
+        raise HTTPException(404, "no shoreline analysis yet: run scripts/make_shoreline.py")
+    return data
+
+
+@app.get("/api/shoreline")
+def shoreline_summary():
+    """Transect counts by trend (advancing / retreating / stable), baseline length, fastest rates and
+    the method. See agents/shoreline.py."""
+    return _shoreline("summary.json")
+
+
+@app.get("/api/shoreline/transects")
+def shoreline_transects(change: Optional[str] = None, trend: Optional[str] = None):
+    """Transects as GeoJSON lines with their rate (lrr m/yr, seaward +), 95 % CI, net movement, the radar
+    `trend` and the reported `change` (radar trend confirmed by the optical dry-season shoreline, else
+    "unconfirmed"). Filter with ?change= or ?trend=."""
+    fc = _shoreline("transects.geojson")
+    feats = fc["features"]
+    if change:
+        feats = [f for f in feats if f["properties"].get("change") == change]
+    if trend:
+        feats = [f for f in feats if f["properties"]["trend"] == trend]
+    return {**fc, "features": feats}
+
+
+@app.get("/api/shoreline/baseline")
+def shoreline_baseline():
+    return _shoreline("baseline.geojson")
+
+
+@app.get("/api/shoreline/lines")
+def shoreline_lines(month: Optional[str] = None, kind: Optional[Literal["month", "quarter"]] = None):
+    """Extracted shorelines: one MultiLineString per month (kind=month; move with the tide) and per
+    quarter (kind=quarter; tide-averaged, the lines the rates come from). ?month=YYYY-MM picks one month."""
+    fc = _shoreline("shorelines.geojson")
+    feats = fc["features"]
+    if kind:
+        feats = [f for f in feats if f["properties"].get("kind", "month") == kind]
+    if month:
+        if not _MONTH_RE.match(month):
+            raise HTTPException(400, "month must be YYYY-MM")
+        feats = [f for f in feats if f["properties"].get("month") == month]
+        if not feats:
+            raise HTTPException(404, f"no shoreline for {month}")
+    return {**fc, "features": feats}
+
+
+@app.get("/api/shoreline/transects/{tid}")
+def shoreline_transect(tid: str):
+    """One transect's positions (m from the baseline, seaward +; null = none): monthly (tide-affected)
+    and quarterly (tide-averaged, the rate is fitted to these)."""
+    pos = _shoreline("positions.json")
+    if tid not in pos["positions"]:
+        raise HTTPException(404, f"unknown transect {tid}")
+    feat = next(f for f in _shoreline("transects.geojson")["features"] if f["id"] == tid)
+    return {**feat["properties"], "geometry": feat["geometry"],
+            "series": [{"month": m, "pos": p} for m, p in zip(pos["months"], pos["positions"][tid])],
+            "quarterly": [{"quarter": q, "pos": p} for q, p in zip(pos.get("quarters", []), pos.get("quarter_positions", {}).get(tid, []))]}
 
 
 app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
