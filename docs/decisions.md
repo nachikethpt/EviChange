@@ -290,7 +290,10 @@ AOI, yearly to 2023) is a pre-period reference only. At 10 m, single houses are 
   both months count, and `compared_ha` always goes with the gained / lost / changed areas. A month with
   no data gives `null`, never a guess.
 - *Per region:* for each change region and month, the class (null under 50 % Dynamic World cover),
-  the water share and the share seen clear.
+  the water share and the share seen clear. These are computed at 20 m, in requests of at most 1,500 ha
+  of regions, each with a 10-minute deadline and retries. The first try, at 10 m with no deadline,
+  stalled on one request for over 30 minutes. The run is saved after every month and resumes from
+  there. The QN run (504 regions × 24 months) took 83 minutes.
 - *API:*
   - `GET /api/monthly`: the summary.
   - `GET /api/monthly/layer?month=YYYY-MM&layer=class|water|clear|water_change|class_change&vs=base|prev`:
