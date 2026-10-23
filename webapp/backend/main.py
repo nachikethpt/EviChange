@@ -316,21 +316,12 @@ def vlm_check_region(req: VLMCheckRequest):
         raise HTTPException(503, str(exc))
     except Exception as exc:
         raise HTTPException(502, f"Earth Engine: {exc}")
-    prompt = vlm_check.build_prompt(params["before_window"], params["after_window"], chip_set)
-    images = [chips[k] for k in vlm_check.chip_keys(chip_set)]
     try:
-        out = vlm.generate(prompt, images, replay_key=f"{version}:{req.region_id}")
+        result, record = vlm_check.check(vlm, params, feature["properties"], bbox, chip_set, chips, req.run_id, t0)
     except VLMUnavailable as exc:
         raise HTTPException(503, str(exc))
-    answer = vlm_check.parse_answer(out["text"])
-    result = {"region_id": req.region_id, "status": "checked", **answer,
-              **vlm_check.compare(answer, feature["properties"]),
-              "model": out["model"], "prompt_version": version, "chips": chip_set, "raw": out["text"][:1000],
-              "before_window": params["before_window"], "after_window": params["after_window"]}
     if vlm.mode != "replay":   # replayed answers are already recorded somewhere
-        vlm_check.log_check({"key": key, "time": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "run_id": req.run_id,
-                             "bbox": [round(v, 6) for v in bbox], "seconds": round(time.time() - t0, 1),
-                             **result, "raw": out["text"]})   # full text in the log, for replays
+        vlm_check.log_check(record)
     _vlm_checks[key] = result
     return result
 

@@ -120,6 +120,26 @@ def compare(answer: dict, region: dict) -> dict:
     return {"detector_types": detector, "agreement": agreement}
 
 
+def check(vlm, params: dict, region: dict, bbox: tuple[float, float, float, float], chip_set: str,
+          chips: dict[str, bytes], run_id: str | None = None, t0: float | None = None) -> tuple[dict, dict]:
+    """Ask the model about one region whose chips are already rendered: (result, log record).
+    The app endpoint and scripts/vlm_batch.py both use this, so their answers are logged alike.
+    `t0` (when the chips started rendering) makes `seconds` include the rendering."""
+    import time
+    t0 = t0 if t0 is not None else time.time()
+    version = prompt_version(chip_set)
+    prompt = build_prompt(params["before_window"], params["after_window"], chip_set)
+    out = vlm.generate(prompt, [chips[k] for k in chip_keys(chip_set)], replay_key=f"{version}:{region['id']}")
+    answer = parse_answer(out["text"])
+    result = {"region_id": region["id"], "status": "checked", **answer, **compare(answer, region),
+              "model": out["model"], "prompt_version": version, "chips": chip_set, "raw": out["text"][:1000],
+              "before_window": params["before_window"], "after_window": params["after_window"]}
+    record = {"key": check_key(params, region["id"], version, out["model"]), "time": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+              "run_id": run_id, "bbox": [round(v, 6) for v in bbox], "seconds": round(time.time() - t0, 1),
+              **result, "raw": out["text"]}   # full text in the log, for replays
+    return result, record
+
+
 # ---------- answer log ----------
 def check_key(params: dict, region_id: str, version: str, model: str) -> str:
     """Identity of one check: same analysis, region, prompt version (incl. image set) and model."""
