@@ -8,6 +8,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import vlm_batch as vb  # noqa: E402
 from agents import vlm_check  # noqa: E402
+from agents.schema import region_change_types  # noqa: E402
 
 PARAMS_META = {"aoi": {"type": "Polygon", "coordinates": [[[107.2, 20.9], [107.5, 20.9], [107.5, 21.2], [107.2, 21.2], [107.2, 20.9]]]},
                "before_window": ["2018-11-01", "2019-03-31"], "after_window": ["2022-11-01", "2023-03-31"],
@@ -100,3 +101,63 @@ def test_committed_sample_is_outside_the_sites():
     by_id = {f["properties"]["id"]: f for f in fc["features"]}
     assert len(sample["ids"]) == vb.SAMPLE_SIZE == len(set(sample["ids"]))
     assert not any(vlm_check.touches_labelled_site(vb.bbox(by_id[i]["geometry"])) for i in sample["ids"])
+
+
+def test_run_retries_a_dropped_connection(tmp_path, monkeypatch, no_sites):
+    from agents.vlm_client import VLMUnavailable
+    monkeypatch.setattr(vb, "CHIP_DIR", tmp_path / "chips")
+    render = lambda aoi, bw, aw, cloud, box, kinds: {f"{w}_{k}": b"png" for k in kinds for w in ("before", "after")}
+    fc = {"metadata": PARAMS_META, "features": [region("r1", 107.25)]}
+
+    class Flaky(FakeVLM):
+        def __init__(self, drops):
+            super().__init__()
+            self.drops = drops
+
+        def generate(self, prompt, images, replay_key=None):
+            if self.drops:
+                self.drops -= 1
+                raise VLMUnavailable("connection reset")
+            return super().generate(prompt, images, replay_key)
+
+    waits = []
+    out = vb.run(Flaky(drops=2), fc, ["r1"], ["rgb"], tmp_path / "log.jsonl", render, lambda *_: None, waits.append)
+    assert out == {"done": 1, "skipped": 0, "failed": 0} and len(waits) == 2
+    with pytest.raises(SystemExit, match="reconnect and rerun"):
+        vb.run(Flaky(drops=vb.SERVER_TRIES), fc, ["r1"], ["rgb_swir"], tmp_path / "log.jsonl", render,
+               lambda *_: None, lambda s: None)
+
+
+def test_control_boxes_keep_away_from_detections_and_sites(no_sites):
+    feats = [region(f"r{i}", 107.25 + i * 0.01) for i in range(5)]
+    aoi_box = (107.22, 20.98, 107.40, 21.10)
+    boxes = vb.control_candidates(feats, aoi_box, [(0.002, 0.002)], n=15, seed=3)
+    assert len(boxes) == 15 and boxes == vb.control_candidates(feats, aoi_box, [(0.002, 0.002)], n=15, seed=3)
+    near = [vb._expand(vb.bbox(f["geometry"]), vb.NEAR_M) for f in feats]
+    for b in boxes:
+        assert aoi_box[0] <= b[0] and b[2] <= aoi_box[2] and aoi_box[1] <= b[1] and b[3] <= aoi_box[3]
+        assert not any(vb._overlaps(b, r) for r in near) and not vlm_check.touches_labelled_site(b)
+
+
+def test_draw_controls_keeps_land_only(no_sites):
+    fc = {"metadata": PARAMS_META, "features": [region("r1", 107.25)]}
+    calls = []
+
+    def fake_water(aoi, window, boxes):
+        calls.append(window)
+        return [0.9 if i % 2 else 0.1 for i in range(len(boxes))]             # every other box is water
+
+    feats = vb.draw_controls(fc, ["r1"], n=5, water=fake_water)
+    assert [f["properties"]["id"] for f in feats] == ["c1", "c2", "c3", "c4", "c5"] and len(calls) == 2
+    p = feats[0]["properties"]
+    assert p["control"] and region_change_types(p) == []                    # the detector saw nothing here
+
+
+def test_committed_controls_are_clear_of_detections():
+    fc = json.loads(vb.REGIONS.read_text(encoding="utf-8"))
+    controls = json.loads(vb.CONTROLS.read_text(encoding="utf-8"))["features"]
+    near = [vb._expand(vb.bbox(f["geometry"]), vb.NEAR_M) for f in fc["features"]]
+    assert len(controls) == vb.N_CONTROLS
+    for c in controls:
+        box = vb.bbox(c["geometry"])
+        assert not any(vb._overlaps(box, r) for r in near) and not vlm_check.touches_labelled_site(box)

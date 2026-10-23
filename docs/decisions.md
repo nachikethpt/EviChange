@@ -480,10 +480,18 @@ use. This is decided once, on development regions, before any test-set answer ex
 - 30 regions change Dynamic World class and 30 don't, each half spread over the detector's change
   types, so rare types are in.
 - Every model and image set gets the same regions and the same chip PNGs, cached on first render.
-- 6 conditions (2 models × 3 image sets): 360 checks. On an L4 that is roughly 2–3 GPU hours per model.
+- **Negative controls** (added 2026-10-23, before any Qwen3 answer):
+  - 20 boxes sized like the sample regions, inside the AOI, mostly not water in either window.
+  - No detected region within 200 m and no labelled site, so the detector saw nothing there
+    (`data/quangninh/vlm_dev_controls.json`).
+  - Without them, a model that always says "change" would look perfect on detected regions.
+- 6 conditions (2 models × 3 image sets) on 80 boxes: 480 checks. At ~4 s per answer on an L4,
+  that's under an hour of GPU per model.
 
 **Criteria, in this order.**
 1. *Readable answers:* parse failures above 2 % rule a condition out.
+   *Can it say no:* a condition that answers "change" on at least 90 % of the controls is ruled out too.
+   It doesn't tell change from no change, whatever it says on the detected regions.
 2. *Hand decisions on disagreements:* wherever the two models give different verdicts under the same
    image set, P2 looks at the chips and decides change / no change / unsure, blind to which model said
    what (`data/quangninh/vlm_dev_adjudication.json`). The share of these each condition gets right is
@@ -501,6 +509,14 @@ picked within the chosen model by the same criteria, with `rgb_swir` (v1) as the
 **Recorded.** `python scripts/vlm_compare.py --dev --out docs/vlm_compare_d15.md` writes every table.
 The choice and its reason are added here. Phase 4 then freezes the prompts on the chosen model and
 image set, and every reported run uses them.
+
+**First result: Qwen2.5-VL-7B with `vlmcheck_v1` (2026-10-23).** It answered "change" on 179 of 180
+detected-region checks and on **all 60** control checks, under every image set, mostly with the same
+sentence ("the vegetation appears greener in the AFTER image"). That includes boxes that are water
+in both windows and control chips that are visibly the same or browner. As prompted, it does not
+check anything. If Qwen3 does no better, the prompt is the problem, and it gets reworked on these
+development boxes before the freeze: describe both images before the verdict, no change as the
+default, perhaps more context than the 600 m chip.
 
 **Limits.**
 - 60 development regions, and the hand decisions come from the same person who builds the system.

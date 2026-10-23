@@ -41,6 +41,7 @@ REGIONS = ROOT / "data" / "quangninh" / "change_regions_quangninh_v3.json"
 SAMPLE = ROOT / "data" / "quangninh" / "vlm_dev_sample.json"
 CHIP_DIR = ROOT / "data" / "vlm_chips"
 SAMPLE_SIZE, SEED = 60, 15
+SERVER_TRIES, RETRY_WAIT_S = 4, 15     # a dropped tunnel connection is retried before giving up
 
 
 # ---------- regions ----------
@@ -96,6 +97,79 @@ def draw_sample(features: list[dict], n: int = SAMPLE_SIZE, seed: int = SEED) ->
     return picked
 
 
+# ---------- negative controls ----------
+CONTROLS = ROOT / "data" / "quangninh" / "vlm_dev_controls.json"
+N_CONTROLS, NEAR_M, MAX_WATER = 20, 200, 0.5
+M_PER_DEG = 111_320
+
+
+def _expand(box: tuple, metres: float) -> tuple:
+    import math
+    dx = metres / (M_PER_DEG * math.cos(math.radians((box[1] + box[3]) / 2)))
+    dy = metres / M_PER_DEG
+    return box[0] - dx, box[1] - dy, box[2] + dx, box[3] + dy
+
+
+def _overlaps(a: tuple, b: tuple) -> bool:
+    return a[0] <= b[2] and a[2] >= b[0] and a[1] <= b[3] and a[3] >= b[1]
+
+
+def control_candidates(features: list[dict], aoi_box: tuple, sizes: list[tuple[float, float]], n: int, seed: int = SEED) -> list[tuple]:
+    """Up to n boxes inside the AOI with no detected region within NEAR_M of them and no labelled site:
+    the detector saw no change there. Each box copies the width / height of a sampled region, so controls
+    look like the detections in size. Deterministic for a seed."""
+    rng = random.Random(seed)
+    region_boxes = [_expand(bbox(f["geometry"]), NEAR_M) for f in features]
+    out, tries = [], 0
+    while len(out) < n and tries < 200 * n:
+        tries += 1
+        w, h = sizes[rng.randrange(len(sizes))]
+        x = rng.uniform(aoi_box[0], aoi_box[2] - w)
+        y = rng.uniform(aoi_box[1], aoi_box[3] - h)
+        box = (x, y, x + w, y + h)
+        if any(_overlaps(box, r) for r in region_boxes) or vlm_check.touches_labelled_site(box):
+            continue
+        if any(_overlaps(box, o) for o in out):
+            continue
+        out.append(box)
+    return out
+
+
+def water_share(aoi: dict, window: list[str], boxes: list[tuple]) -> list[float]:
+    """Dynamic World water probability over each box in one window (one Earth Engine request)."""
+    from agents.ee_engine import _ee, _inclusive_end
+    from agents.landcover import DW_COLLECTION
+    ee = _ee()
+    img = (ee.ImageCollection(DW_COLLECTION).filterBounds(ee.Geometry(aoi))
+           .filterDate(window[0], _inclusive_end(window)).select("water").mean())
+    col = ee.FeatureCollection([ee.Feature(ee.Geometry.Rectangle(list(b)), {"i": i}) for i, b in enumerate(boxes)])
+    feats = img.reduceRegions(collection=col, reducer=ee.Reducer.mean(), scale=10).getInfo()["features"]
+    by_i = {f["properties"]["i"]: f["properties"].get("mean") for f in feats}
+    return [by_i.get(i) if by_i.get(i) is not None else 1.0 for i in range(len(boxes))]
+
+
+def control_feature(cid: str, box: tuple) -> dict:
+    """A box as a pseudo-region: index deltas 0 (the detector saw nothing), so vlm_check works unchanged."""
+    w, s, e, n = box
+    ring = [[w, s], [e, s], [e, n], [w, n], [w, s]]
+    return {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [ring]},
+            "properties": {"id": cid, "control": True, "area_ha": 0.0, "mean_conf": 0.0, "dNDVI": 0.0, "dNDBI": 0.0,
+                           "dMNDWI": 0.0, "location": "centre"}}
+
+
+def draw_controls(fc: dict, sample_ids: list[str], n: int = N_CONTROLS, seed: int = SEED, water=water_share) -> list[dict]:
+    """n land control boxes (mostly not water in both windows, Dynamic World), sized like the sample."""
+    params = analysis_params(fc)
+    by_id = {f["properties"]["id"]: f for f in fc["features"]}
+    sizes = [(b[2] - b[0], b[3] - b[1]) for b in (bbox(by_id[i]["geometry"]) for i in sample_ids)]
+    pts = params["aoi"]["coordinates"][0]
+    aoi_box = (min(p[0] for p in pts), min(p[1] for p in pts), max(p[0] for p in pts), max(p[1] for p in pts))
+    cands = control_candidates(fc["features"], aoi_box, sizes, 6 * n, seed)
+    before, after = water(params["aoi"], params["before_window"], cands), water(params["aoi"], params["after_window"], cands)
+    land = [b for b, wb, wa in zip(cands, before, after) if wb < MAX_WATER and wa < MAX_WATER]
+    return [control_feature(f"c{i}", b) for i, b in enumerate(land[:n], 1)]
+
+
 # ---------- chips ----------
 def chip_dir(params: dict, box: tuple) -> Path:
     key = hashlib.sha256(json.dumps([params, [round(v, 6) for v in box]], sort_keys=True).encode()).hexdigest()[:16]
@@ -119,7 +193,8 @@ def chips_for(params: dict, box: tuple, kinds: tuple[str, ...], render=None) -> 
 
 
 # ---------- run ----------
-def run(vlm, fc: dict, ids: list[str], chip_sets: list[str], log_path: Path | None = None, render=None, log=print) -> dict:
+def run(vlm, fc: dict, ids: list[str], chip_sets: list[str], log_path: Path | None = None, render=None, log=print,
+        sleep=time.sleep) -> dict:
     """Check every sampled region under every chip set with the server's current model; skip checks
     already logged. Returns counts {'done', 'skipped', 'failed'}."""
     status = vlm.status()
@@ -144,16 +219,24 @@ def run(vlm, fc: dict, ids: list[str], chip_sets: list[str], log_path: Path | No
             if vlm_check.check_key(params, rid, version, model) in logged:
                 counts["skipped"] += 1
                 continue
-            t0 = time.time()
-            try:
-                chips = chips_for(params, box, vlm_check.chip_kinds(chip_set), render)
-                _, record = vlm_check.check(vlm, params, feature["properties"], box, chip_set, chips, t0=t0)
-            except Exception as exc:
-                from agents.vlm_client import VLMUnavailable
-                if isinstance(exc, VLMUnavailable):
-                    raise SystemExit(f"server stopped answering ({exc}); reconnect and rerun to resume")
-                counts["failed"] += 1
-                log(f"[{n}/{total}] {rid} {chip_set}: FAILED {str(exc)[:150]}")
+            from agents.vlm_client import VLMUnavailable
+            for attempt in range(1, SERVER_TRIES + 1):
+                t0 = time.time()
+                try:
+                    chips = chips_for(params, box, vlm_check.chip_kinds(chip_set), render)
+                    _, record = vlm_check.check(vlm, params, feature["properties"], box, chip_set, chips, t0=t0)
+                    break
+                except VLMUnavailable as exc:      # the tunnel drops single connections now and then
+                    if attempt == SERVER_TRIES:
+                        raise SystemExit(f"server stopped answering ({exc}); reconnect and rerun to resume")
+                    log(f"[{n}/{total}] {rid} {chip_set}: server did not answer, retrying in {RETRY_WAIT_S * attempt} s")
+                    sleep(RETRY_WAIT_S * attempt)
+                except Exception as exc:
+                    record = None
+                    counts["failed"] += 1
+                    log(f"[{n}/{total}] {rid} {chip_set}: FAILED {str(exc)[:150]}")
+                    break
+            if record is None:
                 continue
             vlm_check.log_check(record, log_path)
             counts["done"] += 1
@@ -161,15 +244,27 @@ def run(vlm, fc: dict, ids: list[str], chip_sets: list[str], log_path: Path | No
     return counts
 
 
+def with_controls(fc: dict) -> tuple[dict, list[str]]:
+    """The regions file with the control boxes added as features, and the control ids ([] before drawn)."""
+    if not CONTROLS.exists():
+        return fc, []
+    controls = json.loads(CONTROLS.read_text(encoding="utf-8"))["features"]
+    return {**fc, "features": fc["features"] + controls}, [f["properties"]["id"] for f in controls]
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--draw", action="store_true", help=f"draw the sample into {SAMPLE.name} (refuses to redraw)")
+    ap.add_argument("--draw-controls", action="store_true",
+                    help=f"draw the negative-control boxes into {CONTROLS.name} (Earth Engine; refuses to redraw)")
     ap.add_argument("--chips", default=",".join(vlm_check.CHIP_SETS), help="image sets, comma-separated")
     ap.add_argument("--limit", type=int, help="only the first N sampled regions (a quick test)")
+    ap.add_argument("--controls-only", action="store_true", help="check only the control boxes")
     ap.add_argument("--render-only", action="store_true",
                     help="only render and cache the chips (Earth Engine, no model server): do this before paying for GPU time")
     args = ap.parse_args(argv)
     fc = json.loads(REGIONS.read_text(encoding="utf-8"))
+    sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
     if args.draw:
         if SAMPLE.exists():
             raise SystemExit(f"{SAMPLE} exists: the sample is fixed once drawn, so every model sees the same regions")
@@ -182,11 +277,22 @@ def main(argv: list[str] | None = None) -> None:
         print(f"{len(ids)} regions -> {SAMPLE}")
         return
     sample = json.loads(SAMPLE.read_text(encoding="utf-8"))
+    if args.draw_controls:
+        if CONTROLS.exists():
+            raise SystemExit(f"{CONTROLS} exists: the controls are fixed once drawn")
+        feats = draw_controls(fc, sample["ids"])
+        CONTROLS.write_text(json.dumps({"type": "FeatureCollection", "metadata": {
+            "regions_file": REGIONS.relative_to(ROOT).as_posix(), "drawn": date.today().isoformat(), "seed": SEED,
+            "rule": f"boxes sized like the sample regions, inside the AOI, no detected region within {NEAR_M} m, "
+                    f"no labelled site, Dynamic World water < {MAX_WATER} in both windows (scripts/vlm_batch.py draw_controls)"},
+            "features": feats}, indent=1), encoding="utf-8")
+        print(f"{len(feats)} control boxes -> {CONTROLS}")
+        return
+    fc, control_ids = with_controls(fc)
+    ids = control_ids if args.controls_only else sample["ids"][:args.limit] + control_ids
     if args.render_only:
-        sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
         params, by_id = analysis_params(fc), {f["properties"]["id"]: f for f in fc["features"]}
         all_kinds = tuple(dict.fromkeys(k for s in vlm_check.CHIP_SETS.values() for k in s))
-        ids = sample["ids"][:args.limit]
         for n, rid in enumerate(ids, 1):
             t0 = time.time()
             try:
@@ -199,8 +305,7 @@ def main(argv: list[str] | None = None) -> None:
     for c in chip_sets:
         vlm_check.chip_kinds(c)
     from agents.vlm_client import VLMClient
-    sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
-    counts = run(VLMClient(), fc, sample["ids"][:args.limit], chip_sets)
+    counts = run(VLMClient(), fc, ids, chip_sets)
     print(f"done {counts['done']}, already logged {counts['skipped']}, failed {counts['failed']}")
 
 
