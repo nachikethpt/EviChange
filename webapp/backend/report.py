@@ -8,6 +8,10 @@ RIGHT NOW: no AI model is called.
 Phase 3 replaces ungated_claims() / gated_claims() with real Qwen2.5-VL output
 (through agents' VLMClient). Keep the returned shape identical.
 
+Ungated arms with a real model (agents/ungated.py, D16) pass their output in as `ungated`:
+free text plus the claims the extractor split it into. "ungated_gpt" has no demo stand-in,
+so without that output its report says it was not run.
+
 Claims are checked by agents/verifier.py and must match agents/schema.py.
 """
 from agents.schema import CHANGE_TYPES, REASONS, T_IDX, region_change_types
@@ -88,9 +92,17 @@ def gated_claims(ev):
     return _number(claims), abstain
 
 
-def build_report(ev, condition):
-    raw, abstain = None, []
-    if condition == "template":
+def build_report(ev, condition, ungated=None):
+    """`ungated`: run_ungated() output for the "ungated" / "ungated_gpt" arms, else None."""
+    raw, abstain, model, extra = None, [], "demo (no AI yet)", {}
+    if condition in ("ungated", "ungated_gpt") and ungated is not None:
+        raw, claims, model = ungated["raw"], [dict(c) for c in ungated["claims"]], ungated["model"]
+        extra = {k: ungated[k] for k in ("parse_ok", "dropped", "extractor_model", "prompt_version", "extract_version")}
+    elif condition == "ungated_gpt":
+        return {"condition": condition, "status": "not_run", "detail": "No ungated GPT output for this selection.",
+                "model": None, "evidence": ev, "raw_output": None, "claims": [], "abstain": [],
+                "counts": {"supported": 0, "unsupported": 0, "uncertain": 0}}
+    elif condition == "template":
         claims = template_claims(ev)
     elif condition == "ungated":
         raw, claims = ungated_claims(ev)
@@ -103,6 +115,6 @@ def build_report(ev, condition):
         c["verdict_note"] = REASONS[c["verdict_reason"]]
     counts = {v: sum(c["verdict"] == v for c in claims) for v in ("supported", "unsupported", "uncertain")}
     return {
-        "condition": condition, "model": "demo (no AI yet)", "evidence": ev,
-        "raw_output": raw, "claims": claims, "abstain": abstain, "counts": counts,
+        "condition": condition, "status": "ok", "model": model, "evidence": ev,
+        "raw_output": raw, "claims": claims, "abstain": abstain, "counts": counts, **extra,
     }

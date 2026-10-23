@@ -424,6 +424,8 @@ map.on('move', syncSwipe);
 window.addEventListener('resize', () => { state.swipe.map?.resize(); if (state.swipe.on) setSwipeX(state.swipe.x); });
 
 // ---------- 8. AI report panel ----------
+const COMPARE_CONDITIONS = ['template', 'ungated', 'gated', 'ungated_gpt'];   // ungated_gpt: D16 secondary comparison
+const condLabel = c => ({ ungated_gpt: 'Ungated GPT' })[c] ?? c[0].toUpperCase() + c.slice(1);
 let reportCache = {};
 async function fetchReport(condition) {
   const ids = [...state.selected].sort();
@@ -443,7 +445,7 @@ async function generateReport() {
   out.innerHTML = '<p class="muted">Generating…</p>';
   try {
     if (state.condition === 'compare') {
-      const reps = await Promise.all(['template', 'ungated', 'gated'].map(fetchReport));
+      const reps = await Promise.all(COMPARE_CONDITIONS.map(fetchReport));
       out.innerHTML = compareHtml(reps);
     } else {
       out.innerHTML = reportHtml(await fetchReport(state.condition));
@@ -454,6 +456,7 @@ async function generateReport() {
 function gated(c) { return c.stated_conf !== null && c.stated_conf !== undefined && c.stated_conf < state.threshold; }
 
 function reportHtml(r) {
+  if (r.status === 'not_run') return `<p class="muted">Not run: ${esc(r.detail)}</p>`;
   const shown = r.claims.filter(c => !gated(c));
   const withheld = r.claims.length - shown.length;
   const cnt = v => shown.filter(c => c.verdict === v).length;
@@ -463,7 +466,7 @@ function reportHtml(r) {
       <span class="chip uncertain">${cnt('uncertain')} uncertain</span>
       ${withheld ? `<span class="chip">${withheld} withheld by threshold</span>` : ''}
     </div>`;
-  if (r.condition === 'ungated') h += '<p class="muted">Ungated claims have no confidence, so the threshold cannot filter them.</p>';
+  if (r.condition.startsWith('ungated')) h += '<p class="muted">Ungated claims have no confidence, so the threshold cannot filter them.</p>';
   h += '<div class="section"><div class="pane-subtitle">Claims</div>' + r.claims.map(c => `
     <div class="claim ${c.verdict} ${gated(c) ? 'hidden-by-gate' : ''}">
       <div>${esc(c.text)}</div>
@@ -477,20 +480,22 @@ function reportHtml(r) {
     r.abstain.map(a => `<div class="abstain"><b>${esc(a.topic)}</b><br><span class="muted">${esc(a.reason)}</span></div>`).join('') + '</div>';
   if (r.raw_output) h += `<details><summary>Raw model text</summary><p>${esc(r.raw_output)}</p></details>`;
   h += `<details><summary>Evidence sent to the model</summary><pre>${esc(JSON.stringify(r.evidence, null, 2))}</pre></details>`;
-  h += `<p class="muted">Model: ${esc(r.model)}</p>`;
+  h += `<p class="muted">Model: ${esc(r.model)}${r.extractor_model ? ` · claims split by ${esc(r.extractor_model)}` : ''}</p>`;
   return h;
 }
 
 function compareHtml(reps) {
   const row = r => {
+    if (r.status === 'not_run') return `<tr class="muted" title="${esc(r.detail)}"><td>${condLabel(r.condition)}</td><td colspan="5">not run</td></tr>`;
     const shown = r.claims.filter(c => !gated(c));
     const n = v => shown.filter(c => c.verdict === v).length;
-    return `<tr><td>${r.condition}</td><td>${shown.length}</td><td>${n('supported')}</td><td>${n('unsupported')}</td><td>${n('uncertain')}</td><td>${r.abstain.length}</td></tr>`;
+    return `<tr><td>${condLabel(r.condition)}</td><td>${shown.length}</td><td>${n('supported')}</td><td>${n('unsupported')}</td><td>${n('uncertain')}</td><td>${r.abstain.length}</td></tr>`;
   };
   return `<table class="cmp"><thead><tr><th>Condition</th><th>Claims</th><th>✔</th><th>✘</th><th>?</th><th>Abstain</th></tr></thead>
     <tbody>${reps.map(row).join('')}</tbody></table>
     <p class="muted">✔ supported · ✘ unsupported (hallucination) · ? uncertain. Counts use the current threshold.
-    The research question: does <b>gated</b> keep ✘ near zero while still making useful claims?</p>`;
+    The research question: does <b>gated</b> keep ✘ near zero while still making useful claims?</p>
+    ${reps.filter(r => r.status === 'not_run').map(r => `<p class="muted">${condLabel(r.condition)} not run: ${esc(r.detail)}</p>`).join('')}`;
 }
 
 // ---------- 9. Add data ----------
@@ -606,8 +611,8 @@ function renderPanel() {
         <div class="chips">${ids.length ? ids.map(i => `<span class="chip">${esc(i)}</span>`).join('') : '<span class="muted">none</span>'}</div>
         <p class="muted">Click a coloured region on the map (Shift+click to add more) or use ✎ Draw area.</p>
         <button class="btn" id="rAll">Select all</button> <button class="btn" id="rClear">Clear</button></div>
-      <div class="section seg" id="rCond">${['template', 'ungated', 'gated', 'compare'].map(c =>
-        `<button data-c="${c}" class="${state.condition === c ? 'on' : ''}">${c[0].toUpperCase() + c.slice(1)}</button>`).join('')}</div>
+      <div class="section seg" id="rCond">${[...COMPARE_CONDITIONS, 'compare'].map(c =>
+        `<button data-c="${c}" class="${state.condition === c ? 'on' : ''}">${condLabel(c)}</button>`).join('')}</div>
       <div class="section"><label>Confidence threshold: <b id="thrVal">${state.threshold.toFixed(2)}</b>
         <input type="range" id="thr" min="0" max="1" step="0.05" value="${state.threshold}" style="width:100%"></label>
         <span class="muted">Claims below this confidence are withheld (abstain).</span></div>
@@ -621,7 +626,7 @@ function renderPanel() {
 let thrTimer = null;
 function rerenderReportOnly() { clearTimeout(thrTimer); thrTimer = setTimeout(async () => {
   const out = $('#reportOut'); if (!out || !state.selected.size) return;
-  if (state.condition === 'compare') out.innerHTML = compareHtml(await Promise.all(['template', 'ungated', 'gated'].map(fetchReport)));
+  if (state.condition === 'compare') out.innerHTML = compareHtml(await Promise.all(COMPARE_CONDITIONS.map(fetchReport)));
   else out.innerHTML = reportHtml(await fetchReport(state.condition));
 }, 60); }
 
