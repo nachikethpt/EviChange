@@ -24,6 +24,7 @@ Run it from the **repo root** (it imports the shared `agents/schema.py` and
 | ⇆ Swipe | Before/after slider (e.g. Sentinel-2 2018 vs 2022) |
 | ◐ Indices | NDVI / NDBI / MNDWI before, after or change, as Earth Engine tile layers over the regions' own AOI and dates (needs live data + an Earth Engine login) |
 | ⚙ Tools | Select by attributes (shows the SQL) or location; buffer, clip, intersect, dissolve (run in a background worker; outputs are new layers) |
+| Shoreline API (Phase 11) | `/api/shoreline` (summary), `/api/shoreline/transects?change=` (rates, confirmed change), `/api/shoreline/lines?kind=quarter|month`, `/api/shoreline/transects/{id}`; data from `scripts/make_shoreline.py`. The map / chart UI is P3's |
 | 🔎 Find changes ⇄ selection | Start a search with *select*, *add* or *remove* to change the map selection (the one ⚙ Tools, charts, the table and the AI report use); every search shows its SQL `WHERE` clause; ☑ Select these / ＋ Add to selection on the results; a **Selection** scope lists and checks whatever is selected; ⚙ Tools → 🔎 Explore in Find changes |
 | 📊 Charts | Bar chart (count or sum by a field) or histogram; click a bar to select its features; table view |
 | 🖨 Export | Layer → GeoJSON / CSV / KML (all or selected); A4 print layout with legend, north arrow and scale bar → PNG or PDF |
