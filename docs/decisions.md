@@ -469,6 +469,45 @@ the labelled data show a reason to change them, and any change is recorded here.
 **Evaluation.** Break-month agreement with the Phase 14d labels (share within ± 1 month and within
 the reported window), and the share of detector regions CCDC calls seasonal rather than lasting.
 
+## D15 — Choosing the Geo-VLM model and image set before the freeze (2026-10-23, proposed)
+
+**Question.** Which model (Qwen2.5-VL-7B-Instruct, the default, or Qwen3-VL-8B-Instruct) and which
+image set (`rgb`, `rgb_swir`, `rgb_swir_cir`, see `agents/vlm_check.py`) the frozen Phase 4 prompts
+use. This is decided once, on development regions, before any test-set answer exists.
+
+**Sample.** 60 detected QN regions **outside** the 30 labelled sites, drawn once
+(`scripts/vlm_batch.py --draw`, seed 15) and committed (`data/quangninh/vlm_dev_sample.json`).
+- 30 regions change Dynamic World class and 30 don't, each half spread over the detector's change
+  types, so rare types are in.
+- Every model and image set gets the same regions and the same chip PNGs, cached on first render.
+- 6 conditions (2 models × 3 image sets): 360 checks. On an L4 that is roughly 2–3 GPU hours per model.
+
+**Criteria, in this order.**
+1. *Readable answers:* parse failures above 2 % rule a condition out.
+2. *Hand decisions on disagreements:* wherever the two models give different verdicts under the same
+   image set, P2 looks at the chips and decides change / no change / unsure, blind to which model said
+   what (`data/quangninh/vlm_dev_adjudication.json`). The share of these each condition gets right is
+   the main criterion: it is the only real reference outside the test set.
+3. *Dynamic World class change,* as an independent but weak reference. A class can stay the same
+   while the land changes (thinning, new houses in a built area), so this only breaks ties.
+4. *"Unsure" rate:* lower is better, but only as long as 2 and 3 don't get worse.
+5. *Same verdict across image sets:* a model whose verdict flips with the image set is fragile.
+6. *Seconds per answer:* only if everything above is equal.
+
+**Defaults.** If the evidence doesn't clearly favour Qwen3 (criterion 2 by at least 10 points, or
+1–3 together), Qwen2.5-VL-7B stays: it is the model the whole plan was built on. The image set is
+picked within the chosen model by the same criteria, with `rgb_swir` (v1) as the default.
+
+**Recorded.** `python scripts/vlm_compare.py --dev --out docs/vlm_compare_d15.md` writes every table.
+The choice and its reason are added here. Phase 4 then freezes the prompts on the chosen model and
+image set, and every reported run uses them.
+
+**Limits.**
+- 60 development regions, and the hand decisions come from the same person who builds the system.
+  They are made blind to the model, never on test sites.
+- A model that is better on these regions may still not be better on the 30 test sites. The freeze
+  makes sure that isn't tuned for.
+
 ## D16 — Ungated GPT as a secondary comparison arm (2026-10-23, proposed)
 
 **Why.** The obvious question about the Geo-VLM is "why not just ask GPT?". The three conditions
