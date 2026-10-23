@@ -2,8 +2,8 @@
 
 Team of three (again since 2026-10-19; one member worked solo 2026-10-06 → 10-19 in a private repo,
 synced to this one): **P1** Earth Engine + labels, **P2** VLM + Planet, **P3** app + verifier. The
-Owner column says who does each phase (updated 2026-10-19). P1 did Phases 2 and 3 and now does the Phase 14
-labelling (blind to the Dynamic World and shoreline outputs P2 and P3 build). The critical path
+Owner column says who does each phase (updated 2026-10-23). P1 did Phases 2 and 3; the Phase 14 labelling
+moved to P2 on 2026-10-23, with P3 as second labeller (blindness: see Phase 14). The critical path
 (9 → 10 → freeze → 4 / 5) is with P2; P3 has work that blocks no one (5 page, 7, 7c, 10b, 12, UI). Before 2026-10-05, solo from the start of
 week 4 (≈125 h).
 Defaults: this repo is canonical; Qwen2.5-VL-7B-Instruct for every reported run.
@@ -45,7 +45,7 @@ Study period for the monthly work: the last 24 months, **Oct 2024 – Sep 2026**
 | 11 | **Shoreline change (D11).** Monthly land / water line from Sentinel-1 (VV, Otsu threshold) with Sentinel-2 MNDWI where clear; baseline + transects every 100 m; per transect: position each month, net movement and linear rate (m/yr) over the 24 months; tide caveat on every number (D11). App: shoreline per month on the map, transect chart, "advancing / retreating" colouring | 10 | 14 | P2 (+ P3 map, chart) | |
 | 12 | **Buildings near the shoreline (D11).** Built area inside coastal strips (0–200 m, 200–500 m from the Oct 2024 shoreline) per month from Dynamic World `built`; new built patches; Open Buildings temporal (to 2023) as a pre-period reference | 10, 11 | 8 | P3 | |
 | 13 | **Planet imagery (D12).** (a) `scripts/planet_order.py`: best clear 8-band scene set per month over the AOI, clipped and harmonised to Sentinel-2, km² shown before ordering; Oct 2024 – Sep 2025 on the October 2026 quota, the rest in November; (b) `ee_engine` gets a `source` setting (sentinel2 / planet) with a per-source band map and resolution; indices that need SWIR (NDBI, MNDWI) are replaced by NDWI + classes for Planet; (c) integration: monsoon gap fill for Phase 10, 3 m detail for Phases 11–12, Geo-VLM chips | 9, 10 (a: none) | 6 (+8) | P2 | **in progress**: (a) **done**: ordering script; year 1 delivered (11 of 12 months; Feb 2025 refused over quota, re-order in November). (b) Planet → Earth Engine **ready** 2026-10-22: `notebooks/EviChange_planet_to_ee.ipynb` (Colab) + `agents/planet.py`; the 11 delivered months first, February skipped for now. Next: run the notebook, then (c) wiring into Phases 10, 11 and the Geo-VLM chips |
-| 14 | **Ground truth for classes, shoreline and coastal buildings (D13).** (a) From / to land-cover class at the existing 30 sites (blind to Dynamic World); (b) reference shorelines digitised on high-resolution imagery at 2 dates on 30 transects; (c) 30 coastal cells labelled built / not built at Oct 2024 and Sep 2026; (d) month of change at the 30 sites where the Planet monthly images show it (D14) | 9, 11, 12, 13 | 9 | P1 (2nd labeller on 10 sites: P2 or P3; if not done by the agreed date, P2 + P3 take it over) | |
+| 14 | **Ground truth for classes, shoreline and coastal buildings (D13).** (a) From / to land-cover class at the existing 30 sites (blind to Dynamic World); (b) reference shorelines digitised on high-resolution imagery at 2 dates on 30 transects; (c) 30 coastal cells labelled built / not built at Oct 2024 and Sep 2026; (d) month of change at the 30 sites where the Planet monthly images show it (D14) | 9, 11, 12, 13 | 9 | P2 (moved from P1 2026-10-23); 2nd labeller on 10 sites: P3 | Blindness: P2 builds the class and shoreline outputs, so (a) classes stay hidden at the labelled sites (already locked, D10), (b) the 30 reference transects are drawn at random and their extracted shorelines hidden in the app until digitised, (c) each site is labelled from imagery before any output for it is opened; the write-up states the labeller built the classifier. |
 | 15 | **Evaluation extension (D13).** Claim types `land_cover` (L3), `shoreline` (L2) and `coastal_built` (L2) in `schema.py`, verifier rules, gated / ungated prompts cover them; metrics per claim type; extraction accuracy (shoreline RMSE in m, class-transition agreement κ with the labels) | 4, 14 | 10 | P2 (prompts) + P3 (schema, verifier rules) | **in progress**: `land_cover` claim type + verifier rule **done** by P3 2026-10-22 (public #16). Left: `shoreline`, `coastal_built`, and P2's prompts |
 
 **Order matters for the evaluation.** Phase 4's report prompts must be frozen **after** Phase 9 and
@@ -53,7 +53,7 @@ the Phase 15 schema exist, because the frozen prompts have to cover the new clai
 work that doesn't depend on them (VLMClient, server notebook, the region check) carries on.
 
 Total remaining ≈ 150 h on 2026-10-19 (179 h planned on 2026-10-11, minus Phase 4 / 7 / 13a work done since):
-roughly P1 ≈ 9 h, P2 ≈ 68 h and P3 ≈ 55 h, plus the write-up together. If P3 slips, the core results
+roughly P2 ≈ 77 h (including Phase 14, moved from P1 on 2026-10-23) and P3 ≈ 55 h, plus the write-up together. If P3 slips, the core results
 still happen; the cut order below applies (7c, then 10b and 12 are the first extras to go). Decided 2026-10-08: add the hours rather than
 cut scope. If something must give later, cut the D7 candidate check first, then 7c's VLM side.
 Labelling is done; a second labeller on the remaining 20 sites is optional (≈40 min).
