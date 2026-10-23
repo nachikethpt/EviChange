@@ -14,6 +14,12 @@ from agents.schema import CHANGE_TYPES, REASONS, T_IDX, region_change_types
 from agents.verifier import verify
 
 
+def _ha(area):
+    """Hectares as claim text. Whole numbers round small regions by up to 0.5 ha, more than
+    the verifier's 25% area tolerance below ~2 ha, so keep one decimal under 10 ha."""
+    return f"{area:.1f}" if area < 10 else f"{area:.0f}"
+
+
 def _number(claims):
     for i, c in enumerate(claims, 1):
         c["claim_id"] = f"c{i}"
@@ -28,11 +34,11 @@ def template_claims(ev):
     claims.append(dict(level="L1", type="presence", text="Change detected between the two dates.",
                        region_ref=None, evidence_ref=["change_frac"], stated_conf=1.0))
     total = sum(r["area_ha"] for r in ev["regions"])
-    claims.append(dict(level="L2", type="extent", text=f"About {total:.0f} ha changed in total.",
+    claims.append(dict(level="L2", type="extent", text=f"About {_ha(total)} ha changed in total.",
                        region_ref=None, evidence_ref=["area_ha"], stated_conf=1.0))
     for r in ev["regions"]:
         claims.append(dict(level="L2", type="location",
-                           text=f"Region {r['id']}: {r['area_ha']:.0f} ha of change in the {r['location']}.",
+                           text=f"Region {r['id']}: {_ha(r['area_ha'])} ha of change in the {r['location']}.",
                            region_ref=r["id"], evidence_ref=["location", "area_ha"], stated_conf=r["mean_conf"]))
         for name in region_change_types(r):
             field, _, label = CHANGE_TYPES[name]
@@ -68,7 +74,7 @@ def gated_claims(ev):
         r = by_id.get(c.get("region_ref"))
         if r and c["type"] == "change_type":
             field, _, label = CHANGE_TYPES[c["change_type"]]
-            c["text"] = (f"In region {r['id']} ({r['location']}, ~{r['area_ha']:.0f} ha) the imagery shows "
+            c["text"] = (f"In region {r['id']} ({r['location']}, ~{_ha(r['area_ha'])} ha) the imagery shows "
                          f"{label} ({field} {r[field]:+.2f}).")
     abstain = [
         {"topic": "cause of change (e.g. mining)", "reason": "The evidence contains no information about causes."},
