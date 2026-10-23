@@ -461,6 +461,7 @@ def shoreline_transects(change: Optional[str] = None, trend: Optional[str] = Non
     `trend` and the reported `change` (radar trend confirmed by the optical dry-season shoreline, else
     "unconfirmed"). Filter with ?change= or ?trend=."""
     fc = _shoreline("transects.geojson")
+    fc = shoreline.hide_transects(fc, shoreline.hidden_transects(fc))
     feats = fc["features"]
     if change:
         feats = [f for f in feats if f["properties"].get("change") == change]
@@ -478,7 +479,8 @@ def shoreline_baseline():
 def shoreline_lines(month: Optional[str] = None, kind: Optional[Literal["month", "quarter"]] = None):
     """Extracted shorelines: one MultiLineString per month (kind=month; move with the tide) and per
     quarter (kind=quarter; tide-averaged, the lines the rates come from). ?month=YYYY-MM picks one month."""
-    fc = _shoreline("shorelines.geojson")
+    transects = _shoreline("transects.geojson")
+    fc = shoreline.hide_lines(_shoreline("shorelines.geojson"), transects, shoreline.hidden_transects(transects))
     feats = fc["features"]
     if kind:
         feats = [f for f in feats if f["properties"].get("kind", "month") == kind]
@@ -498,7 +500,11 @@ def shoreline_transect(tid: str):
     pos = _shoreline("positions.json")
     if tid not in pos["positions"]:
         raise HTTPException(404, f"unknown transect {tid}")
-    feat = next(f for f in _shoreline("transects.geojson")["features"] if f["id"] == tid)
+    transects = _shoreline("transects.geojson")
+    feat = next(f for f in transects["features"] if f["id"] == tid)
+    if tid in shoreline.hidden_transects(transects):          # Phase 14 reference transect: blind until digitised
+        return {**shoreline.hide_transects({"features": [feat]}, {tid})["features"][0]["properties"],
+                "geometry": feat["geometry"], "series": None, "quarterly": None}
     return {**feat["properties"], "geometry": feat["geometry"],
             "series": [{"month": m, "pos": p} for m, p in zip(pos["months"], pos["positions"][tid])],
             "quarterly": [{"quarter": q, "pos": p} for q, p in zip(pos.get("quarters", []), pos.get("quarter_positions", {}).get(tid, []))]}

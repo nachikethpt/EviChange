@@ -566,6 +566,67 @@ def write_outputs(result: dict, out_dir: Path | None = None) -> dict:
     return summary
 
 
+# ---------- Phase 14 blind lock ----------
+REFERENCE_TRANSECTS_UNLOCKED = False     # set True in the commit that adds the Phase 14 reference shorelines
+HIDDEN_FIELDS = ("n", "lrr", "ci95", "r2", "nsm", "trend", "monthly_iqr", "tidal", "opt_first", "opt_last", "opt_shift", "change")
+_HIDE_NEAR_M = 30                        # a shoreline vertex this close to a hidden transect belongs to it
+
+
+def hidden_transects(transects: dict | None = None) -> set[str]:
+    """Ids hidden until the Phase 14 reference shorelines exist: the 30 reference transects and
+    their neighbours (labels14.hidden_transect_ids). Empty when unlocked or not sampled yet."""
+    if REFERENCE_TRANSECTS_UNLOCKED:
+        return set()
+    from . import labels14
+    refs = labels14.load_samples(labels14.TRANSECTS_FILE)
+    transects = transects if transects is not None else load("transects.geojson")
+    if not refs or not transects:
+        return set()
+    return labels14.hidden_transect_ids(transects, refs)
+
+
+def hide_transects(fc: dict, hidden: set[str]) -> dict:
+    """Copy of the transects with the extracted statistics removed (and hidden: true) on hidden ones."""
+    feats = [f if f["id"] not in hidden else
+             {**f, "properties": {**{k: v for k, v in f["properties"].items() if k not in HIDDEN_FIELDS}, "hidden": True}}
+             for f in fc["features"]]
+    return {**fc, "features": feats}
+
+
+def _near_segment(p: tuple[float, float], a: tuple[float, float], b: tuple[float, float], frame: "LocalFrame", tol: float) -> bool:
+    (px, py), (ax, ay), (bx, by) = frame.to_m(*p), frame.to_m(*a), frame.to_m(*b)
+    dx, dy = bx - ax, by - ay
+    t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy or 1)))
+    return math.hypot(px - ax - t * dx, py - ay - t * dy) <= tol
+
+
+def hide_lines(fc: dict, transects: dict, hidden: set[str], tol: float = _HIDE_NEAR_M) -> dict:
+    """Copy of the extracted shorelines with the vertices on hidden transects removed: each line is
+    split there, so no line passes through (or interpolates across) a reference transect."""
+    if not hidden:
+        return fc
+    segs = [tuple(map(tuple, f["geometry"]["coordinates"])) for f in transects["features"] if f["id"] in hidden]
+    feats = []
+    for f in fc["features"]:
+        lines = []
+        for line in f["geometry"]["coordinates"]:
+            cur = []
+            for p in line:
+                frame = LocalFrame(p[0], p[1])
+                if any(_near_segment(tuple(p), a, b, frame, tol) for a, b in segs
+                       if abs(a[0] - p[0]) < 0.01 and abs(a[1] - p[1]) < 0.01):
+                    if len(cur) >= 2:
+                        lines.append(cur)
+                    cur = []
+                else:
+                    cur.append(p)
+            if len(cur) >= 2:
+                lines.append(cur)
+        if lines:
+            feats.append({**f, "geometry": {"type": "MultiLineString", "coordinates": lines}})
+    return {**fc, "features": feats}
+
+
 def load(name: str, out_dir: Path | None = None) -> Any:
     path = (out_dir or SHORELINE_DIR) / name
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
