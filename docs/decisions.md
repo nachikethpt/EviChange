@@ -491,10 +491,10 @@ scored by the same verifier and labels. It is a **pre-specified secondary compar
 vs ungated GPT. The primary comparison (gated vs ungated Qwen) is unchanged, and template stays a
 reference.
 - **Same input and prompt as ungated Qwen.** Both ungated arms use `agents/ungated.py`
-  (`ungated_report_v0`): the before/after chips with the box outlined, the dates, nothing from the
+  (`ungated_report_v1`; v1 also asks about the shoreline and buildings near it, D13): the before/after chips with the box outlined, the dates, nothing from the
   evidence. The arms differ only in the model that writes, so the difference is the model's.
 - **One extractor for both ungated arms.** Free text is split into claims by the Geo-VLM (Qwen,
-  text only, `claim_extract_v0`), which copies statements and never judges them. Using the same
+  text only, `claim_extract_v1`), which copies statements and never judges them. Using the same
   extractor for GPT and Qwen keeps extraction errors from favouring either arm. Items that break the
   claim schema are dropped and counted as parse failures (metric 8), never repaired.
 - **Report arm, not a pipeline condition.** `schema.REPORT_CONDITIONS` adds `ungated_gpt`;
@@ -503,7 +503,7 @@ reference.
   on. Running it needs `EVICHANGE_GPT=http` and an explicit `OPENAI_MODEL`, and the model name is
   reported. It sends the chips to OpenAI, so it costs money and moves imagery off our own GPU. The
   labelled-site lock (D7) applies to it too. Answers can be replayed (`GPT_REPLAY_FILE`).
-- **Prompt hygiene.** The ungated report prompt and the extractor prompt are drafts (v0). They are
+- **Prompt hygiene.** The ungated report prompt and the extractor prompt are drafts (v1). They are
   developed outside the 30 sites and frozen with the other Phase 4 prompts.
 
 **Open before freezing.**
