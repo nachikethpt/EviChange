@@ -423,6 +423,18 @@ Neither the scenes nor the mosaics are committed to either repository (licence).
   rates per claim type.
 - **Freeze order:** Phase 4 prompts are frozen only after the new claim types exist (PLAN).
 
+**As implemented (Phase 14 tooling, 2026-10-23).** `agents/labels14.py` draws the samples and checks
+records (protocol `labels14_v1`); labels go in `data/quangninh/labels/phase14/`. (b) 30 reference transects
+from the 518 with an extracted rate: usable transects in coast order are cut into 30 equal runs and one
+is drawn from each, so the sample spans the coast. The labeller sees each transect extended by a random
+0–200 m at both ends (the baseline would otherwise sit at a fixed 300 m from the start) and the two
+dates in shuffled order; answers convert to the `positions.json` frame. The app hides the rates,
+positions and extracted lines at the reference transects and their same-line neighbours (81 transects)
+until the labels exist. (c) 30 cells of 30 m (3 × 3 Dynamic World pixels), 15 per coastal strip, labelled
+built when more than half the cell is built. (d) on the Planet months with a window, like CCDC (D14).
+Dates for (b) and (c) are Oct 2024 and Sep 2026, with the last delivered Planet month standing in for
+Sep 2026 until the November order lands.
+
 ## D14 — Time series analysis with CCDC (2026-10-11, proposed)
 
 **Why.** The teacher asked for time series analysis. Two-date comparison (D6) says *what* changed

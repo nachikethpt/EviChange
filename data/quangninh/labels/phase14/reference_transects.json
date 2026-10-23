@@ -1,0 +1,602 @@
+[
+ {
+  "transect_id": "t0016",
+  "line": 0,
+  "chainage_m": 1600,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.267104,
+     20.991125
+    ],
+    [
+     107.260685,
+     20.987156
+    ]
+   ]
+  },
+  "extend_land_m": 53,
+  "extend_sea_m": 40
+ },
+ {
+  "transect_id": "t0036",
+  "line": 0,
+  "chainage_m": 3600,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.247889,
+     20.994403
+    ],
+    [
+     107.255444,
+     20.995791
+    ]
+   ]
+  },
+  "extend_land_m": 48,
+  "extend_sea_m": 73
+ },
+ {
+  "transect_id": "t0072",
+  "line": 0,
+  "chainage_m": 8400,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.229754,
+     20.99143
+    ],
+    [
+     107.231292,
+     20.984388
+    ]
+   ]
+  },
+  "extend_land_m": 15,
+  "extend_sea_m": 80
+ },
+ {
+  "transect_id": "t0093",
+  "line": 3,
+  "chainage_m": 400,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.267036,
+     20.98513
+    ],
+    [
+     107.259631,
+     20.983162
+    ]
+   ]
+  },
+  "extend_land_m": 62,
+  "extend_sea_m": 59
+ },
+ {
+  "transect_id": "t0118",
+  "line": 5,
+  "chainage_m": 600,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.320427,
+     20.97966
+    ],
+    [
+     107.324151,
+     20.985951
+    ]
+   ]
+  },
+  "extend_land_m": 115,
+  "extend_sea_m": 175
+ },
+ {
+  "transect_id": "t0128",
+  "line": 7,
+  "chainage_m": 200,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.395849,
+     21.041984
+    ],
+    [
+     107.400504,
+     21.03626
+    ]
+   ]
+  },
+  "extend_land_m": 113,
+  "extend_sea_m": 4
+ },
+ {
+  "transect_id": "t0177",
+  "line": 7,
+  "chainage_m": 5800,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.37562,
+     21.066093
+    ],
+    [
+     107.378531,
+     21.05944
+    ]
+   ]
+  },
+  "extend_land_m": 173,
+  "extend_sea_m": 119
+ },
+ {
+  "transect_id": "t0209",
+  "line": 7,
+  "chainage_m": 10300,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.384796,
+     21.082401
+    ],
+    [
+     107.377407,
+     21.084422
+    ]
+   ]
+  },
+  "extend_land_m": 30,
+  "extend_sea_m": 148
+ },
+ {
+  "transect_id": "t0240",
+  "line": 7,
+  "chainage_m": 14000,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.384024,
+     21.092726
+    ],
+    [
+     107.38108,
+     21.086085
+    ]
+   ]
+  },
+  "extend_land_m": 57,
+  "extend_sea_m": 115
+ },
+ {
+  "transect_id": "t0276",
+  "line": 9,
+  "chainage_m": 1600,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.373308,
+     21.086047
+    ],
+    [
+     107.379106,
+     21.090775
+    ]
+   ]
+  },
+  "extend_land_m": 168,
+  "extend_sea_m": 75
+ },
+ {
+  "transect_id": "t0308",
+  "line": 9,
+  "chainage_m": 5700,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.364653,
+     21.063554
+    ],
+    [
+     107.372236,
+     21.062305
+    ]
+   ]
+  },
+  "extend_land_m": 8,
+  "extend_sea_m": 6
+ },
+ {
+  "transect_id": "t0325",
+  "line": 9,
+  "chainage_m": 7600,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.364003,
+     21.047416
+    ],
+    [
+     107.371642,
+     21.046509
+    ]
+   ]
+  },
+  "extend_land_m": 50,
+  "extend_sea_m": 177
+ },
+ {
+  "transect_id": "t0347",
+  "line": 9,
+  "chainage_m": 10000,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.369028,
+     21.027815
+    ],
+    [
+     107.376151,
+     21.030545
+    ]
+   ]
+  },
+  "extend_land_m": 144,
+  "extend_sea_m": 125
+ },
+ {
+  "transect_id": "t0376",
+  "line": 9,
+  "chainage_m": 13500,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.356632,
+     21.006899
+    ],
+    [
+     107.363303,
+     21.003311
+    ]
+   ]
+  },
+  "extend_land_m": 122,
+  "extend_sea_m": 189
+ },
+ {
+  "transect_id": "t0384",
+  "line": 9,
+  "chainage_m": 14300,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.352416,
+     21.002102
+    ],
+    [
+     107.357658,
+     20.996838
+    ]
+   ]
+  },
+  "extend_land_m": 64,
+  "extend_sea_m": 149
+ },
+ {
+  "transect_id": "t0414",
+  "line": 9,
+  "chainage_m": 18200,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.34626,
+     20.985898
+    ],
+    [
+     107.338646,
+     20.986965
+    ]
+   ]
+  },
+  "extend_land_m": 153,
+  "extend_sea_m": 71
+ },
+ {
+  "transect_id": "t0432",
+  "line": 9,
+  "chainage_m": 20400,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.327632,
+     20.993416
+    ],
+    [
+     107.327731,
+     20.98623
+    ]
+   ]
+  },
+  "extend_land_m": 155,
+  "extend_sea_m": 30
+ },
+ {
+  "transect_id": "t0448",
+  "line": 9,
+  "chainage_m": 22100,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.31143,
+     20.996461
+    ],
+    [
+     107.312515,
+     20.989346
+    ]
+   ]
+  },
+  "extend_land_m": 39,
+  "extend_sea_m": 187
+ },
+ {
+  "transect_id": "t0469",
+  "line": 9,
+  "chainage_m": 24400,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.294404,
+     20.993425
+    ],
+    [
+     107.296739,
+     20.986577
+    ]
+   ]
+  },
+  "extend_land_m": 162,
+  "extend_sea_m": 121
+ },
+ {
+  "transect_id": "t0486",
+  "line": 9,
+  "chainage_m": 26500,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.282049,
+     20.999
+    ],
+    [
+     107.282924,
+     20.99186
+    ]
+   ]
+  },
+  "extend_land_m": 129,
+  "extend_sea_m": 120
+ },
+ {
+  "transect_id": "t0505",
+  "line": 9,
+  "chainage_m": 28400,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.263816,
+     20.998928
+    ],
+    [
+     107.264722,
+     20.991791
+    ]
+   ]
+  },
+  "extend_land_m": 2,
+  "extend_sea_m": 47
+ },
+ {
+  "transect_id": "t0523",
+  "line": 9,
+  "chainage_m": 30400,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.268986,
+     20.981943
+    ],
+    [
+     107.27481,
+     20.986643
+    ]
+   ]
+  },
+  "extend_land_m": 131,
+  "extend_sea_m": 65
+ },
+ {
+  "transect_id": "t0555",
+  "line": 14,
+  "chainage_m": 1000,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.276308,
+     20.984163
+    ],
+    [
+     107.273979,
+     20.991013
+    ]
+   ]
+  },
+  "extend_land_m": 8,
+  "extend_sea_m": 81
+ },
+ {
+  "transect_id": "t0589",
+  "line": 15,
+  "chainage_m": 3300,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.285932,
+     20.989455
+    ],
+    [
+     107.279945,
+     20.984936
+    ]
+   ]
+  },
+  "extend_land_m": 102,
+  "extend_sea_m": 16
+ },
+ {
+  "transect_id": "t0604",
+  "line": 17,
+  "chainage_m": 500,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.36215,
+     20.99934
+    ],
+    [
+     107.369323,
+     21.001952
+    ]
+   ]
+  },
+  "extend_land_m": 129,
+  "extend_sea_m": 29
+ },
+ {
+  "transect_id": "t0636",
+  "line": 22,
+  "chainage_m": 200,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.398348,
+     20.988303
+    ],
+    [
+     107.399144,
+     20.995451
+    ]
+   ]
+  },
+  "extend_land_m": 51,
+  "extend_sea_m": 103
+ },
+ {
+  "transect_id": "t0662",
+  "line": 25,
+  "chainage_m": 1300,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.358915,
+     20.987087
+    ],
+    [
+     107.358017,
+     20.994224
+    ]
+   ]
+  },
+  "extend_land_m": 4,
+  "extend_sea_m": 138
+ },
+ {
+  "transect_id": "t0670",
+  "line": 27,
+  "chainage_m": 200,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.382074,
+     21.01026
+    ],
+    [
+     107.385395,
+     21.003777
+    ]
+   ]
+  },
+  "extend_land_m": 112,
+  "extend_sea_m": 117
+ },
+ {
+  "transect_id": "t0691",
+  "line": 28,
+  "chainage_m": 200,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.376212,
+     21.050938
+    ],
+    [
+     107.370298,
+     21.055539
+    ]
+   ]
+  },
+  "extend_land_m": 59,
+  "extend_sea_m": 49
+ },
+ {
+  "transect_id": "t0712",
+  "line": 28,
+  "chainage_m": 3000,
+  "geometry": {
+   "type": "LineString",
+   "coordinates": [
+    [
+     107.373313,
+     21.036858
+    ],
+    [
+     107.380971,
+     21.03611
+    ]
+   ]
+  },
+  "extend_land_m": 130,
+  "extend_sea_m": 63
+ }
+]
