@@ -245,7 +245,7 @@ r363 water → built (coastal reclamation, south), r289 bare → trees (revegeta
 regions keep "water" as their class while its share falls (r435: 47 % → 28 %), so the shares carry
 information the class alone hides.
 
-## D11 — Monthly change, shoreline and coastal buildings (2026-10-08; monthly maps implemented 2026-10-22)
+## D11 — Monthly change, shoreline and coastal buildings (2026-10-08; monthly maps implemented 2026-10-22, shoreline 2026-10-23)
 
 **Period.** Oct 2024 – Sep 2026 (24 months: two full monsoon cycles, so seasonal swings can be
 told apart from lasting change).
@@ -314,6 +314,44 @@ AOI, yearly to 2023) is a pre-period reference only. At 10 m, single houses are 
   shrub → trees (1,850 ha), Dynamic World's known shrub / tree confusion. The plausible real changes
   are smaller: water → bare 301 ha, bare → built 244 ha. Phase 14's class labels will say how much of
   this is real; until then report class change from the seasons, never from single months.
+
+**Shoreline, as implemented (Phase 11, `agents/shoreline.py`, `scripts/make_shoreline.py`, 2026-10-23).**
+- *Sea and baseline:* water in ≥ 50 % of the months (Phase 10's radar maps), opened by 50 m so docks,
+  inlets and channels under ~100 m wide don't count as coast; polygons touching the AOI edge and
+  ≥ 100 ha are sea (ponds and the river aren't). Their boundary without the AOI cut, smoothed over
+  ±250 m, is the baseline: 90 km on the QN coast and islands, 735 transects every 100 m, 300 m
+  landward to 500 m seaward, sampled every 10 m.
+- *Position:* the landward edge of the **sea-connected** water: from the seaward end, walk landward
+  until 30 m of land in a row.
+- *Rate:* from **quarterly** shorelines (water in ≥ half of a quarter's 6–12 radar looks, i.e.
+  tide-averaged): linear regression rate with a 95 % CI over the 8 quarters, ≥ 5 quarters needed.
+- *Reported change:* "advancing" / "retreating" only when the radar trend is significant **and** the
+  Sentinel-2 dry-season shoreline (median MNDWI of clear looks > 0, 2024-25 → 2025-26) moved the same
+  way by ≥ 20 m; else "unconfirmed". Monthly lines are kept for display; transects whose monthly
+  positions spread > 100 m (IQR) are flagged `tidal`.
+
+**What the first runs got wrong, and why the method has each step.** Each run was checked against
+Sentinel-2 imagery before and after:
+1. Unsmoothed baseline: transects in coves crossed each other; an inlet flipping between water and
+   land gave up to 478 m/yr "advance" on a coast that didn't move. → mask opening + smoothing.
+2. Best overall land / water split per profile: positions jumped between the coast and coal-port
+   settling ponds ~300 m inland. → sea-connected walk from the seaward end.
+3. Rates fitted to monthly positions: on tidal flats the monthly shoreline jumps 200–450 m between
+   low and high tide, giving 150–340 m/yr "trends" wherever low-tide looks clustered. → quarterly
+   tide-averaged shorelines.
+4. Radar alone: in the coal-port channel the Jul–Sep 2026 shoreline jumped 300–400 m seaward (rough
+   water or moored barges read as land) while the imagery showed an unchanged coast. → optical
+   confirmation.
+
+**First QN result (2026-10-23, Oct 2024 – Sep 2026).** Of 735 transects: 483 stable (median rate
+±1.9 m/yr, median 95 % CI ±8.4 m/yr), 217 with too few quarterly positions (piers, coves, tidal
+channels), 30 radar trends **unconfirmed** by the optical shoreline, and **5 confirmed advancing**
+(9–73 m/yr, optical shift 20–30 m, all on one stretch of the east coast; one is flagged tidal). No confirmed
+retreat. 78 transects are tidal flats. The QN coast is therefore essentially stable over these two
+years at Sentinel resolution, with small local advance (reclamation / fill); the 20 m confirmation
+threshold is 2 Sentinel-2 pixels, so the 5 confirmed cases sit near the detection limit. Change after
+Mar 2026 can't be confirmed optically until Planet's monsoon months are in (Phase 13c), and the
+Phase 14 reference shorelines will give the extraction error in metres.
 
 ## D12 — Planet-ready imagery source (2026-10-08, proposed)
 
