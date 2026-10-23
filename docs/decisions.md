@@ -453,3 +453,42 @@ the labelled data show a reason to change them, and any change is recorded here.
 
 **Evaluation.** Break-month agreement with the Phase 14d labels (share within ± 1 month and within
 the reported window), and the share of detector regions CCDC calls seasonal rather than lasting.
+
+## D16 — Ungated GPT as a secondary comparison arm (2026-10-23, proposed)
+
+**Why.** The obvious question about the Geo-VLM is "why not just ask GPT?". The three conditions
+only use Qwen, so they can show that gating helps a 7B open model, not how that compares with a
+frontier model used the usual way: free text from the images, no evidence, no checks.
+
+**Decision.** A fourth report arm, `ungated_gpt`, run on the same 30 sites with the same chips and
+scored by the same verifier and labels. It is a **pre-specified secondary comparison**: gated Qwen
+vs ungated GPT. The primary comparison (gated vs ungated Qwen) is unchanged, and template stays a
+reference.
+- **Same input and prompt as ungated Qwen.** Both ungated arms use `agents/ungated.py`
+  (`ungated_report_v0`): the before/after chips with the box outlined, the dates, nothing from the
+  evidence. The arms differ only in the model that writes, so the difference is the model's.
+- **One extractor for both ungated arms.** Free text is split into claims by the Geo-VLM (Qwen,
+  text only, `claim_extract_v0`), which copies statements and never judges them. Using the same
+  extractor for GPT and Qwen keeps extraction errors from favouring either arm. Items that break the
+  claim schema are dropped and counted as parse failures (metric 8), never repaired.
+- **Report arm, not a pipeline condition.** `schema.REPORT_CONDITIONS` adds `ungated_gpt`;
+  `CONDITIONS` (pipeline runs) stays at three, since the pipeline has no chips.
+- **Off unless asked for.** `GPTClient` is off by default; an `OPENAI_API_KEY` alone never turns it
+  on. Running it needs `EVICHANGE_GPT=http` and an explicit `OPENAI_MODEL`, and the model name is
+  reported. It sends the chips to OpenAI, so it costs money and moves imagery off our own GPU. The
+  labelled-site lock (D7) applies to it too. Answers can be replayed (`GPT_REPLAY_FILE`).
+- **Prompt hygiene.** The ungated report prompt and the extractor prompt are drafts (v0). They are
+  developed outside the 30 sites and frozen with the other Phase 4 prompts.
+
+**Open before freezing.**
+1. *Location frame.* A region's `location` is relative to the whole AOI, but the ungated prompt asks
+   where change is *in the box*. For both ungated arms, the verifier's location checks would then
+   compare different frames. Options: recompute locations relative to the site box for every arm,
+   or drop location wording from the ungated prompt.
+2. *Extractor validation.* Check the extractor on a sample of reports outside the 30 sites (claims
+   missed, invented or mis-levelled) and report that rate; it is part of the measurement.
+
+**Limits to state.** One GPT model at one point in time (the API model can change behind a name;
+record the dated model name the API returns). GPT sees PNG chips at its own image resolution, not
+the 10 m pixels. A better GPT result would not say the Geo-VLM is worse at describing imagery; the
+claim tested is about unsupported claims reaching the user.

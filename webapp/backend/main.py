@@ -34,11 +34,12 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from agents import ee_engine, landcover, monthly, shoreline, vlm_check
+from agents import ee_engine, landcover, monthly, shoreline, ungated, vlm_check
+from agents.gpt_client import GPTClient
 from agents.vlm_client import VLMClient, VLMUnavailable
 from agents.graph import run_pipeline
 from agents.study import REPO_ROOT, load_study_config
-from agents.schema import CHANGE_TYPES, CONDITIONS, CONF_MIN, T_IDX, validate_aoi, validate_windows
+from agents.schema import CHANGE_TYPES, CONDITIONS, CONF_MIN, REPORT_CONDITIONS, T_IDX, validate_aoi, validate_windows
 
 from . import data_store
 from .report import build_report
@@ -246,6 +247,7 @@ def monthly_region(region_id: str):
 
 
 vlm = VLMClient()
+gpt = GPTClient()                # ungated GPT arm (D16); off unless EVICHANGE_GPT=http
 _vlm_checks: dict = {}           # check key -> result; filled from the answer log on first use
 _vlm_log_loaded = False
 LOG_ONLY_FIELDS = ("key", "time", "run_id", "bbox", "seconds")
@@ -342,7 +344,7 @@ def _bbox(geometry: dict) -> tuple[float, float, float, float]:
 
 class ReportRequest(BaseModel):
     region_ids: List[str]
-    condition: Literal["template", "ungated", "gated"] = "gated"
+    condition: Literal[REPORT_CONDITIONS] = "gated"
     run_id: Optional[str] = None
 
 
@@ -355,7 +357,51 @@ def report(req: ReportRequest):
     if unknown:
         raise HTTPException(400, f"unknown region ids: {unknown}")
     ev = data_store.evidence_for(req.region_ids, req.run_id)
+    if req.condition == "ungated_gpt":
+        return _ungated_gpt_report(req, ev)
     return build_report(ev, req.condition)
+
+
+_ungated_gpt_runs: dict = {}     # (run, selection, prompt versions, models) -> run_ungated() output
+
+
+def _ungated_gpt_report(req: ReportRequest, ev: dict) -> dict:
+    """D16: GPT writes free text from the selection's chips, the Geo-VLM splits it into claims, and the
+    verifier checks them against the same evidence as the other arms. Anything missing -> not_run."""
+    def not_run(detail: str) -> dict:
+        return {**build_report(ev, "ungated_gpt"), "detail": detail}
+    fc = data_store.get_change_regions(req.run_id)
+    geoms = [f["geometry"] for f in fc["features"] if f["properties"]["id"] in set(req.region_ids)]
+    if not geoms:
+        return not_run("No regions selected.")
+    boxes = [_bbox(g) for g in geoms]
+    bbox = (min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes))
+    if vlm_check.touches_labelled_site(bbox):
+        return not_run("Overlaps a labelled evaluation site: not sent to any model until the Phase 4 prompts are frozen.")
+    params = data_store.analysis_params(req.run_id)
+    if params is None:
+        return not_run("These change regions have no Earth Engine analysis behind them (demo data).")
+    for name, client in (("GPT", gpt), ("Geo-VLM (claim extractor)", vlm)):
+        status = client.status()
+        if not status["available"]:
+            return not_run(f"{name} unavailable: {status['detail']}")
+    chip_set = vlm_check.DEFAULT_CHIP_SET
+    sel = ",".join(sorted(req.region_ids))
+    key = (req.run_id, sel, ungated.REPORT_PROMPT_VERSION, ungated.EXTRACT_PROMPT_VERSION, chip_set,
+           gpt.status()["model"], vlm.status()["model"])
+    if key not in _ungated_gpt_runs:
+        try:
+            chips = ee_engine.region_chips(params["aoi"], params["before_window"], params["after_window"],
+                                           params["max_cloud_pct"], bbox, kinds=vlm_check.chip_kinds(chip_set))
+        except Exception as exc:
+            return not_run(f"Earth Engine: {exc}")
+        try:
+            _ungated_gpt_runs[key] = ungated.run_ungated(
+                gpt, vlm, "ungated_gpt", sel, params["before_window"], params["after_window"],
+                [chips[k] for k in vlm_check.chip_keys(chip_set)], chip_set)
+        except VLMUnavailable as exc:
+            return not_run(str(exc))
+    return build_report(ev, "ungated_gpt", ungated=_ungated_gpt_runs[key])
 
 
 class RunRequest(BaseModel):

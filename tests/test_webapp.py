@@ -9,6 +9,7 @@ from agents.graph import run_pipeline
 from agents.schema import CHANGE_TYPES, T_IDX, validate_claim, validate_change_regions
 from webapp.backend import data_store, main
 from webapp.backend.main import app
+from webapp.backend.report import build_report
 
 AOI = {"type": "Polygon", "coordinates": [[[107.22, 20.98], [107.40, 20.98], [107.40, 21.10], [107.22, 21.10], [107.22, 20.98]]]}
 BEFORE = ["2018-11-01", "2019-03-31"]
@@ -49,6 +50,18 @@ def test_demo_verdicts_tell_the_research_story(client):
     for cond in ("template", "gated"):
         assert not any(c["level"] == "L4" for c in reports[cond]["claims"])
         assert reports[cond]["counts"]["unsupported"] == 0
+
+
+@pytest.mark.parametrize("condition", ["template", "gated"])
+def test_small_region_areas_survive_rounding(condition):
+    """Whole-ha text put 1.3-1.6 ha regions outside the verifier's 25% area tolerance (QN export)."""
+    ev = {"change_frac": 0.01, "regions": [
+        {"id": f"r{i}", "area_ha": a, "mean_conf": 0.9, "dNDVI": 0.20, "dNDBI": -0.15, "dMNDWI": -0.15, "location": "south-east"}
+        for i, a in enumerate([0.4, 1.338, 1.5, 1.598, 2.49, 9.96, 10.4], 1)]}
+    report = build_report(ev, condition)
+    area_claims = [c for c in report["claims"] if " ha" in c["text"]]
+    assert len(area_claims) > len(ev["regions"])
+    assert [c["text"] for c in area_claims if c["verdict"] != "supported"] == []
 
 
 def test_unknown_region_rejected(client):

@@ -23,6 +23,7 @@ T_IDX = 0.10      # |index change| at or below this is "no clear change" (notebo
 CONF_MIN = 0.2    # detections with mean_conf below this only support "uncertain" claims (D6: ~median of v3 QN regions)
 
 CONDITIONS = ("template", "ungated", "gated")
+REPORT_CONDITIONS = (*CONDITIONS, "ungated_gpt")   # D16: GPT is a report-only comparison arm, not a pipeline run
 LEVELS = ("L1", "L2", "L3", "L4")
 CLAIM_TYPES = ("presence", "extent", "location", "change_type", "land_cover", "cause", "other")
 VERDICTS = ("supported", "unsupported", "uncertain")

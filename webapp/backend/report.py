@@ -8,10 +8,20 @@ RIGHT NOW: no AI model is called.
 Phase 3 replaces ungated_claims() / gated_claims() with real Qwen2.5-VL output
 (through agents' VLMClient). Keep the returned shape identical.
 
+Ungated arms with a real model (agents/ungated.py, D16) pass their output in as `ungated`:
+free text plus the claims the extractor split it into. "ungated_gpt" has no demo stand-in,
+so without that output its report says it was not run.
+
 Claims are checked by agents/verifier.py and must match agents/schema.py.
 """
 from agents.schema import CHANGE_TYPES, REASONS, T_IDX, region_change_types
 from agents.verifier import verify
+
+
+def _ha(area):
+    """Hectares as claim text. Whole numbers round small regions by up to 0.5 ha, more than
+    the verifier's 25% area tolerance below ~2 ha, so keep one decimal under 10 ha."""
+    return f"{area:.1f}" if area < 10 else f"{area:.0f}"
 
 
 def _number(claims):
@@ -28,11 +38,11 @@ def template_claims(ev):
     claims.append(dict(level="L1", type="presence", text="Change detected between the two dates.",
                        region_ref=None, evidence_ref=["change_frac"], stated_conf=1.0))
     total = sum(r["area_ha"] for r in ev["regions"])
-    claims.append(dict(level="L2", type="extent", text=f"About {total:.0f} ha changed in total.",
+    claims.append(dict(level="L2", type="extent", text=f"About {_ha(total)} ha changed in total.",
                        region_ref=None, evidence_ref=["area_ha"], stated_conf=1.0))
     for r in ev["regions"]:
         claims.append(dict(level="L2", type="location",
-                           text=f"Region {r['id']}: {r['area_ha']:.0f} ha of change in the {r['location']}.",
+                           text=f"Region {r['id']}: {_ha(r['area_ha'])} ha of change in the {r['location']}.",
                            region_ref=r["id"], evidence_ref=["location", "area_ha"], stated_conf=r["mean_conf"]))
         for name in region_change_types(r):
             field, _, label = CHANGE_TYPES[name]
@@ -68,7 +78,7 @@ def gated_claims(ev):
         r = by_id.get(c.get("region_ref"))
         if r and c["type"] == "change_type":
             field, _, label = CHANGE_TYPES[c["change_type"]]
-            c["text"] = (f"In region {r['id']} ({r['location']}, ~{r['area_ha']:.0f} ha) the imagery shows "
+            c["text"] = (f"In region {r['id']} ({r['location']}, ~{_ha(r['area_ha'])} ha) the imagery shows "
                          f"{label} ({field} {r[field]:+.2f}).")
     abstain = [
         {"topic": "cause of change (e.g. mining)", "reason": "The evidence contains no information about causes."},
@@ -82,9 +92,17 @@ def gated_claims(ev):
     return _number(claims), abstain
 
 
-def build_report(ev, condition):
-    raw, abstain = None, []
-    if condition == "template":
+def build_report(ev, condition, ungated=None):
+    """`ungated`: run_ungated() output for the "ungated" / "ungated_gpt" arms, else None."""
+    raw, abstain, model, extra = None, [], "demo (no AI yet)", {}
+    if condition in ("ungated", "ungated_gpt") and ungated is not None:
+        raw, claims, model = ungated["raw"], [dict(c) for c in ungated["claims"]], ungated["model"]
+        extra = {k: ungated[k] for k in ("parse_ok", "dropped", "extractor_model", "prompt_version", "extract_version")}
+    elif condition == "ungated_gpt":
+        return {"condition": condition, "status": "not_run", "detail": "No ungated GPT output for this selection.",
+                "model": None, "evidence": ev, "raw_output": None, "claims": [], "abstain": [],
+                "counts": {"supported": 0, "unsupported": 0, "uncertain": 0}}
+    elif condition == "template":
         claims = template_claims(ev)
     elif condition == "ungated":
         raw, claims = ungated_claims(ev)
@@ -97,6 +115,6 @@ def build_report(ev, condition):
         c["verdict_note"] = REASONS[c["verdict_reason"]]
     counts = {v: sum(c["verdict"] == v for c in claims) for v in ("supported", "unsupported", "uncertain")}
     return {
-        "condition": condition, "model": "demo (no AI yet)", "evidence": ev,
-        "raw_output": raw, "claims": claims, "abstain": abstain, "counts": counts,
+        "condition": condition, "status": "ok", "model": model, "evidence": ev,
+        "raw_output": raw, "claims": claims, "abstain": abstain, "counts": counts, **extra,
     }
