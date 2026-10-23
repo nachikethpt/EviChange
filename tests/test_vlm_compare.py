@@ -94,3 +94,13 @@ def test_adjudication_sheet_is_blind():
     assert "r2" in page and page.count("<img") == 2 and 'value="no_change"' in page
     for leak in ("Qwen", "no change\"", "disagrees", "reason"):
         assert leak not in page                                  # no model names or answers on the page
+
+
+def test_controls_table_and_dev_report_with_controls():
+    log = LOG + [rec("c1", Q25, "rgb_swir", "change", "change_only"), rec("c1", Q3, "rgb_swir", "no_change", "disagrees"),
+                 rec("c2", Q3, "rgb_swir", "no_change", "disagrees")]
+    text = vc.dev_report(log, ["r1", "r2"], REGIONS, control_ids=["c1", "c2"])
+    assert "## Negative controls (2 boxes with no detection within 200 m)" in text
+    assert "| Qwen3-VL-8B-Instruct · rgb_swir | 2 | 2 (100%) | 0 (0%) | 0 (0%) |" in text
+    assert "| Qwen2.5-VL-7B-Instruct · rgb_swir | 1 | 0 (0%) | 0 (0%) | 1 (100%) |" in text
+    assert "- c1 (rgb_swir)" in text                       # model disagreement on a control goes to the hand check

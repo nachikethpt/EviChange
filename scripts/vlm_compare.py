@@ -219,17 +219,35 @@ function save() {{
 """
 
 
-def dev_report(records: list[dict], sample_ids: list[str], regions: dict[str, dict], adj: dict[str, str] | None = None) -> str:
-    keep = set(sample_ids)
-    checks = {k: r for k, r in latest(records).items() if k[1] in keep}
-    if not checks:
+def controls_table(checks: dict[tuple, dict]) -> str:
+    """Per condition on the negative controls (no detection near the box): a model that can tell change
+    from no change should mostly say no_change here (D15 specificity)."""
+    by_cond: dict[str, list[dict]] = {}
+    for (cond, *_), rec in checks.items():
+        by_cond.setdefault(cond, []).append(rec)
+    lines = ["| Condition | n | no change (wanted) | unsure | change |", "|---|---|---|---|---|"]
+    for cond in sorted(by_cond):
+        v = Counter(r["verdict"] for r in by_cond[cond])
+        n = len(by_cond[cond])
+        lines.append(f"| {cond} | {n} | {_pct(v['no_change'], n)} | {_pct(v['unsure'], n)} | {_pct(v['change'], n)} |")
+    return "\n".join(lines) if len(lines) > 2 else "_No control answers yet._"
+
+
+def dev_report(records: list[dict], sample_ids: list[str], regions: dict[str, dict], adj: dict[str, str] | None = None,
+               control_ids: list[str] = ()) -> str:
+    keep, ctrl = set(sample_ids), set(control_ids)
+    all_checks = latest(records)
+    checks = {k: r for k, r in all_checks.items() if k[1] in keep}
+    controls = {k: r for k, r in all_checks.items() if k[1] in ctrl}
+    if not checks and not controls:
         return "No answers on the development sample yet: run scripts/vlm_batch.py first."
-    dis = disagreements(checks)
+    dis = disagreements({**checks, **controls})
     parts = [f"# D15 model / image-set comparison: {len(checks)} checks on {len({k[1] for k in checks})} "
              f"of {len(keep)} development regions",
              "Regions outside the 30 labelled sites only (data/quangninh/vlm_dev_sample.json). Criteria in "
              "docs/decisions.md D15.",
-             "## Per condition", summary(checks),
+             "## Per condition (detected regions)", summary(checks) if checks else "_None yet._",
+             f"## Negative controls ({len(ctrl)} boxes with no detection within 200 m)", controls_table(controls),
              "## Against Dynamic World class change (weak reference)", dw_reference(checks, regions),
              "## Same verdict across image sets", stability(checks),
              "## Between conditions", pairwise(checks),
@@ -262,11 +280,12 @@ def main(argv: list[str] | None = None) -> None:
     if args.dev:
         sample = json.loads(SAMPLE.read_text(encoding="utf-8"))
         fc = json.loads((ROOT / sample["regions_file"]).read_text(encoding="utf-8"))
+        import vlm_batch
+        fc, control_ids = vlm_batch.with_controls(fc)
         regions = {f["properties"]["id"]: f["properties"] for f in fc["features"]}
         adj = json.loads(args.adjudication.read_text(encoding="utf-8")) if args.adjudication.exists() else None
         if args.sheet:
-            import vlm_batch
-            keep = set(sample["ids"])
+            keep = set(sample["ids"]) | set(control_ids)
             dis = disagreements({k: r for k, r in latest(records).items() if k[1] in keep})
             params = vlm_batch.analysis_params(fc)
             by_id = {f["properties"]["id"]: f for f in fc["features"]}
@@ -277,7 +296,7 @@ def main(argv: list[str] | None = None) -> None:
             args.sheet.write_text(adjudication_sheet(dis, chips), encoding="utf-8")
             print(f"{len(chips)} regions -> {args.sheet}  (open it, decide, Save, move the file to {ADJUDICATION})")
             return
-        text = dev_report(records, sample["ids"], regions, adj)
+        text = dev_report(records, sample["ids"], regions, adj, control_ids)
         if args.out:
             args.out.write_text(text, encoding="utf-8")
             print(f"report -> {args.out}")
