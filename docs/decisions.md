@@ -435,6 +435,20 @@ built when more than half the cell is built. (d) on the Planet months with a win
 Dates for (b) and (c) are Oct 2024 and Sep 2026, with the last delivered Planet month standing in for
 Sep 2026 until the November order lands.
 
+**As implemented (Phase 15 verifier, 2026-10-23).** `schema.py` adds the claim types `shoreline` and
+`coastal_built` and two optional evidence lists: `transects[]` (`id`, `location`, `change`, `nsm`, `lrr`,
+`ci95` from `agents/shoreline.py`) and `coastal_strips[]` (`strip` "0-200" / "200-500", `built_ha_before`,
+`built_ha_after`, optional `location`; Phase 12 fills them). Both rules run before the change-region rules,
+since these claims are about their own evidence. *Shoreline:* the claim's transects (by `transect_ref`,
+location words, or all) are checked against the optically confirmed `change`: a direction is supported
+when some transect has it, a stated distance must match `nsm` within 20 m or 25 %, a rate `lrr` within its
+95 % CI or 25 %; "stable" is wrong if any covered transect moved. A radar trend the imagery does not
+confirm (`unconfirmed`) gives *uncertain*, never a verdict either way. *Coastal built:* the strip comes from
+the text ("within 200 m" → 0–200, "200–500 m" → 200–500, else both); the change must exceed 0.5 ha in the
+stated direction (provisional), and stated hectares are read as the change, or the before / after area
+after "from" / "to". No evidence for the claim gives *uncertain* (`shoreline_not_in_evidence`,
+`coastal_not_in_evidence`). Tests: `tests/test_verifier_coastal.py`.
+
 ## D14 — Time series analysis with CCDC (2026-10-11, proposed)
 
 **Why.** The teacher asked for time series analysis. Two-date comparison (D6) says *what* changed
