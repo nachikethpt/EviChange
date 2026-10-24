@@ -85,7 +85,7 @@ function vlmSectionHtml(results) {
     ${action}
     ${gv.error ? `<p class="chip unsupported">${esc(gv.error)}</p>` : ''}
     ${summary ? `<p class="small">${summary}</p>` : ''}
-    <p class="muted small">The model sees only before/after images, not the detector's numbers, and says whether the outlined box changed. A second look, not validated.
+    <p class="muted small">The model sees only before/after images, not the detector's numbers, and says whether the outlined box changed. A second look, not validated: on development regions it did no better than chance (D15).
       ${st?.labelled_sites_locked ? 'The 30 labelled evaluation sites are skipped until the Phase 4 prompts are frozen.' : ''}</p></div>`;
 }
 

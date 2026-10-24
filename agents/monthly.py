@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .ee_engine import S2_COLLECTION, _ee
-from .landcover import DW_CLASSES, DW_COLLECTION, _batches
+from .landcover import DW_CLASSES, DW_COLLECTION
 from .study import REPO_ROOT
 
 MONTHLY_DIR = REPO_ROOT / "data" / "quangninh" / "monthly"
@@ -45,7 +45,11 @@ FALLBACK_DB = -18.0                    # used then (and recorded as such)
 MAX_SLOPE_DEG, MAX_ELEV_M = 15, 40     # never water: radar shadow on hills
 S2_CLEAR_SCL = [2, 4, 5, 6, 7]         # dark area, vegetation, bare, water, unclassified (not cloud / shadow / cirrus / snow / no data)
 STATS_SCALE = 20                       # m, AOI-level areas (10 m pixels at 20 m: areas within ~1 %)
-REGION_SCALE = 10
+REGION_SCALE = 20                      # m; 10 m requests over the big QN regions stalled for > 30 min
+REGION_BATCH_BYTES = 500_000           # GeoJSON per reduceRegions request
+REGION_BATCH_HA = 1_500                # region area per request (r239 alone is 3,275 ha)
+REQUEST_TIMEOUT_S = 600                # Earth Engine client deadline per request
+REQUEST_TRIES = 3
 MIN_REGION_CLASS_COVER = 0.5           # a region's monthly class needs Dynamic World on half its area
 DRY_SEASON_MONTHS = (10, 3)            # Oct – Mar: the months Dynamic World is usually clear (D11)
 TOP_TRANSITIONS = 6
@@ -381,36 +385,85 @@ METHOD = {
 
 
 # ---------- per-region series ----------
-def region_series(fc: dict, aoi: dict, start: str, end: str, thresholds: dict[str, dict] | None = None, log=print) -> dict:
+def region_batches(features: list[dict], max_bytes: int = REGION_BATCH_BYTES, max_ha: float = REGION_BATCH_HA) -> list[list[dict]]:
+    """Batches small enough for one reduceRegions request: at most max_bytes of GeoJSON and max_ha of
+    region area (the area sets the pixel count). A region larger than max_ha goes alone."""
+    out, cur, size, ha = [], [], 0, 0.0
+    for f in features:
+        n, a = len(json.dumps(f["geometry"])), f["properties"].get("area_ha", 0)
+        if cur and (size + n > max_bytes or ha + a > max_ha):
+            out.append(cur)
+            cur, size, ha = [], 0, 0.0
+        cur.append(f)
+        size, ha = size + n, ha + a
+    return out + ([cur] if cur else [])
+
+
+def get_info(obj: Any, what: str, tries: int = REQUEST_TRIES, log=print, sleep=None) -> Any:
+    """obj.getInfo() with retries (each attempt bounded by the client deadline set in region_series)."""
+    import time
+    sleep = sleep or time.sleep
+    for attempt in range(1, tries + 1):
+        try:
+            return obj.getInfo()
+        except Exception as exc:
+            if attempt == tries:
+                raise
+            log(f"  {what}: attempt {attempt} failed ({str(exc)[:120]}), retrying")
+            sleep(10 * attempt)
+
+
+def region_series(fc: dict, aoi: dict, start: str, end: str, thresholds: dict[str, dict] | None = None,
+                  done: dict | None = None, save=None, log=print) -> dict:
     """{'months': [...], 'regions': {id: {'class': [...], 'water': [...], 'clear': [...]}}}: per region and
-    month the Dynamic World class (null without enough cover), water share and share seen clear."""
-    ee = _ee()
+    month the Dynamic World class (null without enough cover), water share and share seen clear.
+
+    Resumable: `done` is {month: {id: [class, water, clear]}} from an earlier, interrupted run; months in it
+    are skipped. `save(done)` is called after every finished month."""
     windows = month_windows(start, end)
-    regions: dict[str, dict[str, list]] = {f["properties"]["id"]: {"class": [], "water": [], "clear": []} for f in fc["features"]}
-    batches = _batches(fc["features"])
-    reducer = ee.Reducer.mean().combine(ee.Reducer.mode(), sharedInputs=True)
-    for k, s, e in windows:
+    done = dict(done or {})
+    todo = [w for w in windows if w[0] not in done]
+    if todo:
+        ee = _ee()
+        ee.data.setDeadline(REQUEST_TIMEOUT_S * 1000)   # one stuck request must not freeze the run
+        batches = region_batches(fc["features"])
+        reducer = ee.Reducer.mean().combine(ee.Reducer.mode(), sharedInputs=True)
+    for k, s, e in todo:
         m = Month(ee, aoi, k, s, e, (thresholds or {}).get(k))
         clear_count, _ = m.clear
         bands = [clear_count.gt(0).rename("seen")]
-        dw = ee.ImageCollection(DW_COLLECTION).filterBounds(ee.Geometry(aoi)).filterDate(s, e).size().getInfo() > 0
+        dw = get_info(ee.ImageCollection(DW_COLLECTION).filterBounds(ee.Geometry(aoi)).filterDate(s, e).size(),
+                      f"{k} Dynamic World count", log=log) > 0
         if dw:
             bands += [m.label.rename("label"), m.label.mask().rename("cover")]
         if m.thresholds:
             bands.append(m.water.rename("water"))
         image = ee.Image.cat(bands)
         stats: dict[str, dict] = {}
-        for batch in batches:
+        for i, batch in enumerate(batches, 1):
             col = ee.FeatureCollection([ee.Feature(ee.Geometry(f["geometry"]), {"rid": f["properties"]["id"]}) for f in batch])
-            for feat in image.reduceRegions(collection=col, reducer=reducer, scale=REGION_SCALE, tileScale=4).getInfo()["features"]:
+            result = get_info(image.reduceRegions(collection=col, reducer=reducer, scale=REGION_SCALE, tileScale=8),
+                              f"{k} batch {i}/{len(batches)}", log=log)
+            for feat in result["features"]:
                 stats[feat["properties"]["rid"]] = feat["properties"]
-        for rid, series in regions.items():
-            st = stats.get(rid, {})
-            series["class"].append(region_class(st.get("label_mode"), st.get("cover_mean")) if dw else None)
-            series["water"].append(_r(st.get("water_mean"), 2))
-            series["clear"].append(_r(st.get("seen_mean"), 2))
-        log(f"{k}: {len(stats)} regions")
-    return {"months": [k for k, _, _ in windows], "regions": regions}
+        done[k] = {f["properties"]["id"]: [
+            region_class(st.get("label_mode"), st.get("cover_mean")) if dw else None,
+            _r(st.get("water_mean"), 2), _r(st.get("seen_mean"), 2)]
+            for f in fc["features"] for st in [stats.get(f["properties"]["id"], {})]}
+        if save:
+            save(done)
+        log(f"{k}: {len(stats)} regions ({len(done)}/{len(windows)} months)")
+    return series_from_months(fc, [k for k, _, _ in windows], done)
+
+
+def series_from_months(fc: dict, months: list[str], done: dict) -> dict:
+    """The served file shape from per-month results ({month: {id: [class, water, clear]}})."""
+    regions = {}
+    for f in fc["features"]:
+        rid = f["properties"]["id"]
+        rows = [done[k].get(rid, [None, None, None]) for k in months]
+        regions[rid] = {"class": [r[0] for r in rows], "water": [r[1] for r in rows], "clear": [r[2] for r in rows]}
+    return {"months": months, "regions": regions}
 
 
 def load(path: Path) -> dict | None:

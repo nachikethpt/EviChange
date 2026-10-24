@@ -150,3 +150,50 @@ def test_dry_seasons_inside_the_period():
     assert monthly.dry_seasons("2024-10", "2026-09") == [("2024-25", "2024-10-01", "2025-04-01"),
                                                          ("2025-26", "2025-10-01", "2026-04-01")]
     assert monthly.dry_seasons("2024-11", "2025-09") == []          # Oct 2024 missing: no full season
+
+
+def _region(rid, ha, n_points=5):
+    ring = [[107.3 + i * 1e-4, 21.0] for i in range(n_points)] + [[107.3, 21.0]]
+    return {"geometry": {"type": "Polygon", "coordinates": [ring]}, "properties": {"id": rid, "area_ha": ha}}
+
+
+def test_region_batches_cap_area_and_bytes():
+    feats = [_region("a", 400), _region("b", 400), _region("big", 3_275), _region("c", 300)]
+    assert [[f["properties"]["id"] for f in b] for b in monthly.region_batches(feats, max_ha=1_000)] == [["a", "b"], ["big"], ["c"]]
+    small = monthly.region_batches(feats, max_bytes=len(json.dumps(feats[0]["geometry"])) + 1, max_ha=1e9)
+    assert [len(b) for b in small] == [1, 1, 1, 1]
+
+
+def test_get_info_retries_then_raises():
+    class Flaky:
+        def __init__(self, fails):
+            self.fails, self.calls = fails, 0
+
+        def getInfo(self):
+            self.calls += 1
+            if self.calls <= self.fails:
+                raise TimeoutError("deadline exceeded")
+            return {"ok": True}
+
+    quiet = dict(log=lambda *_: None, sleep=lambda *_: None)
+    obj = Flaky(fails=2)
+    assert monthly.get_info(obj, "x", tries=3, **quiet) == {"ok": True} and obj.calls == 3
+    with pytest.raises(TimeoutError):
+        monthly.get_info(Flaky(fails=5), "x", tries=3, **quiet)
+
+
+def test_series_from_saved_months():
+    fc = {"features": [_region("r1", 1), _region("r2", 1)]}
+    done = {"2025-01": {"r1": ["trees", 0.1, 1.0], "r2": [None, 0.0, 0.5]},
+            "2025-02": {"r1": [None, 0.2, 0.0]}}                      # r2 missing that month
+    out = monthly.series_from_months(fc, ["2025-01", "2025-02"], done)
+    assert out["regions"]["r1"] == {"class": ["trees", None], "water": [0.1, 0.2], "clear": [1.0, 0.0]}
+    assert out["regions"]["r2"] == {"class": [None, None], "water": [0.0, None], "clear": [0.5, None]}
+
+
+def test_region_series_skips_months_already_done(monkeypatch):
+    monkeypatch.setattr(monthly, "_ee", lambda: pytest.fail("no Earth Engine call when every month is done"))
+    fc = {"features": [_region("r1", 1)]}
+    done = {"2025-01": {"r1": ["water", 1.0, 1.0]}}
+    out = monthly.region_series(fc, {}, "2025-01", "2025-01", done=done)
+    assert out == {"months": ["2025-01"], "regions": {"r1": {"class": ["water"], "water": [1.0], "clear": [1.0]}}}

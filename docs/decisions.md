@@ -290,7 +290,10 @@ AOI, yearly to 2023) is a pre-period reference only. At 10 m, single houses are 
   both months count, and `compared_ha` always goes with the gained / lost / changed areas. A month with
   no data gives `null`, never a guess.
 - *Per region:* for each change region and month, the class (null under 50 % Dynamic World cover),
-  the water share and the share seen clear.
+  the water share and the share seen clear. These are computed at 20 m, in requests of at most 1,500 ha
+  of regions, each with a 10-minute deadline and retries. The first try, at 10 m with no deadline,
+  stalled on one request for over 30 minutes. The run is saved after every month and resumes from
+  there. The QN run (504 regions × 24 months) took 83 minutes.
 - *API:*
   - `GET /api/monthly`: the summary.
   - `GET /api/monthly/layer?month=YYYY-MM&layer=class|water|clear|water_change|class_change&vs=base|prev`:
@@ -480,6 +483,111 @@ the labelled data show a reason to change them, and any change is recorded here.
 **Evaluation.** Break-month agreement with the Phase 14d labels (share within ± 1 month and within
 the reported window), and the share of detector regions CCDC calls seasonal rather than lasting.
 
+## D15 — Choosing the Geo-VLM model and image set before the freeze (2026-10-23; decided 2026-10-24)
+
+**Question.** Which model (Qwen2.5-VL-7B-Instruct, the default, or Qwen3-VL-8B-Instruct) and which
+image set (`rgb`, `rgb_swir`, `rgb_swir_cir`, see `agents/vlm_check.py`) the frozen Phase 4 prompts
+use. This is decided once, on development regions, before any test-set answer exists.
+
+**Sample.** 60 detected QN regions **outside** the 30 labelled sites, drawn once
+(`scripts/vlm_batch.py --draw`, seed 15) and committed (`data/quangninh/vlm_dev_sample.json`).
+- 30 regions change Dynamic World class and 30 don't, each half spread over the detector's change
+  types, so rare types are in.
+- Every model and image set gets the same regions and the same chip PNGs, cached on first render.
+- **Negative controls** (added 2026-10-23, before any Qwen3 answer):
+  - 20 boxes sized like the sample regions, inside the AOI, mostly not water in either window.
+  - No detected region within 200 m and no labelled site, so the detector saw nothing there
+    (`data/quangninh/vlm_dev_controls.json`).
+  - Without them, a model that always says "change" would look perfect on detected regions.
+- 6 conditions (2 models × 3 image sets) on 80 boxes: 480 checks. At ~4 s per answer on an L4,
+  that's under an hour of GPU per model.
+
+**Criteria, in this order.**
+1. *Readable answers:* parse failures above 2 % rule a condition out.
+   *Can it say no:* a condition that answers "change" on at least 90 % of the controls is ruled out too.
+   It doesn't tell change from no change, whatever it says on the detected regions.
+2. *Hand decisions on disagreements:* wherever the two models give different verdicts under the same
+   image set, P2 looks at the chips and decides change / no change / unsure, blind to which model said
+   what (`data/quangninh/vlm_dev_adjudication.json`). The share of these each condition gets right is
+   the main criterion: it is the only real reference outside the test set.
+3. *Dynamic World class change,* as an independent but weak reference. A class can stay the same
+   while the land changes (thinning, new houses in a built area), so this only breaks ties.
+4. *"Unsure" rate:* lower is better, but only as long as 2 and 3 don't get worse.
+5. *Same verdict across image sets:* a model whose verdict flips with the image set is fragile.
+6. *Seconds per answer:* only if everything above is equal.
+
+**Defaults.** If the evidence doesn't clearly favour Qwen3 (criterion 2 by at least 10 points, or
+1–3 together), Qwen2.5-VL-7B stays: it is the model the whole plan was built on. The image set is
+picked within the chosen model by the same criteria, with `rgb_swir` (v1) as the default.
+
+**Recorded.** `python scripts/vlm_compare.py --dev --out docs/vlm_compare_d15.md` writes every table.
+The choice and its reason are added here. Phase 4 then freezes the prompts on the chosen model and
+image set, and every reported run uses them.
+
+**First result: Qwen2.5-VL-7B with `vlmcheck_v1` (2026-10-23).** It answered "change" on 179 of 180
+detected-region checks and on **all 60** control checks, under every image set, mostly with the same
+sentence ("the vegetation appears greener in the AFTER image"). That includes boxes that are water
+in both windows and control chips that are visibly the same or browner. As prompted, it does not
+check anything.
+
+**Qwen3-VL-8B and the hand decisions (2026-10-24).** Full tables: `docs/vlm_compare_d15.md`.
+- *Qwen3 says "no change" sometimes:*
+  - Detected regions: 13–37 % "no change" depending on the image set.
+  - Controls: 0–55 % "no change". Only true colour stayed under the 90 % "change" limit.
+- *Hand decisions:* 42 regions where the two models disagreed (26 detected, 16 controls), decided
+  blind: 25 change, 10 no change, 7 unsure. Scored on the 35 firm calls (hits on the 25 "change" /
+  on the 10 "no change"):
+
+  | Condition | hits on "change" | hits on "no change" | balanced |
+  |---|---|---|---|
+  | Qwen2.5-VL-7B · any image set | 25/25 | 0/10 | 0.50 |
+  | Qwen3-VL-8B · rgb | 2/25 | 8/10 | 0.44 |
+  | Qwen3-VL-8B · rgb_swir | 20/25 | 2/10 | 0.50 |
+  | Qwen3-VL-8B · rgb_swir_cir | 14/25 | 4/10 | 0.48 |
+
+  No condition is better than chance on the hard cases. Qwen2.5 matches by always saying "change";
+  Qwen3 on true colour by mostly saying "no change".
+- *The controls rule is withdrawn.* The hand decisions found change in 8 of the 12 controls decided.
+  Over four years (2018–19 → 2022–23), land 200 m from any detection still often changes; the
+  detector misses it. So a control is not a "no change" reference, and the rule would have picked
+  Qwen3 · rgb, which disagrees with the hand decisions most. Withdrawn after seeing the data, and said
+  so here.
+- *The question is hard even for a person:* 7 of 42 decisions were "unsure" on 10 m chips.
+
+**Decision (2026-10-24).**
+- The Geo-VLM **model stays Qwen2.5-VL-7B-Instruct** (the default rule: Qwen3 did not clearly win).
+  Every reported Phase 4 run uses it.
+- **The region check (D7 candidate check) is cut from the evaluation**, as the plan's cut order says
+  ("cut the D7 candidate check first"). It stays in the app as "a second look, not validated", where
+  it never removes a region (D7). Its prompt (`vlmcheck_v1`) is not frozen and not reported as a
+  result, except as this negative finding.
+- Phase 4 goes on with the report prompts and the freeze. The gated / ungated report comparison
+  doesn't depend on the region check.
+
+**Addendum: the model is re-decided on report outputs (2026-10-24, written before any report output).**
+The region check is a yes/no image question; the reports are a different task. Keeping Qwen2.5 because
+of the check has a specific risk: its "always change" habit would make the **ungated** arm invent change,
+widening the gated-vs-ungated gap for a reason that has nothing to do with gating (a weak opponent).
+So both models run the report arms on the 80 development boxes (`scripts/report_dev.py`, same prompts
+v0, same chips), and the model for every reported run is chosen by these rules, in order:
+1. *Gated output must be usable:* parse failures plus dropped items on at most 5 % of gated reports.
+2. *Gated must not invent change:* the share of control boxes where the gated report claims change
+   (the template arm gets 0 %). Lower is better.
+3. *Gated claims must hold:* the verifier's unsupported rate on the detected boxes. Lower is better.
+4. *Ties (within 5 points on 2 and 3):* take the model whose **ungated** arm claims change on fewer
+   controls, i.e. the stronger opponent. This is the conservative choice: it can only make the gated
+   advantage smaller.
+
+The ungated results never decide the model except through rule 4. Whichever model wins, both models'
+development tables go into `docs/report_dev.md`. If Qwen3 wins, this addendum records the switch, and
+the plan's "Qwen2.5-VL-7B-Instruct for every reported run" changes with it.
+
+**Limits.**
+- 60 development regions, and the hand decisions come from the same person who builds the system.
+  They are made blind to the model, never on test sites.
+- A model that is better on these regions may still not be better on the 30 test sites. The freeze
+  makes sure that isn't tuned for.
+
 ## D16 — Ungated GPT as a secondary comparison arm (2026-10-23, proposed)
 
 **Why.** The obvious question about the Geo-VLM is "why not just ask GPT?". The three conditions
@@ -511,6 +619,15 @@ reference.
    where change is *in the box*. For both ungated arms, the verifier's location checks would then
    compare different frames. Options: recompute locations relative to the site box for every arm,
    or drop location wording from the ungated prompt.
+   **Decided 2026-10-24: recompute, for every arm** (`agents/site_evidence.py`). A site's evidence
+   is cut to the box:
+   - its regions are the ones overlapping the box;
+   - `area_ha` is the part inside the box, and `location` is where that part's centroid falls in a
+     3 × 3 grid over the box;
+   - `change_frac` is the detected share of the box.
+
+   All arms are verified against that evidence, and the gated arm is given it, so every location
+   claim is in the frame the images show.
 2. *Extractor validation.* Check the extractor on a sample of reports outside the 30 sites (claims
    missed, invented or mis-levelled) and report that rate; it is part of the measurement.
 

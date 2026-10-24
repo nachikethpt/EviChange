@@ -9,3 +9,4 @@ __pycache__/
 *.tiff
 webapp/backend/data/
 data/planet/raw/
+data/vlm_chips/
