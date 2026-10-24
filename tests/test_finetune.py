@@ -21,7 +21,9 @@ from webapp.backend.report import build_report  # noqa: E402
 def test_committed_training_boxes_respect_the_guards():
     boxes = json.loads(fd.BOXES.read_text(encoding="utf-8"))["boxes"]
     held, held_boxes = fd.holdout_ids(), fd.holdout_boxes()
-    assert len(boxes) == len({b["id"] for b in boxes}) and sum(b["kind"] == "detected" for b in boxes) == fd.N_DETECTED
+    first = [b for b in boxes if b.get("draw", 1) == 1]
+    assert len(boxes) == len({b["id"] for b in boxes}) and sum(b["kind"] == "detected" for b in first) == fd.N_DETECTED
+    assert all(b["kind"] == "detected" for b in boxes if b.get("draw") == 2)
     for b in boxes:
         box = tuple(b["box"])
         assert not fd.near_labelled_site(box), b["id"]

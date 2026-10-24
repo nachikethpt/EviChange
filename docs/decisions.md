@@ -669,8 +669,24 @@ weights stay frozen):
   added as a model input once loaded into Earth Engine. The untrained baseline is re-run on them too,
   so sharper images and training are measured separately.
 
+- *Second labeller and second draw:*
+  - P3 labels 100 of the training boxes, plus 16 of P2's labelled boxes repeated unmarked, for
+    inter-rater agreement. The repeats never replace P2's label in training
+    (`scripts/finetune_data.py`, `ft_assigned.json`).
+  - A second draw added 55 detected regions under the same guards. That is all that was left: 334
+    training boxes in all.
+- *Data from outside Quang Ninh (decided 2026-10-24):* **none in the first training run**, so its
+  result shows what our own labels do.
+  - **TERRA-CD** (Sentinel-2, 232 cities) is ruled out: its labels come from NDVI thresholds and an
+    SVM, the same signal as our detector, so the model would learn to copy the detector.
+  - **OSCD** is ruled out: its labels are urban change only, so its "no change" isn't trustworthy.
+  - **DynamicEarthNet** (Planet 3 m, 75 areas, hand-made monthly land-cover maps) is the candidate
+    for a second run with the Planet chips from November, after confirming its licence and
+    downloading only the monthly frames needed.
+  - Any outside data is training-only: the held-out set and the 30 sites stay Quang Ninh.
+
 **Limits.**
-- One labeller, who also built the system.
+- Two labellers, one of whom (P2) built the system; P2 labelled most of the boxes.
 - A few hundred boxes from one area and one date pair: the adapter learns Quang Ninh 2018/19 →
   2022/23, not change in general.
 - 10 m chips.

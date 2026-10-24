@@ -82,6 +82,19 @@ def draw(fc: dict, water=vlm_batch.water_share, seed: int = SEED) -> list[dict]:
     return out
 
 
+def draw_more(fc: dict, n: int, seed: int = SEED + 1) -> list[dict]:
+    """Up to n more detected regions under the same guards, none already drawn (a second draw, D17)."""
+    drawn = {b["id"] for b in json.loads(BOXES.read_text(encoding="utf-8"))["boxes"]}
+    held = holdout_ids()
+    keep = [f for f in fc["features"] if f["properties"]["id"] not in held | drawn
+            and not near_labelled_site(vlm_batch.bbox(f["geometry"]))]
+    ids = vlm_batch.draw_sample(keep, n=n, seed=seed)
+    by_id = {f["properties"]["id"]: f for f in fc["features"]}
+    out = [{"id": rid, "kind": "detected", "box": list(vlm_batch.bbox(by_id[rid]["geometry"])), "draw": 2} for rid in ids]
+    random.Random(seed).shuffle(out)
+    return out
+
+
 # ---------- labels ----------
 def read_labels(folder: Path | None = None, overlap: bool = False) -> dict[str, dict]:
     """{box id: {'verdict', 'types', 'labeller'}} from every file in the label folder (later files win).
@@ -181,6 +194,7 @@ def holdout_items(fc: dict) -> list[dict]:
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--draw", action="store_true")
+    ap.add_argument("--draw-more", type=int, metavar="N", help="add up to N more detected boxes under the same guards")
     ap.add_argument("--render", action="store_true")
     ap.add_argument("--sheet", action="store_true")
     ap.add_argument("--holdout", action="store_true", help="with --sheet / --render: the 80 held-out D15 boxes")
@@ -201,6 +215,14 @@ def main(argv: list[str] | None = None) -> None:
             "boxes": boxes}, indent=1), encoding="utf-8")
         print(f"{sum(b['kind'] == 'detected' for b in boxes)} detected + {sum(b['kind'] != 'detected' for b in boxes)} "
               f"no-detection boxes -> {BOXES}")
+        return
+    if args.draw_more:
+        data = json.loads(BOXES.read_text(encoding="utf-8"))
+        extra = draw_more(fc, args.draw_more)
+        data["boxes"] += extra
+        data["draws"] = data.get("draws", [{"n": len(data["boxes"]) - len(extra), "drawn": data["drawn"], "seed": data["seed"]}]) +             [{"n": len(extra), "drawn": date.today().isoformat(), "seed": SEED + 1, "rule": "same guards; detected regions not yet drawn"}]
+        BOXES.write_text(json.dumps(data, indent=1), encoding="utf-8")
+        print(f"{len(extra)} more detected boxes -> {BOXES} ({len(data['boxes'])} in all)")
         return
     items = holdout_items(fc) if args.holdout else json.loads(BOXES.read_text(encoding="utf-8"))["boxes"]
     if args.render:
