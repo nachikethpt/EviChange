@@ -46,7 +46,25 @@ def test_read_labels_later_file_wins_and_drops_junk(tmp_path):
     (tmp_path / "b.json").write_text(json.dumps({"r1": {"verdict": "unsure", "types": []}}))
     os.utime(tmp_path / "b.json")
     labels = fd.read_labels(tmp_path)
-    assert labels == {"r1": {"verdict": "unsure", "types": []}, "r3": {"verdict": "no_change", "types": []}}
+    assert labels == {"r1": {"verdict": "unsure", "types": [], "labeller": "P2"},
+                      "r3": {"verdict": "no_change", "types": [], "labeller": "P2"}}
+
+
+def test_repeats_for_agreement_never_replace_the_first_label(tmp_path, monkeypatch):
+    monkeypatch.setattr(fd, "ASSIGNED", tmp_path / "assigned.json")
+    labels_dir = tmp_path / "labels"
+    labels_dir.mkdir()
+    (labels_dir / "ft_label_1.json").write_text(json.dumps({"r1": {"verdict": "change", "types": []}}))
+    fd.assign("ft_label_p3_1", "P3", ["r2"], overlap=["r1"])
+    time.sleep(0.05)
+    (labels_dir / "ft_label_p3_1.json").write_text(json.dumps({"r1": {"verdict": "no_change", "types": []},
+                                                               "r2": {"verdict": "change", "types": ["other"]}}))
+    os.utime(labels_dir / "ft_label_p3_1.json")
+    train = fd.read_labels(labels_dir)
+    assert train["r1"] == {"verdict": "change", "types": [], "labeller": "P2"}          # P2's label kept for training
+    assert train["r2"]["labeller"] == "P3"
+    assert fd.read_labels(labels_dir, overlap=True) == {"r1": {"verdict": "no_change", "types": [], "labeller": "P3"}}
+    assert fd.labeller_of("ft_label_2.json") == "P2" and fd.labeller_of("ft_label_holdout.json") == "P2"
 
 
 def test_labelling_page_is_blind(tmp_path, monkeypatch):
@@ -127,3 +145,23 @@ def test_balanced_accuracy_and_scoring(tmp_path):
     assert s["parse_failures"] == 1 and s["on_change"] == 1.0 and s["on_no_change"] == 0.0
     (tmp_path / "check_train.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
     assert [r["id"] for r in ft.load_examples(tmp_path, "check", "train")] == ["a", "b"]
+
+
+def test_blanks_on_a_saved_page_return_to_the_pool(tmp_path, monkeypatch):
+    monkeypatch.setattr(fd, "ASSIGNED", tmp_path / "assigned.json")
+    monkeypatch.setattr(fd, "LABEL_DIR", tmp_path / "labels")
+    monkeypatch.setattr(fd, "ROOT", tmp_path)
+    monkeypatch.setattr(vb, "CHIP_DIR", tmp_path / "chips")
+    boxes = [{"id": f"b{i}", "kind": "detected", "box": [107.2 + i * 0.01, 21.0, 107.205 + i * 0.01, 21.005]} for i in range(4)]
+    monkeypatch.setattr(fd, "BOXES", tmp_path / "boxes.json")
+    (tmp_path / "boxes.json").write_text(json.dumps({"boxes": boxes}))
+    monkeypatch.setattr(fd, "rendered", lambda params, box: True)
+    monkeypatch.setattr(fd, "sheet", lambda items, params, title: " ".join(it["id"] for it in items))
+    fd.LABEL_DIR.mkdir()
+    fd.assign("ft_label_1", "P2", ["b0", "b1"])                       # open page: b0, b1 are taken
+    fd.assign("ft_label_p3_1", "P3", ["b2"])                          # open page: b2 is taken
+    fd.main(["--sheet"])
+    assert (tmp_path / "ft_label_2.html").read_text() == "b3"
+    (fd.LABEL_DIR / "ft_label_1.json").write_text(json.dumps({"b0": {"verdict": "change", "types": []}}))   # b1 left blank
+    fd.main(["--sheet"])
+    assert (tmp_path / "ft_label_3.html").read_text() == "b1"         # the blank comes back; b2 still with P3

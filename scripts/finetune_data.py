@@ -34,6 +34,7 @@ from agents.schema import CHANGE_TYPES             # noqa: E402
 
 BOXES = ROOT / "data" / "quangninh" / "ft_boxes.json"
 LABEL_DIR = ROOT / "data" / "quangninh" / "ft_labels"
+ASSIGNED = ROOT / "data" / "quangninh" / "ft_assigned.json"   # page -> {labeller, ids}: no box on two open pages
 N_DETECTED, N_NODETECT, SEED, SITE_BUFFER_M, SHEET_SIZE = 240, 60, 17, 500, 50
 ALL_KINDS = ("rgb", "swir", "cir")
 LABEL_TYPES = (*CHANGE_TYPES, "other")
@@ -82,21 +83,46 @@ def draw(fc: dict, water=vlm_batch.water_share, seed: int = SEED) -> list[dict]:
 
 
 # ---------- labels ----------
-def read_labels(folder: Path | None = None) -> dict[str, dict]:
-    """{box id: {'verdict', 'types'}} from every file in the label folder (later files win)."""
+def read_labels(folder: Path | None = None, overlap: bool = False) -> dict[str, dict]:
+    """{box id: {'verdict', 'types', 'labeller'}} from every file in the label folder (later files win).
+    Boxes repeated on another labeller's page for agreement are skipped there, so training keeps the first
+    label; with overlap=True only those repeats are returned (for kappa)."""
     folder = Path(folder or LABEL_DIR)
+    assigned = read_assigned()
     out: dict[str, dict] = {}
     for p in sorted(folder.glob("*.json"), key=lambda p: p.stat().st_mtime):
+        repeats = set(assigned.get(p.stem, {}).get("overlap", []))
         for bid, lab in json.loads(p.read_text(encoding="utf-8")).items():
+            if (bid in repeats) != overlap:
+                continue
             if isinstance(lab, dict) and lab.get("verdict") in vlm_check.VERDICTS:
                 types = [t for t in lab.get("types") or [] if t in LABEL_TYPES]
-                out[bid] = {"verdict": lab["verdict"], "types": types if lab["verdict"] == "change" else []}
+                out[bid] = {"verdict": lab["verdict"], "types": types if lab["verdict"] == "change" else [],
+                            "labeller": labeller_of(p.name)}
     return out
 
 
 def rendered(params: dict, box: tuple) -> bool:
     folder = vlm_batch.chip_dir(params, box)
     return all((folder / f"{w}_{k}.png").exists() for k in ALL_KINDS for w in ("before", "after"))
+
+
+# ---------- page assignments ----------
+def read_assigned() -> dict:
+    return json.loads(ASSIGNED.read_text(encoding="utf-8")) if ASSIGNED.exists() else {}
+
+
+def assign(page: str, labeller: str, ids: list[str], overlap: list[str] = ()) -> None:
+    """Record a page's boxes; `overlap` = boxes another labeller already labelled, repeated for agreement (kappa)."""
+    data = read_assigned()
+    data[page] = {"labeller": labeller, "ids": list(ids), "overlap": list(overlap)}
+    ASSIGNED.write_text(json.dumps(data, indent=1), encoding="utf-8")
+
+
+def labeller_of(label_file: str) -> str:
+    """'ft_label_p3_1.json' -> 'P3'; every other label file is P2's (the default labeller, D17)."""
+    stem = Path(label_file).stem
+    return stem.split("_")[2].upper() if stem.startswith("ft_label_p") and stem.split("_")[2][1:].isdigit() else "P2"
 
 
 # ---------- labelling page ----------
@@ -158,6 +184,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--render", action="store_true")
     ap.add_argument("--sheet", action="store_true")
     ap.add_argument("--holdout", action="store_true", help="with --sheet / --render: the 80 held-out D15 boxes")
+    ap.add_argument("--labeller", default="P2", help="with --sheet: who labels the page (P2 default; e.g. P3)")
+    ap.add_argument("--overlap", type=int, default=0, help="with --sheet: also repeat this many boxes already labelled, for kappa")
     ap.add_argument("--status", action="store_true")
     args = ap.parse_args(argv)
     sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
@@ -197,16 +225,27 @@ def main(argv: list[str] | None = None) -> None:
               f"({sum(labels[it['id']]['verdict'] == 'unsure' for it in done)} unsure)")
         return
     if args.sheet:
-        ready = [it for it in items if it["id"] not in labels and rendered(params, tuple(it["box"]))]
+        assigned = read_assigned()
+        saved = {f.stem for f in LABEL_DIR.glob("*.json")} if LABEL_DIR.exists() else set()
+        taken = {i for name, page in assigned.items() if name not in saved for i in page["ids"]}   # open pages only
+        ready = [it for it in items if it["id"] not in labels and it["id"] not in taken and rendered(params, tuple(it["box"]))]
         if not args.holdout:
             ready = ready[:SHEET_SIZE]
         if not ready:
-            raise SystemExit("nothing to label: everything rendered is labelled (run --render, or --status)")
-        n = len(list(LABEL_DIR.glob("*.json"))) + 1 if LABEL_DIR.exists() else 1
-        name = "ft_label_holdout" if args.holdout else f"ft_label_{n}"
+            raise SystemExit("nothing to label: every rendered box is labelled or on an open page (run --status)")
+        who = args.labeller.lower()
+        prefix = "ft_label" if who == "p2" else f"ft_label_{who}"
+        n = 1 + sum(1 for k in assigned if k.startswith(prefix + "_") and k[len(prefix) + 1:].isdigit())
+        name = "ft_label_holdout" if args.holdout else f"{prefix}_{n}"
+        overlap = []
+        if args.overlap and not args.holdout:
+            done = sorted(i for i, lab in labels.items() if lab["verdict"] != "unsure" and i in {it["id"] for it in items})
+            overlap = random.Random(f"{SEED}-{name}").sample(done, min(args.overlap, len(done)))
+        page_items = ready + [it for it in items if it["id"] in overlap]
         out = ROOT / f"{name}.html"
-        out.write_text(sheet(ready, params, name.replace("_", " ")), encoding="utf-8")
-        print(f"{len(ready)} boxes -> {out}  (Save, then put the .json in {LABEL_DIR})")
+        out.write_text(sheet(page_items, params, name.replace("_", " ")), encoding="utf-8")
+        assign(name, args.labeller.upper(), [it["id"] for it in ready], overlap)
+        print(f"{len(page_items)} boxes ({len(overlap)} repeated for agreement) -> {out}  (Save, then put the .json in {LABEL_DIR})")
 
 
 if __name__ == "__main__":
