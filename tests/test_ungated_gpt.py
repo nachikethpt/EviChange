@@ -94,8 +94,8 @@ def test_parse_claims(text, n, ok, dropped):
 
 def test_ungated_gpt_report_end_to_end(tmp_path):
     """GPT text -> Geo-VLM extractor -> verifier, all from replay files."""
-    gpt = GPTClient(mode="replay", replay_file=replay(tmp_path, "gpt.json", {"ungated_report_v0:ungated_gpt:s1": GPT_TEXT}))
-    ext = VLMClient(mode="replay", replay_file=replay(tmp_path, "ext.json", {"claim_extract_v0:ungated_gpt:s1": EXTRACTED}))
+    gpt = GPTClient(mode="replay", replay_file=replay(tmp_path, "gpt.json", {f"{ungated.REPORT_PROMPT_VERSION}:ungated_gpt:s1": GPT_TEXT}))
+    ext = VLMClient(mode="replay", replay_file=replay(tmp_path, "ext.json", {f"{ungated.EXTRACT_PROMPT_VERSION}:ungated_gpt:s1": EXTRACTED}))
     out = ungated.run_ungated(gpt, ext, "ungated_gpt", "s1", BEFORE, AFTER, [b"a", b"b", b"c", b"d"])
     assert out["raw"] == GPT_TEXT and out["parse_ok"] and len(out["claims"]) == 5
     rep = build_report(EV, "ungated_gpt", ungated=out)
@@ -103,7 +103,7 @@ def test_ungated_gpt_report_end_to_end(tmp_path):
     assert verdicts["The clearing is for open-pit coal mining."] == ("unsupported", "beyond_evidence")
     assert verdicts["The mine is likely unlicensed."] == ("unsupported", "beyond_evidence")
     assert verdicts["About 180 ha changed."] == ("supported", "extent_matches")
-    assert rep["status"] == "ok" and rep["extract_version"] == "claim_extract_v0"
+    assert rep["status"] == "ok" and rep["extract_version"] == ungated.EXTRACT_PROMPT_VERSION
     assert rep["counts"]["unsupported"] >= 2
 
 
@@ -145,9 +145,9 @@ def test_api_ungated_gpt_runs_once_and_caches(tmp_path, monkeypatch):
     monkeypatch.setattr(main.vlm_check, "touches_labelled_site", lambda bbox: False)
     monkeypatch.setattr(main.ee_engine, "region_chips", fake_chips)
     monkeypatch.setattr(main, "gpt", GPTClient(mode="replay", replay_file=replay(
-        tmp_path, "gpt.json", {f"ungated_report_v0:ungated_gpt:{sel}": GPT_TEXT})))
+        tmp_path, "gpt.json", {f"{ungated.REPORT_PROMPT_VERSION}:ungated_gpt:{sel}": GPT_TEXT})))
     monkeypatch.setattr(main, "vlm", VLMClient(mode="replay", replay_file=replay(
-        tmp_path, "ext.json", {f"claim_extract_v0:ungated_gpt:{sel}": EXTRACTED})))
+        tmp_path, "ext.json", {f"{ungated.EXTRACT_PROMPT_VERSION}:ungated_gpt:{sel}": EXTRACTED})))
     monkeypatch.setattr(main, "_ungated_gpt_runs", {})
     client = TestClient(main.app)
     for _ in range(2):

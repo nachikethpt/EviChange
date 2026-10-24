@@ -170,3 +170,53 @@ def test_claims_change():
     assert rd.claims_change({"claims": [{"level": "L1", "text": "Change occurred."}]}) is True
     assert rd.claims_change({"claims": [{"level": "L4", "text": "It is a mine."}]}) is False
     assert rd.claims_change({"claims": [{"level": "L3", "text": "Vegetation loss."}]}) is True
+
+
+# ---------- shoreline / coastal claims (D13) ----------
+COAST_EV = {
+    "change_frac": 0.02,
+    "regions": [{"id": "r1", "area_ha": 182.4, "mean_conf": 0.86, "dNDVI": -0.34, "dNDBI": 0.21, "dMNDWI": -0.03,
+                 "location": "north-east", "class_before": "trees", "class_after": "bare"}],
+    "transects": [
+        {"id": "t0001", "location": "north-east", "change": "advancing", "nsm": 42.0, "lrr": 21.5, "ci95": 6.0},
+        {"id": "t0004", "location": "west", "change": "unconfirmed", "nsm": -35.0, "lrr": -17.0, "ci95": 9.0},
+    ],
+    "coastal_strips": [
+        {"strip": "0-200", "built_ha_before": 12.0, "built_ha_after": 15.1},
+        {"strip": "200-500", "built_ha_before": 30.0, "built_ha_after": 30.2},
+    ],
+}
+
+
+def test_v0_prompt_offers_only_region_claim_types():
+    """The box evidence has no transects or strips yet, so gated_report_v0 must not invite coast claims."""
+    p = gated.build_prompt({"change_frac": 0.0, "regions": []}, ["a", "b"], ["c", "d"])
+    assert "shoreline" not in p and "coastal_built" not in p and "built_ha_before" not in p
+
+
+def test_parser_keeps_coast_fields():
+    answer = json.dumps({"claims": [
+        {"text": "At transect t0001 the shoreline moved about 42 m seaward.", "level": "L2", "type": "shoreline",
+         "transect_ref": "t0001", "shoreline_change": "advancing", "evidence_ref": ["change", "nsm"]},
+        {"text": "Built area within 200 m of the shore grew by about 3 ha.", "level": "L2", "type": "coastal_built",
+         "strip": "0-200", "evidence_ref": ["built_ha_before", "built_ha_after"]}], "abstain": []})
+    claims, _, ok, dropped = gated.parse_report(answer)
+    assert ok and dropped == 0 and claims[0]["transect_ref"] == "t0001" and claims[1]["strip"] == "0-200"
+    rep = build_report(COAST_EV, "gated", gated={"raw": answer, "model": "m", "claims": claims, "abstain": [],
+                                                 "parse_ok": True, "dropped": 0, "prompt_version": gated.PROMPT_VERSION})
+    assert rep["counts"] == {"supported": 2, "unsupported": 0, "uncertain": 0}
+
+
+def test_template_states_the_coast_and_the_verifier_agrees():
+    from webapp.backend.report import template_claims
+    coast = [c for c in template_claims(COAST_EV) if c["type"] in ("shoreline", "coastal_built")]
+    assert [c["type"] for c in coast] == ["shoreline", "coastal_built", "coastal_built"]   # unconfirmed transect: no claim
+    rep = build_report(COAST_EV, "template")
+    assert all(c["verdict"] == "supported" for c in rep["claims"] if c["type"] in ("shoreline", "coastal_built"))
+    no_regions = template_claims({**COAST_EV, "regions": []})
+    assert no_regions[0]["type"] == "presence" and len(no_regions) == 4
+
+
+def test_demo_gated_abstains_on_unconfirmed_shoreline():
+    rep = build_report(COAST_EV, "gated")
+    assert any("t0004" in a["topic"] for a in rep["abstain"])
