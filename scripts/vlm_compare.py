@@ -64,7 +64,7 @@ def summary(checks: dict[tuple, dict]) -> str:
         secs = [r["seconds"] for r in recs if r.get("seconds") is not None]
         lines.append(f"| {cond} | {n} | {_pct(v['change'], n)} | {_pct(v['no_change'], n)} | {_pct(v['unsure'], n)} | "
                      + " | ".join(_pct(a[x], n) for x in AGREEMENTS)
-                     + f" | {sum(not r.get('parse_ok', True) for r in recs)} | {statistics.median(secs) if secs else '–'} |")
+                     + f" | {sum(not r.get('parse_ok', True) for r in recs)} | {round(statistics.median(secs), 1) if secs else '–'} |")
     return "\n".join(lines)
 
 
