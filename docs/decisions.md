@@ -587,6 +587,15 @@ reference.
    where change is *in the box*. For both ungated arms, the verifier's location checks would then
    compare different frames. Options: recompute locations relative to the site box for every arm,
    or drop location wording from the ungated prompt.
+   **Decided 2026-10-24: recompute, for every arm** (`agents/site_evidence.py`). A site's evidence
+   is cut to the box:
+   - its regions are the ones overlapping the box;
+   - `area_ha` is the part inside the box, and `location` is where that part's centroid falls in a
+     3 × 3 grid over the box;
+   - `change_frac` is the detected share of the box.
+
+   All arms are verified against that evidence, and the gated arm is given it, so every location
+   claim is in the frame the images show.
 2. *Extractor validation.* Check the extractor on a sample of reports outside the 30 sites (claims
    missed, invented or mis-levelled) and report that rate; it is part of the measurement.
 
