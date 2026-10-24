@@ -621,3 +621,72 @@ reference.
 record the dated model name the API returns). GPT sees PNG chips at its own image resolution, not
 the 10 m pixels. A better GPT result would not say the Geo-VLM is worse at describing imagery; the
 claim tested is about unsupported claims reaching the user.
+
+## D17 — Fine-tuning the Geo-VLM on our own labels (2026-10-24, proposed)
+
+**Why.** Zero-shot, neither Qwen model told change from no change on development boxes (D15: about
+chance against blind hand decisions), and the region check was cut. Fine-tuning on labels from this
+area is the obvious next step, and the user decided to take it for both tasks.
+
+**Labels.** About 300 **new** development boxes, labelled blind by P2 from the chips only (true
+colour, SWIR, colour infrared, before and after). Each box gets change / no change / unsure, plus the
+change types seen (`schema.CHANGE_TYPES` + other), as for the Phase 3 labels.
+- *Boxes:* 240 detected regions (stratified like the D15 sample) and 60 boxes with no detection within
+  200 m, so the model sees both answers.
+- *Leakage guards:*
+  - Never a labelled site and never within **500 m** of one (enforced in code).
+  - Never one of the 80 D15 boxes: those become the **held-out development test**, labelled the same way.
+- *Dynamic World is not a label source.* It disagreed with the hand decisions on 13 of the 18 detected
+  boxes where it kept the same class.
+- "Unsure" boxes are left out of training.
+
+**Two fine-tuned tasks** (LoRA adapters on the base model chosen by the D15 addendum; the base
+weights stay frozen):
+1. *Region check:* chips → `{"verdict", "change_types"}` (the `vlmcheck` answer shape). The target
+   is the hand label.
+2. *Gated report:* chips + box evidence → the gated JSON (`agents/gated.py`). The target is built per
+   box: claims that are **in the evidence and true per the hand label**, abstentions for the rest
+   (causes, legality, the future, and evidence the label contradicts). It is not the rule-based
+   template; that would only teach the model to be the template.
+
+**Evaluation (pre-specified here, before any training).**
+- The primary comparison is unchanged: post-gate hallucination rate, gated vs ungated, **both on
+  the base model**.
+- A new secondary arm, `gated_ft` (fine-tuned gated), is compared with gated-base, which separates
+  the effect of training from the effect of gating.
+- The ungated arms stay untrained: they stand for a model used "the usual way" (D16).
+- The fine-tuned check is scored against the held-out development labels first (balanced accuracy,
+  as D15), then on the 30 sites against the Phase 3 labels.
+
+**As drawn (2026-10-24).**
+- *Boxes:* 240 detected + **39** no-detection boxes (`data/quangninh/ft_boxes.json`, seed 17). Only about
+  40 land boxes in the AOI clear both guards; most of the AOI is sea or near a detection.
+- *Planet:* 3 m PlanetScope for the two detector windows was planned, one clear day each, 4-band, since
+  the 2018 Doves have no 8-band: 2018-11-01 (3 scenes) and 2023-02-28 (1 scene), about 512 km². The
+  order was refused because the October quota was used up. It goes **first on the November quota**, and
+  the year-2 monthly months that no longer fit move to December (`scripts/planet_order.py --window`).
+- *Labels are made on the Sentinel-2 chips,* starting now, not waiting for Planet. Planet chips are
+  added as a model input once loaded into Earth Engine. The untrained baseline is re-run on them too,
+  so sharper images and training are measured separately.
+
+- *Second labeller and second draw:*
+  - P3 labels 100 of the training boxes, plus 16 of P2's labelled boxes repeated unmarked, for
+    inter-rater agreement. The repeats never replace P2's label in training
+    (`scripts/finetune_data.py`, `ft_assigned.json`).
+  - A second draw added 55 detected regions under the same guards. That is all that was left: 334
+    training boxes in all.
+- *Data from outside Quang Ninh (decided 2026-10-24):* **none in the first training run**, so its
+  result shows what our own labels do.
+  - **TERRA-CD** (Sentinel-2, 232 cities) is ruled out: its labels come from NDVI thresholds and an
+    SVM, the same signal as our detector, so the model would learn to copy the detector.
+  - **OSCD** is ruled out: its labels are urban change only, so its "no change" isn't trustworthy.
+  - **DynamicEarthNet** (Planet 3 m, 75 areas, hand-made monthly land-cover maps) is the candidate
+    for a second run with the Planet chips from November, after confirming its licence and
+    downloading only the monthly frames needed.
+  - Any outside data is training-only: the held-out set and the 30 sites stay Quang Ninh.
+
+**Limits.**
+- Two labellers, one of whom (P2) built the system; P2 labelled most of the boxes.
+- A few hundred boxes from one area and one date pair: the adapter learns Quang Ninh 2018/19 →
+  2022/23, not change in general.
+- 10 m chips.
