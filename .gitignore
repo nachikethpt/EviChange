@@ -10,3 +10,4 @@ __pycache__/
 webapp/backend/data/
 data/planet/raw/
 data/vlm_chips/
+data/finetune/chips.zip
