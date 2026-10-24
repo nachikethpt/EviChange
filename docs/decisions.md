@@ -469,7 +469,7 @@ the labelled data show a reason to change them, and any change is recorded here.
 **Evaluation.** Break-month agreement with the Phase 14d labels (share within ± 1 month and within
 the reported window), and the share of detector regions CCDC calls seasonal rather than lasting.
 
-## D15 — Choosing the Geo-VLM model and image set before the freeze (2026-10-23, proposed)
+## D15 — Choosing the Geo-VLM model and image set before the freeze (2026-10-23; decided 2026-10-24)
 
 **Question.** Which model (Qwen2.5-VL-7B-Instruct, the default, or Qwen3-VL-8B-Instruct) and which
 image set (`rgb`, `rgb_swir`, `rgb_swir_cir`, see `agents/vlm_check.py`) the frozen Phase 4 prompts
@@ -514,9 +514,41 @@ image set, and every reported run uses them.
 detected-region checks and on **all 60** control checks, under every image set, mostly with the same
 sentence ("the vegetation appears greener in the AFTER image"). That includes boxes that are water
 in both windows and control chips that are visibly the same or browner. As prompted, it does not
-check anything. If Qwen3 does no better, the prompt is the problem, and it gets reworked on these
-development boxes before the freeze: describe both images before the verdict, no change as the
-default, perhaps more context than the 600 m chip.
+check anything.
+
+**Qwen3-VL-8B and the hand decisions (2026-10-24).** Full tables: `docs/vlm_compare_d15.md`.
+- *Qwen3 says "no change" sometimes:*
+  - Detected regions: 13–37 % "no change" depending on the image set.
+  - Controls: 0–55 % "no change". Only true colour stayed under the 90 % "change" limit.
+- *Hand decisions:* 42 regions where the two models disagreed (26 detected, 16 controls), decided
+  blind: 25 change, 10 no change, 7 unsure. Scored on the 35 firm calls (hits on the 25 "change" /
+  on the 10 "no change"):
+
+  | Condition | hits on "change" | hits on "no change" | balanced |
+  |---|---|---|---|
+  | Qwen2.5-VL-7B · any image set | 25/25 | 0/10 | 0.50 |
+  | Qwen3-VL-8B · rgb | 2/25 | 8/10 | 0.44 |
+  | Qwen3-VL-8B · rgb_swir | 20/25 | 2/10 | 0.50 |
+  | Qwen3-VL-8B · rgb_swir_cir | 14/25 | 4/10 | 0.48 |
+
+  No condition is better than chance on the hard cases. Qwen2.5 matches by always saying "change";
+  Qwen3 on true colour by mostly saying "no change".
+- *The controls rule is withdrawn.* The hand decisions found change in 8 of the 12 controls decided.
+  Over four years (2018–19 → 2022–23), land 200 m from any detection still often changes; the
+  detector misses it. So a control is not a "no change" reference, and the rule would have picked
+  Qwen3 · rgb, which disagrees with the hand decisions most. Withdrawn after seeing the data, and said
+  so here.
+- *The question is hard even for a person:* 7 of 42 decisions were "unsure" on 10 m chips.
+
+**Decision (2026-10-24).**
+- The Geo-VLM **model stays Qwen2.5-VL-7B-Instruct** (the default rule: Qwen3 did not clearly win).
+  Every reported Phase 4 run uses it.
+- **The region check (D7 candidate check) is cut from the evaluation**, as the plan's cut order says
+  ("cut the D7 candidate check first"). It stays in the app as "a second look, not validated", where
+  it never removes a region (D7). Its prompt (`vlmcheck_v1`) is not frozen and not reported as a
+  result, except as this negative finding.
+- Phase 4 goes on with the report prompts and the freeze. The gated / ungated report comparison
+  doesn't depend on the region check.
 
 **Limits.**
 - 60 development regions, and the hand decisions come from the same person who builds the system.
