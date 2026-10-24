@@ -17,74 +17,26 @@ import argparse
 import collections
 import json
 import math
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+from agents.site_evidence import M_PER_DEG, area_m2, bbox, inside_part, overlaps  # noqa: E402  (shared clipping)
+
 LABELS = ROOT / "data" / "quangninh" / "labels"
-M_PER_DEG = 111_320
 NEAR_M = 200
-
-
-def clip_ring(ring, w, s, e, n):
-    """Sutherland–Hodgman: the part of a ring inside an axis-aligned box (area-correct for any ring)."""
-    def clip(points, inside, cross):
-        out = []
-        for i, cur in enumerate(points):
-            prev = points[i - 1]
-            if inside(cur):
-                if not inside(prev):
-                    out.append(cross(prev, cur))
-                out.append(cur)
-            elif inside(prev):
-                out.append(cross(prev, cur))
-        return out
-
-    def at_x(x):
-        return lambda a, b: (x, a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0]))
-
-    def at_y(y):
-        return lambda a, b: (a[0] + (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]), y)
-
-    pts = [tuple(p[:2]) for p in ring[:-1]] if ring[0] == ring[-1] else [tuple(p[:2]) for p in ring]
-    for inside, cross in ((lambda p: p[0] >= w, at_x(w)), (lambda p: p[0] <= e, at_x(e)),
-                          (lambda p: p[1] >= s, at_y(s)), (lambda p: p[1] <= n, at_y(n))):
-        if not pts:
-            break
-        pts = clip(pts, inside, cross)
-    return pts
-
-
-def area_m2(points, lat0):
-    """Shoelace area of lon/lat points on a local equirectangular projection (fine at site scale)."""
-    kx = M_PER_DEG * math.cos(math.radians(lat0))
-    xy = [(x * kx, y * M_PER_DEG) for x, y in points]
-    return abs(sum(x1 * y2 - x2 * y1 for (x1, y1), (x2, y2) in zip(xy, xy[1:] + xy[:1]))) / 2
-
-
-def polygons(geom):
-    return [geom["coordinates"]] if geom["type"] == "Polygon" else geom["coordinates"]
-
-
-def bbox(geom):
-    xs = [p[0] for poly in polygons(geom) for p in poly[0]]
-    ys = [p[1] for poly in polygons(geom) for p in poly[0]]
-    return min(xs), min(ys), max(xs), max(ys)
 
 
 def covered_m2(geom, box, lat0):
     """Area of the region inside the box: clipped outer rings minus clipped holes."""
-    return sum(area_m2(clip_ring(poly[0], *box), lat0) - sum(area_m2(clip_ring(h, *box), lat0) for h in poly[1:])
-               for poly in polygons(geom))
+    return inside_part(geom, box)[0]
 
 
 def expand(box, metres, lat0):
     dx, dy = metres / (M_PER_DEG * math.cos(math.radians(lat0))), metres / M_PER_DEG
     w, s, e, n = box
     return w - dx, s - dy, e + dx, n + dy
-
-
-def overlaps(a, b):
-    return a[0] <= b[2] and a[2] >= b[0] and a[1] <= b[3] and a[3] >= b[1]
 
 
 def main():

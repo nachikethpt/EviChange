@@ -92,10 +92,14 @@ def gated_claims(ev):
     return _number(claims), abstain
 
 
-def build_report(ev, condition, ungated=None):
-    """`ungated`: run_ungated() output for the "ungated" / "ungated_gpt" arms, else None."""
+def build_report(ev, condition, ungated=None, gated=None):
+    """`ungated`: run_ungated() output for the "ungated" / "ungated_gpt" arms; `gated`: run_gated() output
+    (agents/gated.py) for the "gated" arm. Without them, the arms use the demo stand-ins above."""
     raw, abstain, model, extra = None, [], "demo (no AI yet)", {}
-    if condition in ("ungated", "ungated_gpt") and ungated is not None:
+    if condition == "gated" and gated is not None:
+        raw, claims, abstain, model = gated["raw"], [dict(c) for c in gated["claims"]], list(gated["abstain"]), gated["model"]
+        extra = {k: gated[k] for k in ("parse_ok", "dropped", "prompt_version")}
+    elif condition in ("ungated", "ungated_gpt") and ungated is not None:
         raw, claims, model = ungated["raw"], [dict(c) for c in ungated["claims"]], ungated["model"]
         extra = {k: ungated[k] for k in ("parse_ok", "dropped", "extractor_model", "prompt_version", "extract_version")}
     elif condition == "ungated_gpt":
