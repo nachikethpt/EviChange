@@ -550,6 +550,24 @@ check anything.
 - Phase 4 goes on with the report prompts and the freeze. The gated / ungated report comparison
   doesn't depend on the region check.
 
+**Addendum: the model is re-decided on report outputs (2026-10-24, written before any report output).**
+The region check is a yes/no image question; the reports are a different task. Keeping Qwen2.5 because
+of the check has a specific risk: its "always change" habit would make the **ungated** arm invent change,
+widening the gated-vs-ungated gap for a reason that has nothing to do with gating (a weak opponent).
+So both models run the report arms on the 80 development boxes (`scripts/report_dev.py`, same prompts
+v0, same chips), and the model for every reported run is chosen by these rules, in order:
+1. *Gated output must be usable:* parse failures plus dropped items on at most 5 % of gated reports.
+2. *Gated must not invent change:* the share of control boxes where the gated report claims change
+   (the template arm gets 0 %). Lower is better.
+3. *Gated claims must hold:* the verifier's unsupported rate on the detected boxes. Lower is better.
+4. *Ties (within 5 points on 2 and 3):* take the model whose **ungated** arm claims change on fewer
+   controls, i.e. the stronger opponent. This is the conservative choice: it can only make the gated
+   advantage smaller.
+
+The ungated results never decide the model except through rule 4. Whichever model wins, both models'
+development tables go into `docs/report_dev.md`. If Qwen3 wins, this addendum records the switch, and
+the plan's "Qwen2.5-VL-7B-Instruct for every reported run" changes with it.
+
 **Limits.**
 - 60 development regions, and the hand decisions come from the same person who builds the system.
   They are made blind to the model, never on test sites.
