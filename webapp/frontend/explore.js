@@ -116,7 +116,10 @@ function initExplorer() {
   layer.data.features.forEach(f => {
     explore.meta.set(f.properties.id, { fid: f.properties.__fid, bbox: turf.bbox(f), anchor: turf.pointOnFeature(f).geometry.coordinates });
   });
-  map.on('moveend', () => { refreshMarkers(); if (state.panel === 'changes' && explore.scope === 'view' && !explore.regionId) renderPanel(); });
+  if (!explore.moveBound) {          // initExplorer runs again for every run: bind the listener once
+    explore.moveBound = true;
+    map.on('moveend', () => { refreshMarkers(); if (state.panel === 'changes' && explore.scope === 'view' && !explore.regionId) renderPanel(); });
+  }
   applyFilter();
   loadVlmStatus();   // geovlm.js
 }
@@ -146,8 +149,8 @@ function matchesFilter(f, flt = explore.filter) {
 function filterActive() { const f = explore.filter; return !!(f.types || f.minHa != null || f.maxHa != null || f.locations || f.top || f.classFrom || f.classTo); }
 
 /** Regions in the scope that match the filter, largest first (defaults: the panel's current search). */
-function currentResults(flt = explore.filter, scope = explore.scope) {
-  const res = allRegions().filter(f => inScope(f, scope) && matchesFilter(f, flt)).sort((a, b) => b.properties.area_ha - a.properties.area_ha);
+function currentResults(flt = explore.filter, scope = explore.scope, keepRejected = false) {
+  const res = allRegions().filter(f => inScope(f, scope) && matchesFilter(f, flt) && (keepRejected || !vlmHidden(f.properties.id))).sort((a, b) => b.properties.area_ha - a.properties.area_ha);
   return flt.top ? res.slice(0, flt.top) : res;
 }
 
@@ -365,23 +368,26 @@ function describeFilter(flt, scope) {
 const SELECT_VERBS = /^\s*(also select|select|choose|pick|highlight|add|remove|deselect|unselect)\b\s*/i;
 const SELECT_MODES = { add: 'add', 'also select': 'add', remove: 'remove', deselect: 'remove', unselect: 'remove' };
 
-function askChat(text) {
+async function askChat(text) {
   text = text.trim(); if (!text) return;
   explore.chat.push({ who: 'you', html: esc(text) });
   const verb = text.match(SELECT_VERBS);
   if (verb) return askSelect(verb[1].toLowerCase(), text.slice(verb[0].length));
-  const r = parseQuery(text);
+  const r = await interpretRequest(text);   // chatsearch.js: Geo-VLM reads the sentence first, the keyword parser is the fallback
   if (r.reset) {
     explore.scope = 'all'; clearFilter();
     explore.chat.push({ who: 'bot', html: `Showing all ${allRegions().length} change regions again.` });
   } else if (!r.understood) {
     explore.chat.push({ who: 'bot', html: `I can search by <b>type</b> (vegetation, bare/built-up ground, water, mining-like), <b>gain or loss</b>, <b>size</b> ("bigger than 10 ha"), <b>location</b> ("in the north-east"), <b>largest N</b>, and <b>where</b> ("in this area" for a drawn area, "in view"). Start with <b>select</b>, <b>add</b> or <b>remove</b> to change the map selection instead. Try one of the examples below.` });
+  } else if (r.windows && await windowsNeedRun(r.windows)) {
+    await proposeRun(r);                      // other dates than the map shows: ask before spending Earth Engine time
   } else {
     if (r.scope === 'drawn' && !explore.drawnIds) explore.chat.push({ who: 'bot', html: 'No area drawn yet: searching the whole study area. Use ✎ Draw area first to search inside an area.' });
     else if (r.scope) explore.scope = r.scope;
     explore.filter = r.filter; applyFilter();
     const res = currentResults(), total = res.reduce((s, f) => s + f.properties.area_ha, 0);
     explore.chat.push({ who: 'bot', html:
+      (r.sourceNote ? `<div class="muted small">${esc(r.sourceNote)}</div>` : '') +
       `Looking for ${esc(describeFilter(r.filter, explore.scope))}.<br>` +
       (res.length ? `<b>Found ${res.length} region${res.length > 1 ? 's' : ''}, ${fmtHa(total)} in total.</b> They are the only ones shown on the map now. Say <i>select …</i> to select them instead.`
                   : '<b>No regions match.</b> Try a smaller size, another location or the whole study area.') +
@@ -513,7 +519,7 @@ function renderChangesPanel(body) {
         ${state.selected.size && explore.scope !== 'selection' ? '<button class="btn" id="selAdd" title="Add these to the current selection">＋ Add to selection</button>' : ''}
         ${state.selected.size ? `<button class="btn" id="selClear">Clear selection (${state.selected.size})</button>` : ''}
       </div>
-      ${vlmSectionHtml(results)}
+      ${vlmSectionHtml(results, currentResults(explore.filter, explore.scope, true))}
       <button class="btn" id="toReport">✦ AI report for these ${results.length} region${results.length > 1 ? 's' : ''}</button>` : ''}`;
 
   const log = $('#chatLog'); log.scrollTop = log.scrollHeight;
@@ -528,6 +534,7 @@ function renderChangesPanel(body) {
     b.onclick = () => openRegion(b.dataset.id, true);
   });
   wireVlmSection(results);
+  wireChatActions(body);
   const st = $('#selThese'); if (st) st.onclick = () => selectResults(results, 'new');
   const sa = $('#selAdd'); if (sa) sa.onclick = () => selectResults(results, 'add');
   const sc = $('#selClear'); if (sc) sc.onclick = () => selectResults([], 'new');

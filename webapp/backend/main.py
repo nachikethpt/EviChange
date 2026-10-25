@@ -36,7 +36,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from agents import ee_engine, landcover, monthly, shoreline, ungated, vlm_check
+from agents import ee_engine, landcover, monthly, search_spec, shoreline, ungated, vlm_check
 from agents.gpt_client import GPTClient
 from agents.vlm_client import VLMClient, VLMUnavailable
 from agents.graph import run_pipeline
@@ -326,6 +326,26 @@ def vlm_check_region(req: VLMCheckRequest):
         vlm_check.log_check(record)
     _vlm_checks[key] = result
     return result
+
+
+class SearchSpecRequest(BaseModel):
+    prompt: str
+
+
+@app.post("/api/search_spec")
+def search_spec_endpoint(req: SearchSpecRequest):
+    """D7 step 1: a typed request -> a validated SearchSpec from the Geo-VLM (text only, no images).
+    503 when no model is reachable and 200 with status "invalid" when the answer is unusable;
+    in both cases the app falls back to its keyword parser."""
+    if not req.prompt.strip():
+        raise HTTPException(400, "prompt is empty")
+    status = vlm.status()
+    if not status["available"]:
+        raise HTTPException(503, status["detail"])
+    try:
+        return search_spec.spec_from_prompt(vlm, req.prompt)
+    except VLMUnavailable as exc:
+        raise HTTPException(503, str(exc))
 
 
 def _bbox(geometry: dict) -> tuple[float, float, float, float]:

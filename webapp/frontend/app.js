@@ -724,14 +724,19 @@ function setRunProgress(frac, text) {                // null-safe: the panel may
 async function submitRun() {
   const problem = runFormProblem();
   if (problem) return alertBox(problem);
-  const condition = $id('runCondition').value;
-  const payload = {
+  $id('btnSubmitRun').disabled = true;
+  await startRun({
     aoi: state.runAoi,
     before_window: [$id('beforeStart').value, $id('beforeEnd').value],
     after_window: [$id('afterStart').value, $id('afterEnd').value],
-    condition,
-  };
-  $id('btnSubmitRun').disabled = true;
+    condition: $id('runCondition').value,
+  });
+}
+
+/** POST /api/runs, then follow it to the end. Used by the Run pipeline panel and by the Find changes chat
+ *  (after the user confirms the proposed run). Optional callbacks: onProgress(status), onDone(runId), onError(message). */
+async function startRun(payload, cb = {}) {
+  if (runPollTimer) { alertBox('A run is already in progress.'); cb.onError?.('A run is already in progress.'); return; }
   setRunProgress(0.1, 'Submitting…');
   try {
     const res = await fetch('/api/runs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -740,40 +745,45 @@ async function submitRun() {
     if (data.cached) {
       setRunProgress(1, 'Loaded from cache');
       await loadRunResults(data.run_id);
+      cb.onDone?.(data.run_id);
     } else {
-      pollRunStatus(data.run_id);
+      pollRunStatus(data.run_id, cb);
     }
     refreshRunList();
   } catch (err) {
     setRunProgress(null, `Error: ${err.message}`);
     validateRunForm();
+    cb.onError?.(err.message);
   }
 }
 
-function pollRunStatus(runId) {
+function pollRunStatus(runId, cb = {}) {
   if (runPollTimer) clearInterval(runPollTimer);
   let failures = 0;
   const stop = () => { clearInterval(runPollTimer); runPollTimer = null; validateRunForm(); refreshRunList(); };
   runPollTimer = setInterval(async () => {
     try {
       const res = await fetch(`/api/runs/${runId}`);
-      if (res.status === 404) { stop(); return setRunProgress(null, 'This run no longer exists.'); }
+      if (res.status === 404) { stop(); setRunProgress(null, 'This run no longer exists.'); return cb.onError?.('This run no longer exists.'); }
       const status = await res.json();
       if (!res.ok) throw new Error(status.detail || 'Status check failed');
       failures = 0;
       const progress = status.progress || 0;
       setRunProgress(progress, `${status.status} (${Math.round(progress * 100)}%)`);
+      cb.onProgress?.(status);
       if (status.status === 'done') {
         stop();
         setRunProgress(1, 'Complete!');
         await loadRunResults(runId);
+        cb.onDone?.(runId);
       } else if (status.status === 'error') {
         stop();
         setRunProgress(null, `Error: ${status.error}`);
+        cb.onError?.(status.error);
       }
     } catch (err) {
       console.error('Poll error:', err);
-      if (++failures >= 5) { stop(); setRunProgress(null, `Lost contact with the server: ${err.message}`); }
+      if (++failures >= 5) { stop(); setRunProgress(null, `Lost contact with the server: ${err.message}`); cb.onError?.(err.message); }
     }
   }, 2000);
 }
@@ -1022,6 +1032,8 @@ async function loadLayers(runId = null) {
   // Replace only the server's layers (study area + change regions). Layers the user added stay.
   state.layers.filter(l => l.id === CHANGE_ID || l.id === 'aoi').forEach(removeLayer);
   state.selected.clear();                          // region ids belong to the previous run
+  explore.meta.clear(); explore.drawnIds = null; explore.regionId = null; explore.scope = 'all'; explore.filter = emptyFilter();
+  gv.results.clear();                              // Geo-VLM answers are per region id, and ids repeat between runs
 
   for (const d of layers) {
     const data = await (await fetch(d.url)).json();

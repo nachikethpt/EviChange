@@ -8,7 +8,8 @@
 'use strict';
 
 const GV_MAX = 20;   // regions per click, largest first
-const gv = { status: null, results: new Map(), running: false, stop: false, done: 0, total: 0, error: '', chips: null };
+const GV_SHOW_REJECTED_DEFAULT = false;   // D7: regions the model sees no change in are hidden, not removed. Flip to true to show them dimmed instead.
+const gv = { showRejected: GV_SHOW_REJECTED_DEFAULT, status: null, results: new Map(), running: false, stop: false, done: 0, total: 0, error: '', chips: null };
 const GV_CHIPS = { rgb: 'True colour', rgb_swir: 'True colour + SWIR', rgb_swir_cir: 'True colour + SWIR + infrared' };
 const GV_AGREE = {
   agrees:         { icon: '✓', label: 'agrees with the detector', cls: 'supported' },
@@ -18,6 +19,12 @@ const GV_AGREE = {
   disagrees:      { icon: '✗', label: 'sees no change', cls: 'unsupported' },
   unsure:         { icon: '?', label: 'unsure', cls: '' },
 };
+
+/** True while a region the model saw no change in should be hidden (it never leaves the data; "Show rejected" brings it back). */
+function vlmHidden(id) {
+  const r = gv.results.get(id);
+  return !gv.showRejected && r?.status === 'checked' && r.verdict === 'no_change';
+}
 
 async function loadVlmStatus() {
   try { gv.status = await (await fetch('/api/vlm/status')).json(); }
@@ -47,7 +54,7 @@ async function checkRegions(ids) {
     if (!gv.results.has(id) || gv.results.get(id).status === 'error') {
       try {
         const res = await fetch('/api/vlm/check', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                                   body: JSON.stringify({ region_id: id, chips: gv.chips || gv.status?.default_chips }) });
+                                                   body: JSON.stringify({ region_id: id, run_id: state.currentRunId, chips: gv.chips || gv.status?.default_chips }) });
         const body = await res.json();
         if (res.status === 503) { gv.error = body.detail; gv.status = { ...gv.status, available: false, detail: body.detail }; break; }
         gv.results.set(id, res.ok ? body : { status: 'error', detail: body.detail || res.statusText });
@@ -55,6 +62,7 @@ async function checkRegions(ids) {
         gv.results.set(id, { status: 'error', detail: err.message });
       }
       flagRegion(id);
+      applyFilter();   // a region the model rejects leaves the map and the list now
     }
     gv.done++;
     if (state.panel === 'changes') renderPanel();
@@ -64,10 +72,11 @@ async function checkRegions(ids) {
 }
 
 /** The "Check with Geo-VLM" block of the Find changes list view. */
-function vlmSectionHtml(results) {
+function vlmSectionHtml(results, matches = results) {
   const n = Math.min(results.length, GV_MAX), st = gv.status;
   const counts = {};
-  results.forEach(f => { const r = gv.results.get(f.properties.id); if (r) { const k = r.status === 'checked' ? r.agreement : r.status; counts[k] = (counts[k] || 0) + 1; } });
+  const rejected = matches.filter(f => { const r = gv.results.get(f.properties.id); return r?.status === 'checked' && r.verdict === 'no_change'; }).length;
+  matches.forEach(f => { const r = gv.results.get(f.properties.id); if (r) { const k = r.status === 'checked' ? r.agreement : r.status; counts[k] = (counts[k] || 0) + 1; } });
   const summary = Object.entries(counts).map(([k, v]) =>
     k === 'blocked' ? `🔒 ${v} labelled site${v > 1 ? 's' : ''} skipped` : k === 'error' ? `! ${v} failed`
       : `${GV_AGREE[k]?.icon ?? '?'} ${v} ${GV_AGREE[k]?.label ?? k}`).join(' · ');
@@ -85,6 +94,9 @@ function vlmSectionHtml(results) {
     ${action}
     ${gv.error ? `<p class="chip unsupported">${esc(gv.error)}</p>` : ''}
     ${summary ? `<p class="small">${summary}</p>` : ''}
+    ${rejected ? `<p class="small"><b>${rejected} region${rejected > 1 ? 's' : ''} the model sees no change in ${gv.showRejected ? 'shown' : 'hidden'}.</b>
+      <button class="linkish" id="gvToggle">${gv.showRejected ? 'Hide rejected' : 'Show rejected'}</button><br>
+      <span class="muted">VLM-checked, not validated: it can be wrong, and nothing is deleted.</span></p>` : ''}
     <p class="muted small">The model sees only before/after images, not the detector's numbers, and says whether the outlined box changed. A second look, not validated: on development regions it did no better than chance (D15).
       ${st?.labelled_sites_locked ? 'The 30 labelled evaluation sites are skipped until the Phase 4 prompts are frozen.' : ''}</p></div>`;
 }
@@ -95,8 +107,10 @@ function wireVlmSection(results) {
   const stop = $('#gvStop'); if (stop) stop.onclick = () => { gv.stop = true; };
   const pick = $('#gvChips');
   if (pick) pick.onchange = () => {   // results belong to one image set: start over with the new one
-    gv.chips = pick.value; const old = [...gv.results.keys()]; gv.results.clear(); old.forEach(flagRegion); renderPanel();
+    gv.chips = pick.value; const old = [...gv.results.keys()]; gv.results.clear(); old.forEach(flagRegion); applyFilter(); renderPanel();
   };
+  const tog = $('#gvToggle');
+  if (tog) tog.onclick = () => { gv.showRejected = !gv.showRejected; applyFilter(); renderPanel(); };
   const retry = $('#gvRetry'); if (retry) retry.onclick = () => { gv.status = null; gv.error = ''; renderPanel(); loadVlmStatus(); };
 }
 
