@@ -685,6 +685,30 @@ weights stay frozen):
     downloading only the monthly frames needed.
   - Any outside data is training-only: the held-out set and the 30 sites stay Quang Ninh.
 
+**Labelling scheme v2 (2026-10-25).**
+- *Why:* on the first scheme (change / no change at 10 m), P2 and P3 agreed on 9 of 14 boxes they
+  both labelled. That is Cohen's κ = 0.05, chance level. The 10 m chips are too blurry, and "did it
+  change?" leaves too much to judgement (size, crops, gradual greening, tide). So the labels are
+  remade with two changes:
+  1. **Google Earth's high-resolution historical imagery** is the main view. Each box has a link, and
+     each page a KML for the history slider in Google Earth Pro. The month of the image used is
+     recorded per window, and the Sentinel-2 chips stay for reference. Google Earth imagery is only
+     looked at to make labels; it never goes into training.
+  2. **Land cover per date, not change.** For each date: the covers taking up at least about a fifth
+     of the box (water / dense vegetation / sparse vegetation / crops / bare / built-up), and the main
+     one, or "can't tell". Change and change types are **derived** from the two dates
+     (`scripts/finetune_mcq.py derive()`), never judged. This multiple-choice format follows
+     GEOBench-VLM (Danish et al., ICCV 2025).
+- *Order:*
+  1. 40 **calibration** boxes, labelled by both P2 and P3. κ is computed on the derived change and on
+     the main cover per date. Training needs κ ≥ 0.5; below that, the task is too ambiguous to train on.
+  2. The 80 **held-out** boxes, labelled by both; disagreements are settled together, so it is a
+     trustworthy answer key.
+  3. The **training** boxes.
+- *The first-scheme labels* (329 boxes) are kept, as a comparison of what 10 m labelling got right.
+- *Outside yardstick:* both Qwen models are scored on GEOBench-VLM's temporal multiple-choice tasks
+  (`scripts/geobench_eval.py`, evaluation only).
+
 **Limits.**
 - Two labellers, one of whom (P2) built the system; P2 labelled most of the boxes.
 - A few hundred boxes from one area and one date pair: the adapter learns Quang Ninh 2018/19 →
