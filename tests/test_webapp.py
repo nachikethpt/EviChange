@@ -213,3 +213,53 @@ def test_index_layer_reports_earth_engine_errors(client, monkeypatch):
     main._index_tiles.clear()
     resp = client.get("/api/index_layer", params={"index": "NDVI", "kind": "before"})
     assert resp.status_code == 502 and "No Sentinel-2" in resp.json()["detail"]
+
+
+# ---------- Phase 7: run list, delete, place search ----------
+
+def _make_run(run_id, status="done", created=1.0):
+    data_store.create_run(run_id, AOI, BEFORE, AFTER, "gated", "test")
+    data_store.update_status(run_id, status=status, created_at=created)
+    if status == "done":
+        data_store.write_run_result(run_id, {"type": "FeatureCollection", "features": []},
+                                    {"type": "FeatureCollection", "features": []}, {})
+
+
+def test_list_runs_newest_first(client):
+    assert client.get("/api/runs").json() == []
+    _make_run("aaaaaaaaaaaa", created=1.0)
+    _make_run("bbbbbbbbbbbb", created=2.0)
+    runs = client.get("/api/runs").json()
+    assert [r["run_id"] for r in runs] == ["bbbbbbbbbbbb", "aaaaaaaaaaaa"]
+    assert runs[0]["aoi"] == AOI and runs[0]["n_regions"] == 0
+
+
+def test_delete_run_removes_it_and_its_cache_entry(client):
+    _make_run("aaaaaaaaaaaa")
+    data_store.update_status("aaaaaaaaaaaa", cache_key="k")
+    assert data_store.find_cached_run("k") == "aaaaaaaaaaaa"
+    assert client.delete("/api/runs/aaaaaaaaaaaa").json() == {"deleted": "aaaaaaaaaaaa"}
+    assert client.get("/api/runs/aaaaaaaaaaaa").status_code == 404
+    assert data_store.find_cached_run("k") is None
+
+
+@pytest.mark.parametrize("status", ["queued", "running"])
+def test_delete_refuses_a_run_in_progress(client, status):
+    _make_run("aaaaaaaaaaaa", status=status)
+    assert client.delete("/api/runs/aaaaaaaaaaaa").status_code == 409
+    assert client.get("/api/runs/aaaaaaaaaaaa").status_code == 200
+
+
+def test_delete_unknown_or_malformed_run(client):
+    assert client.delete("/api/runs/0123456789ab").status_code == 404
+    assert client.delete("/api/runs/..%2F..%2Fetc").status_code in (400, 404)
+
+
+def test_geocode_parses_nominatim_and_validates(client, monkeypatch):
+    import io
+    body = json.dumps([{"display_name": "Cẩm Phả, Quảng Ninh", "lon": "107.3", "lat": "21.0",
+                        "boundingbox": ["20.9", "21.1", "107.2", "107.4"]}, {"bad": 1}]).encode()
+    monkeypatch.setattr(main.urllib.request, "urlopen", lambda req, timeout=0: io.BytesIO(body))
+    out = client.get("/api/geocode", params={"q": "Cam Pha"}).json()
+    assert out == [{"name": "Cẩm Phả, Quảng Ninh", "lon": 107.3, "lat": 21.0, "bbox": [107.2, 20.9, 107.4, 21.1]}]
+    assert client.get("/api/geocode", params={"q": "a"}).status_code == 400
