@@ -1,0 +1,57 @@
+{
+ "aoi": {
+  "type": "Polygon",
+  "coordinates": [
+   [
+    [
+     107.22,
+     20.98
+    ],
+    [
+     107.4,
+     20.98
+    ],
+    [
+     107.4,
+     21.1
+    ],
+    [
+     107.22,
+     21.1
+    ],
+    [
+     107.22,
+     20.98
+    ]
+   ]
+  ]
+ },
+ "aoi_km2": 249.8,
+ "max_cloud": 0.1,
+ "item_type": "PSScene",
+ "product_bundle": "analytic_sr_udm2",
+ "bands": 4,
+ "created": "2026-10-24T08:07:22+00:00",
+ "months": [
+  {
+   "month": "after_2022-23",
+   "span": [
+    "2022-11",
+    "2023-03"
+   ],
+   "date": "2023-02-28",
+   "item_ids": [
+    "20230228_023357_99_24c9"
+   ],
+   "coverage": 1.0,
+   "clear_pct": 95.0,
+   "score": 0.95,
+   "scenes_found": 6,
+   "quota_km2": 249.8,
+   "days_found": 33,
+   "km2": 249.8
+  }
+ ],
+ "total_km2": 249.8,
+ "total_quota_km2": 249.8
+}

@@ -1,0 +1,375 @@
+{
+ "r376": {
+  "verdict": "change",
+  "types": [
+   "vegetation_gain"
+  ]
+ },
+ "r270": {
+  "verdict": "change",
+  "types": [
+   "vegetation_gain"
+  ]
+ },
+ "r414": {
+  "verdict": "change",
+  "types": [
+   "built_up_decrease"
+  ]
+ },
+ "r97": {
+  "verdict": "change",
+  "types": [
+   "vegetation_gain",
+   "water_decrease"
+  ]
+ },
+ "r134": {
+  "verdict": "change",
+  "types": [
+   "vegetation_loss"
+  ]
+ },
+ "r159": {
+  "verdict": "change",
+  "types": [
+   "vegetation_loss",
+   "built_up_increase"
+  ]
+ },
+ "r132": {
+  "verdict": "change",
+  "types": [
+   "vegetation_loss"
+  ]
+ },
+ "r472": {
+  "verdict": "change",
+  "types": [
+   "built_up_increase"
+  ]
+ },
+ "r394": {
+  "verdict": "change",
+  "types": [
+   "vegetation_gain",
+   "built_up_increase",
+   "water_decrease"
+  ]
+ },
+ "r74": {
+  "verdict": "change",
+  "types": [
+   "built_up_increase",
+   "water_decrease"
+  ]
+ },
+ "r70": {
+  "verdict": "change",
+  "types": [
+   "built_up_increase",
+   "water_decrease"
+  ]
+ },
+ "r391": {
+  "verdict": "unsure",
+  "types": []
+ },
+ "r166": {
+  "verdict": "change",
+  "types": [
+   "vegetation_loss",
+   "built_up_decrease"
+  ]
+ },
+ "t26": {
+  "verdict": "change",
+  "types": [
+   "vegetation_gain",
+   "built_up_decrease"
+  ]
+ },
+ "r466": {
+  "verdict": "change",
+  "types": [
+   "built_up_increase",
+   "water_decrease"
+  ]
+ },
+ "r139": {
+  "verdict": "change",
+  "types": [
+   "vegetation_gain",
+   "water_decrease"
+  ]
+ },
+ "r384": {
+  "verdict": "change",
+  "types": [
+   "vegetation_loss",
+   "built_up_increase"
+  ]
+ },
+ "r73": {
+  "verdict": "change",
+  "types": [
+   "built_up_increase"
+  ]
+ },
+ "r184": {
+  "verdict": "change",
+  "types": [
+   "built_up_increase",
+   "water_decrease"
+  ]
+ },
+ "r156": {
+  "verdict": "change",
+  "types": [
+   "vegetation_loss"
+  ]
+ },
+ "r361": {
+  "verdict": "change",
+  "types": [
+   "vegetation_loss",
+   "water_increase"
+  ]
+ },
+ "r474": {
+  "verdict": "change",
+  "types": [
+   "built_up_decrease",
+   "water_increase"
+  ]
+ },
+ "r328": {
+  "verdict": "no_change",
+  "types": []
+ },
+ "r360": {
+  "verdict": "change",
+  "types": [
+   "built_up_increase",
+   "water_decrease"
+  ]
+ },
+ "r152": {
+  "verdict": "change",
+  "types": [
+   "vegetation_loss",
+   "water_increase"
+  ]
+ },
+ "r236": {
+  "verdict": "change",
+  "types": [
+   "vegetation_loss",
+   "built_up_increase"
+  ]
+ },
+ "t3": {
+  "verdict": "change",
+  "types": [
+   "water_increase"
+  ]
+ },
+ "r346": {
+  "verdict": "change",
+  "types": [
+   "vegetation_gain"
+  ]
+ },
+ "r316": {
+  "verdict": "change",
+  "types": [
+   "vegetation_gain"
+  ]
+ },
+ "r247": {
+  "verdict": "change",
+  "types": [
+   "built_up_increase"
+  ]
+ },
+ "r399": {
+  "verdict": "change",
+  "types": [
+   "vegetation_gain",
+   "water_decrease"
+  ]
+ },
+ "r146": {
+  "verdict": "change",
+  "types": [
+   "built_up_increase",
+   "water_decrease"
+  ]
+ },
+ "r430": {
+  "verdict": "change",
+  "types": [
+   "vegetation_loss"
+  ]
+ },
+ "r256": {
+  "verdict": "change",
+  "types": [
+   "vegetation_gain"
+  ]
+ },
+ "r219": {
+  "verdict": "change",
+  "types": [
+   "vegetation_gain",
+   "built_up_increase",
+   "water_decrease"
+  ]
+ },
+ "r105": {
+  "verdict": "change",
+  "types": [
+   "vegetation_gain",
+   "built_up_decrease"
+  ]
+ },
+ "r438": {
+  "verdict": "unsure",
+  "types": []
+ },
+ "r79": {
+  "verdict": "change",
+  "types": [
+   "built_up_decrease"
+  ]
+ },
+ "t32": {
+  "verdict": "change",
+  "types": [
+   "vegetation_loss",
+   "built_up_increase"
+  ]
+ },
+ "r7": {
+  "verdict": "change",
+  "types": [
+   "vegetation_gain"
+  ]
+ },
+ "r150": {
+  "verdict": "change",
+  "types": [
+   "vegetation_gain"
+  ]
+ },
+ "r448": {
+  "verdict": "no_change",
+  "types": []
+ },
+ "r202": {
+  "verdict": "change",
+  "types": [
+   "vegetation_loss",
+   "water_increase"
+  ]
+ },
+ "r157": {
+  "verdict": "change",
+  "types": [
+   "vegetation_loss",
+   "water_increase"
+  ]
+ },
+ "t21": {
+  "verdict": "change",
+  "types": [
+   "vegetation_loss",
+   "water_increase"
+  ]
+ },
+ "r281": {
+  "verdict": "change",
+  "types": [
+   "vegetation_gain"
+  ]
+ },
+ "r68": {
+  "verdict": "change",
+  "types": [
+   "vegetation_loss",
+   "built_up_increase"
+  ]
+ },
+ "r149": {
+  "verdict": "change",
+  "types": [
+   "vegetation_gain",
+   "built_up_decrease"
+  ]
+ },
+ "t19": {
+  "verdict": "change",
+  "types": [
+   "vegetation_gain"
+  ]
+ },
+ "r208": {
+  "verdict": "change",
+  "types": [
+   "vegetation_loss",
+   "built_up_increase"
+  ]
+ },
+ "r174": {
+  "verdict": "change",
+  "types": [
+   "vegetation_loss",
+   "water_increase"
+  ]
+ },
+ "r81": {
+  "verdict": "change",
+  "types": [
+   "vegetation_loss"
+  ]
+ },
+ "r267": {
+  "verdict": "change",
+  "types": [
+   "vegetation_gain"
+  ]
+ },
+ "r393": {
+  "verdict": "change",
+  "types": [
+   "vegetation_gain",
+   "built_up_increase"
+  ]
+ },
+ "r147": {
+  "verdict": "change",
+  "types": [
+   "vegetation_gain"
+  ]
+ },
+ "r129": {
+  "verdict": "change",
+  "types": [
+   "vegetation_gain",
+   "built_up_decrease"
+  ]
+ },
+ "r457": {
+  "verdict": "change",
+  "types": [
+   "vegetation_gain",
+   "built_up_decrease"
+  ]
+ },
+ "r61": {
+  "verdict": "change",
+  "types": [
+   "vegetation_loss"
+  ]
+ }
+}

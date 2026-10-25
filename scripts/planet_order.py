@@ -6,6 +6,7 @@
     python scripts/planet_order.py status                         # state of placed orders
     python scripts/planet_order.py download                       # finished orders -> data/planet/raw/<month>/
     python scripts/planet_order.py download --copy-to "G:/My Drive/EviChange/planet"   # ... and a copy in Drive
+    python scripts/planet_order.py search 2018-11 2019-03 --bands 4 --window before_2018-19   # one best day in a window (D17)
 
 Needs PL_API_KEY (Planet account -> My settings -> API key), set in the shell, never committed.
 
@@ -38,6 +39,7 @@ ORDERS_LOG = OUT / "orders.json"
 SEARCH_URL = "https://api.planet.com/data/v1/quick-search"
 ORDERS_URL = "https://api.planet.com/compute/ops/orders/v2"
 ITEM_TYPE, ASSET, BUNDLE = "PSScene", "ortho_analytic_8b_sr", "analytic_8b_sr_udm2"
+PRODUCTS = {8: (ASSET, BUNDLE), 4: ("ortho_analytic_4b_sr", "analytic_sr_udm2")}   # bands -> (asset, bundle)
 PLANET_DELAY_DAYS = 30
 
 
@@ -93,20 +95,20 @@ def coverage(grid: list[tuple[float, float]], footprints: list[dict]) -> float:
 
 
 # ---------- search ----------
-def search_filter(aoi: dict, month: str, max_cloud: float) -> dict:
+def search_filter(aoi: dict, month: str, max_cloud: float, asset: str = ASSET) -> dict:
     gte, lt = month_bounds(month)
     return {"type": "AndFilter", "config": [
         {"type": "GeometryFilter", "field_name": "geometry", "config": aoi},
         {"type": "DateRangeFilter", "field_name": "acquired", "config": {"gte": gte, "lt": lt}},
         {"type": "RangeFilter", "field_name": "cloud_cover", "config": {"lte": max_cloud}},
         {"type": "StringInFilter", "field_name": "quality_category", "config": ["standard"]},
-        {"type": "AssetFilter", "config": [ASSET]},
+        {"type": "AssetFilter", "config": [asset]},
         {"type": "PermissionFilter", "config": ["assets:download"]},
     ]}
 
 
-def search_month(session, aoi: dict, month: str, max_cloud: float) -> list[dict]:
-    resp = _call(session.post, SEARCH_URL, json={"item_types": [ITEM_TYPE], "filter": search_filter(aoi, month, max_cloud)})
+def search_month(session, aoi: dict, month: str, max_cloud: float, asset: str = ASSET) -> list[dict]:
+    resp = _call(session.post, SEARCH_URL, json={"item_types": [ITEM_TYPE], "filter": search_filter(aoi, month, max_cloud, asset)})
     body = resp.json()
     items = list(body.get("features", []))
     while body.get("_links", {}).get("_next"):
@@ -161,23 +163,34 @@ def pick_day(items: list[dict], grid: list[tuple[float, float]], aoi_km2: float 
     return best
 
 
-def make_plan(session, aoi: dict, month_list: list[str], max_cloud: float, today: date | None = None) -> dict:
+def make_plan(session, aoi: dict, month_list: list[str], max_cloud: float, today: date | None = None,
+              bands: int = 8, window: str | None = None) -> dict:
+    """One row per month; with `window`, one row named `window` for the best day over all the months
+    (e.g. the detector's 2018-19 dry season, D17). `bands` 8 or 4 (PS2 Dove Classic, before 2021, has 4 only)."""
     aoi_km2 = aoi_area_ha(aoi) / 100
     grid = aoi_grid(aoi)
+    asset, bundle = PRODUCTS[bands]
     newest = (today or date.today()) - timedelta(days=PLANET_DELAY_DAYS)
     rows = []
+    if window:
+        items = [it for month in month_list for it in search_month(session, aoi, month, max_cloud, asset)]
+        best = pick_day(items, grid, aoi_km2)
+        row = {"month": window, "span": [month_list[0], month_list[-1]]}
+        row.update(best, km2=round(aoi_km2 * best["coverage"], 1)) if best else             row.update({"date": None, "item_ids": [], "km2": 0.0, "quota_km2": 0.0, "note": "no scene under the cloud limit"})
+        rows.append(row)
+        month_list = []
     for month in month_list:
         row = {"month": month}
         if month_bounds(month)[0][:10] > newest.isoformat():
             row["note"] = f"after {newest.isoformat()}: PlanetScope has a {PLANET_DELAY_DAYS}-day delay"
-        best = pick_day(search_month(session, aoi, month, max_cloud), grid, aoi_km2)
+        best = pick_day(search_month(session, aoi, month, max_cloud, asset), grid, aoi_km2)
         if best is None:
             row.update({"date": None, "item_ids": [], "km2": 0.0, "quota_km2": 0.0, "note": row.get("note") or "no scene under the cloud limit"})
         else:
             row.update(best, km2=round(aoi_km2 * best["coverage"], 1))
         rows.append(row)
     return {"aoi": aoi, "aoi_km2": round(aoi_km2, 1), "max_cloud": max_cloud, "item_type": ITEM_TYPE,
-            "product_bundle": BUNDLE, "created": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "product_bundle": bundle, "bands": bands, "created": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "months": rows, "total_km2": round(sum(r["km2"] for r in rows), 1),
             "total_quota_km2": round(sum(r.get("quota_km2", r["km2"]) for r in rows), 1)}
 
@@ -406,6 +419,8 @@ def main(argv: list[str] | None = None) -> None:
     s.add_argument("start", help="first month, YYYY-MM")
     s.add_argument("end", help="last month, YYYY-MM")
     s.add_argument("--max-cloud", type=float, default=0.3, help="max cloud cover per scene, 0-1 (default 0.3)")
+    s.add_argument("--bands", type=int, choices=sorted(PRODUCTS), default=8, help="8 (default) or 4 (needed before 2021)")
+    s.add_argument("--window", help="one best day over the whole range, logged under this name (e.g. before_2018-19)")
     o = sub.add_parser("order", help="order a plan's months (dry run without --confirm)")
     o.add_argument("plan")
     o.add_argument("--confirm", action="store_true")
@@ -421,9 +436,9 @@ def main(argv: list[str] | None = None) -> None:
     session = _session()
     if args.cmd == "search":
         aoi = json.loads(STUDY.read_text(encoding="utf-8"))["aoi"]
-        plan = make_plan(session, aoi, months(args.start, args.end), args.max_cloud)
+        plan = make_plan(session, aoi, months(args.start, args.end), args.max_cloud, bands=args.bands, window=args.window)
         OUT.mkdir(parents=True, exist_ok=True)
-        path = OUT / f"plan_{args.start}_{args.end}.json"
+        path = OUT / (f"plan_{args.window}.json" if args.window else f"plan_{args.start}_{args.end}.json")
         path.write_text(json.dumps(plan, indent=1), encoding="utf-8")
         print_plan(plan)
         print(f"Plan saved: {path.relative_to(ROOT)}. Nothing ordered.")
