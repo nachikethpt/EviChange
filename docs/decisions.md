@@ -728,3 +728,25 @@ weights stay frozen):
 - A few hundred boxes from one area and one date pair: the adapter learns Quang Ninh 2018/19 →
   2022/23, not change in general.
 - 10 m chips.
+
+## D18 — Claim adjudication rules (2026-10-25, proposed)
+
+**Problem.** Two gaps in the Phase 5 truth axis would decide the comparison by wording alone
+(`docs/eval_audit.md`, findings 1–2):
+- 8 of the 10 random sites are labelled "change", so a "no change was detected" claim is true
+  about the detector but false about the ground;
+- precise numbers (ha, index values) could be marked `unverifiable`, which counts as a hallucination
+  and penalises gated for quoting its evidence.
+
+**Proposal** (full rules: `docs/adjudication_rules.md`):
+- Claims about the detector's output are tagged `about_detector` and left out of the hallucination
+  denominator. They are reported separately, with "missed change at random sites" added to metric 6.
+- `unverifiable` is only for what no imagery can show: cause, intent, legality, ownership, the future.
+  Numbers are judged with stated tolerances (area within a factor of 2, share within ±15 points,
+  index values by their implied direction only).
+- A second adjudicator on a seeded 20 % of sites, with κ on both axes.
+
+**Alternative.** Read every presence claim as a statement about the ground, and reword gated's rule-4
+sentence to "The detector found no change in the box" before the freeze.
+
+**Decide before the Phase 4 freeze**; the rules are then pinned by commit with the prompts.
