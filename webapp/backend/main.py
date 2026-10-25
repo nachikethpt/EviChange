@@ -492,7 +492,9 @@ def shoreline_transect(tid: str):
     if tid not in pos["positions"]:
         raise HTTPException(404, f"unknown transect {tid}")
     transects = _shoreline("transects.geojson")
-    feat = next(f for f in transects["features"] if f["id"] == tid)
+    feat = next((f for f in transects["features"] if f["id"] == tid), None)
+    if feat is None:                                          # positions.json and transects.geojson out of step
+        raise HTTPException(404, f"unknown transect {tid}")
     if tid in shoreline.hidden_transects(transects):          # Phase 14 reference transect: blind until digitised
         return {**shoreline.hide_transects({"features": [feat]}, {tid})["features"][0]["properties"],
                 "geometry": feat["geometry"], "series": None, "quarterly": None}

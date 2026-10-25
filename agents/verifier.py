@@ -120,7 +120,7 @@ _STABLE = re.compile(r"\b(stable|unchanged|did\s+not\s+(?:move|change)|no\s+(?:c
                      r"(?:shoreline\s+)?(?:change|movement))", re.I)
 _RATE_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:m|metres?|meters?)\s*(?:/|per\s+)\s*(?:yr|year|a)\b", re.I)
 _DIST_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(km|kilomet(?:re|er)s?|m|met(?:re|er)s?)\b", re.I)
-_STRIP_RE = re.compile(r"\b(200|500)\b(?!\s*(?:ha\b|hectares?|%))", re.I)
+_STRIP_RE = re.compile(r"\b(200|500)\b(?![.,]\d)(?!\s*(?:ha\b|hectares?|%))", re.I)
 _BUILT_UP = re.compile(r"\b(grew|grow|increas|expan|new|more|added|rose|risen)", re.I)
 _BUILT_DOWN = re.compile(r"\b(decreas|declin|shr[iau]nk|fewer|less|lost|demolish|removed|fell)", re.I)
 _TO_FROM_RE = re.compile(r"\b(to|from)\s+(?:about\s+|around\s+|roughly\s+|approximately\s+|~\s*)?$", re.I)
