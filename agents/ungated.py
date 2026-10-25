@@ -18,15 +18,16 @@ import re
 from . import vlm_check
 from .schema import CHANGE_TYPES, CLAIM_TYPES, LANDCOVER_CLASSES, validate_claim
 
-REPORT_PROMPT_VERSION = "ungated_report_v0"
-EXTRACT_PROMPT_VERSION = "claim_extract_v0"
+REPORT_PROMPT_VERSION = "ungated_report_v1"   # v1: asks about the shoreline and buildings near it (D13)
+EXTRACT_PROMPT_VERSION = "claim_extract_v1"  # v1: shoreline / coastal_built fields
 
 REPORT_PROMPT = """You are a remote-sensing analyst. You get {count} Sentinel-2 images of the same place:
 {images}
 Before: {before}. After: {after}. Both dates use the same colour stretch, so colour differences are real.
 {keys}
 Write a short report (3 to 6 sentences) for a decision maker about the area inside the yellow box:
-what changed between the two dates, where in the box, and roughly how large the change is."""
+what changed between the two dates, where in the box, and roughly how large the change is. If the box
+includes a coast, also say whether the shoreline moved and whether buildings near the shore increased."""
 
 EXTRACT_PROMPT = """Split the satellite change report below into separate claims. Each claim is ONE statement
 the report makes. Copy the report's wording as closely as possible. Do not add, merge, correct, judge
@@ -41,6 +42,10 @@ For each claim give:
   "type":  one of {types}
   "change_type": one of {change_types}, or null
   "class_before", "class_after": one of {classes}, or null (only for land-cover statements)
+  "shoreline_change": "advancing" (land moved seaward), "retreating" (sea moved landward), "stable",
+                      or null (only for shoreline statements)
+  "strip": "0-200" or "200-500" (metres inland of the shore), "0-500", or null (only for statements
+           about buildings near the shore)
 
 Answer with a JSON list only, no other text.
 
@@ -80,7 +85,7 @@ def parse_claims(text: str) -> tuple[list[dict], bool, int]:
             continue
         claim = {"level": item.get("level"), "type": item.get("type"), "text": str(item["text"]).strip(),
                  "region_ref": None, "evidence_ref": [], "stated_conf": None}
-        for field in ("change_type", "class_before", "class_after"):
+        for field in ("change_type", "class_before", "class_after", "shoreline_change", "strip"):
             if item.get(field) is not None:
                 claim[field] = item[field]
         if validate_claim(claim):

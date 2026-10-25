@@ -438,6 +438,20 @@ built when more than half the cell is built. (d) on the Planet months with a win
 Dates for (b) and (c) are Oct 2024 and Sep 2026, with the last delivered Planet month standing in for
 Sep 2026 until the November order lands.
 
+**As implemented (Phase 15 verifier, 2026-10-23).** `schema.py` adds the claim types `shoreline` and
+`coastal_built` and two optional evidence lists: `transects[]` (`id`, `location`, `change`, `nsm`, `lrr`,
+`ci95` from `agents/shoreline.py`) and `coastal_strips[]` (`strip` "0-200" / "200-500", `built_ha_before`,
+`built_ha_after`, optional `location`; Phase 12 fills them). Both rules run before the change-region rules,
+since these claims are about their own evidence. *Shoreline:* the claim's transects (by `transect_ref`,
+location words, or all) are checked against the optically confirmed `change`: a direction is supported
+when some transect has it, a stated distance must match `nsm` within 20 m or 25 %, a rate `lrr` within its
+95 % CI or 25 %; "stable" is wrong if any covered transect moved. A radar trend the imagery does not
+confirm (`unconfirmed`) gives *uncertain*, never a verdict either way. *Coastal built:* the strip comes from
+the text ("within 200 m" → 0–200, "200–500 m" → 200–500, else both); the change must exceed 0.5 ha in the
+stated direction (provisional), and stated hectares are read as the change, or the before / after area
+after "from" / "to". No evidence for the claim gives *uncertain* (`shoreline_not_in_evidence`,
+`coastal_not_in_evidence`). Tests: `tests/test_verifier_coastal.py`.
+
 ## D14 — Time series analysis with CCDC (2026-10-11, proposed)
 
 **Why.** The teacher asked for time series analysis. Two-date comparison (D6) says *what* changed
@@ -469,7 +483,7 @@ the labelled data show a reason to change them, and any change is recorded here.
 **Evaluation.** Break-month agreement with the Phase 14d labels (share within ± 1 month and within
 the reported window), and the share of detector regions CCDC calls seasonal rather than lasting.
 
-## D15 — Choosing the Geo-VLM model and image set before the freeze (2026-10-23, proposed)
+## D15 — Choosing the Geo-VLM model and image set before the freeze (2026-10-23; decided 2026-10-24)
 
 **Question.** Which model (Qwen2.5-VL-7B-Instruct, the default, or Qwen3-VL-8B-Instruct) and which
 image set (`rgb`, `rgb_swir`, `rgb_swir_cir`, see `agents/vlm_check.py`) the frozen Phase 4 prompts
@@ -514,9 +528,59 @@ image set, and every reported run uses them.
 detected-region checks and on **all 60** control checks, under every image set, mostly with the same
 sentence ("the vegetation appears greener in the AFTER image"). That includes boxes that are water
 in both windows and control chips that are visibly the same or browner. As prompted, it does not
-check anything. If Qwen3 does no better, the prompt is the problem, and it gets reworked on these
-development boxes before the freeze: describe both images before the verdict, no change as the
-default, perhaps more context than the 600 m chip.
+check anything.
+
+**Qwen3-VL-8B and the hand decisions (2026-10-24).** Full tables: `docs/vlm_compare_d15.md`.
+- *Qwen3 says "no change" sometimes:*
+  - Detected regions: 13–37 % "no change" depending on the image set.
+  - Controls: 0–55 % "no change". Only true colour stayed under the 90 % "change" limit.
+- *Hand decisions:* 42 regions where the two models disagreed (26 detected, 16 controls), decided
+  blind: 25 change, 10 no change, 7 unsure. Scored on the 35 firm calls (hits on the 25 "change" /
+  on the 10 "no change"):
+
+  | Condition | hits on "change" | hits on "no change" | balanced |
+  |---|---|---|---|
+  | Qwen2.5-VL-7B · any image set | 25/25 | 0/10 | 0.50 |
+  | Qwen3-VL-8B · rgb | 2/25 | 8/10 | 0.44 |
+  | Qwen3-VL-8B · rgb_swir | 20/25 | 2/10 | 0.50 |
+  | Qwen3-VL-8B · rgb_swir_cir | 14/25 | 4/10 | 0.48 |
+
+  No condition is better than chance on the hard cases. Qwen2.5 matches by always saying "change";
+  Qwen3 on true colour by mostly saying "no change".
+- *The controls rule is withdrawn.* The hand decisions found change in 8 of the 12 controls decided.
+  Over four years (2018–19 → 2022–23), land 200 m from any detection still often changes; the
+  detector misses it. So a control is not a "no change" reference, and the rule would have picked
+  Qwen3 · rgb, which disagrees with the hand decisions most. Withdrawn after seeing the data, and said
+  so here.
+- *The question is hard even for a person:* 7 of 42 decisions were "unsure" on 10 m chips.
+
+**Decision (2026-10-24).**
+- The Geo-VLM **model stays Qwen2.5-VL-7B-Instruct** (the default rule: Qwen3 did not clearly win).
+  Every reported Phase 4 run uses it.
+- **The region check (D7 candidate check) is cut from the evaluation**, as the plan's cut order says
+  ("cut the D7 candidate check first"). It stays in the app as "a second look, not validated", where
+  it never removes a region (D7). Its prompt (`vlmcheck_v1`) is not frozen and not reported as a
+  result, except as this negative finding.
+- Phase 4 goes on with the report prompts and the freeze. The gated / ungated report comparison
+  doesn't depend on the region check.
+
+**Addendum: the model is re-decided on report outputs (2026-10-24, written before any report output).**
+The region check is a yes/no image question; the reports are a different task. Keeping Qwen2.5 because
+of the check has a specific risk: its "always change" habit would make the **ungated** arm invent change,
+widening the gated-vs-ungated gap for a reason that has nothing to do with gating (a weak opponent).
+So both models run the report arms on the 80 development boxes (`scripts/report_dev.py`, same prompts
+v0, same chips), and the model for every reported run is chosen by these rules, in order:
+1. *Gated output must be usable:* parse failures plus dropped items on at most 5 % of gated reports.
+2. *Gated must not invent change:* the share of control boxes where the gated report claims change
+   (the template arm gets 0 %). Lower is better.
+3. *Gated claims must hold:* the verifier's unsupported rate on the detected boxes. Lower is better.
+4. *Ties (within 5 points on 2 and 3):* take the model whose **ungated** arm claims change on fewer
+   controls, i.e. the stronger opponent. This is the conservative choice: it can only make the gated
+   advantage smaller.
+
+The ungated results never decide the model except through rule 4. Whichever model wins, both models'
+development tables go into `docs/report_dev.md`. If Qwen3 wins, this addendum records the switch, and
+the plan's "Qwen2.5-VL-7B-Instruct for every reported run" changes with it.
 
 **Limits.**
 - 60 development regions, and the hand decisions come from the same person who builds the system.
@@ -535,10 +599,10 @@ scored by the same verifier and labels. It is a **pre-specified secondary compar
 vs ungated GPT. The primary comparison (gated vs ungated Qwen) is unchanged, and template stays a
 reference.
 - **Same input and prompt as ungated Qwen.** Both ungated arms use `agents/ungated.py`
-  (`ungated_report_v0`): the before/after chips with the box outlined, the dates, nothing from the
+  (`ungated_report_v1`; v1 also asks about the shoreline and buildings near it, D13): the before/after chips with the box outlined, the dates, nothing from the
   evidence. The arms differ only in the model that writes, so the difference is the model's.
 - **One extractor for both ungated arms.** Free text is split into claims by the Geo-VLM (Qwen,
-  text only, `claim_extract_v0`), which copies statements and never judges them. Using the same
+  text only, `claim_extract_v1`), which copies statements and never judges them. Using the same
   extractor for GPT and Qwen keeps extraction errors from favouring either arm. Items that break the
   claim schema are dropped and counted as parse failures (metric 8), never repaired.
 - **Report arm, not a pipeline condition.** `schema.REPORT_CONDITIONS` adds `ungated_gpt`;
@@ -547,7 +611,7 @@ reference.
   on. Running it needs `EVICHANGE_GPT=http` and an explicit `OPENAI_MODEL`, and the model name is
   reported. It sends the chips to OpenAI, so it costs money and moves imagery off our own GPU. The
   labelled-site lock (D7) applies to it too. Answers can be replayed (`GPT_REPLAY_FILE`).
-- **Prompt hygiene.** The ungated report prompt and the extractor prompt are drafts (v0). They are
+- **Prompt hygiene.** The ungated report prompt and the extractor prompt are drafts (v1). They are
   developed outside the 30 sites and frozen with the other Phase 4 prompts.
 
 **Open before freezing.**
@@ -555,6 +619,15 @@ reference.
    where change is *in the box*. For both ungated arms, the verifier's location checks would then
    compare different frames. Options: recompute locations relative to the site box for every arm,
    or drop location wording from the ungated prompt.
+   **Decided 2026-10-24: recompute, for every arm** (`agents/site_evidence.py`). A site's evidence
+   is cut to the box:
+   - its regions are the ones overlapping the box;
+   - `area_ha` is the part inside the box, and `location` is where that part's centroid falls in a
+     3 × 3 grid over the box;
+   - `change_frac` is the detected share of the box.
+
+   All arms are verified against that evidence, and the gated arm is given it, so every location
+   claim is in the frame the images show.
 2. *Extractor validation.* Check the extractor on a sample of reports outside the 30 sites (claims
    missed, invented or mis-levelled) and report that rate; it is part of the measurement.
 
@@ -562,3 +635,96 @@ reference.
 record the dated model name the API returns). GPT sees PNG chips at its own image resolution, not
 the 10 m pixels. A better GPT result would not say the Geo-VLM is worse at describing imagery; the
 claim tested is about unsupported claims reaching the user.
+
+## D17 — Fine-tuning the Geo-VLM on our own labels (2026-10-24, proposed)
+
+**Why.** Zero-shot, neither Qwen model told change from no change on development boxes (D15: about
+chance against blind hand decisions), and the region check was cut. Fine-tuning on labels from this
+area is the obvious next step, and the user decided to take it for both tasks.
+
+**Labels.** About 300 **new** development boxes, labelled blind by P2 from the chips only (true
+colour, SWIR, colour infrared, before and after). Each box gets change / no change / unsure, plus the
+change types seen (`schema.CHANGE_TYPES` + other), as for the Phase 3 labels.
+- *Boxes:* 240 detected regions (stratified like the D15 sample) and 60 boxes with no detection within
+  200 m, so the model sees both answers.
+- *Leakage guards:*
+  - Never a labelled site and never within **500 m** of one (enforced in code).
+  - Never one of the 80 D15 boxes: those become the **held-out development test**, labelled the same way.
+- *Dynamic World is not a label source.* It disagreed with the hand decisions on 13 of the 18 detected
+  boxes where it kept the same class.
+- "Unsure" boxes are left out of training.
+
+**Two fine-tuned tasks** (LoRA adapters on the base model chosen by the D15 addendum; the base
+weights stay frozen):
+1. *Region check:* chips → `{"verdict", "change_types"}` (the `vlmcheck` answer shape). The target
+   is the hand label.
+2. *Gated report:* chips + box evidence → the gated JSON (`agents/gated.py`). The target is built per
+   box: claims that are **in the evidence and true per the hand label**, abstentions for the rest
+   (causes, legality, the future, and evidence the label contradicts). It is not the rule-based
+   template; that would only teach the model to be the template.
+
+**Evaluation (pre-specified here, before any training).**
+- The primary comparison is unchanged: post-gate hallucination rate, gated vs ungated, **both on
+  the base model**.
+- A new secondary arm, `gated_ft` (fine-tuned gated), is compared with gated-base, which separates
+  the effect of training from the effect of gating.
+- The ungated arms stay untrained: they stand for a model used "the usual way" (D16).
+- The fine-tuned check is scored against the held-out development labels first (balanced accuracy,
+  as D15), then on the 30 sites against the Phase 3 labels.
+
+**As drawn (2026-10-24).**
+- *Boxes:* 240 detected + **39** no-detection boxes (`data/quangninh/ft_boxes.json`, seed 17). Only about
+  40 land boxes in the AOI clear both guards; most of the AOI is sea or near a detection.
+- *Planet:* 3 m PlanetScope for the two detector windows was planned, one clear day each, 4-band, since
+  the 2018 Doves have no 8-band: 2018-11-01 (3 scenes) and 2023-02-28 (1 scene), about 512 km². The
+  order was refused because the October quota was used up. It goes **first on the November quota**, and
+  the year-2 monthly months that no longer fit move to December (`scripts/planet_order.py --window`).
+- *Labels are made on the Sentinel-2 chips,* starting now, not waiting for Planet. Planet chips are
+  added as a model input once loaded into Earth Engine. The untrained baseline is re-run on them too,
+  so sharper images and training are measured separately.
+
+- *Second labeller and second draw:*
+  - P3 labels 100 of the training boxes, plus 16 of P2's labelled boxes repeated unmarked, for
+    inter-rater agreement. The repeats never replace P2's label in training
+    (`scripts/finetune_data.py`, `ft_assigned.json`).
+  - A second draw added 55 detected regions under the same guards. That is all that was left: 334
+    training boxes in all.
+- *Data from outside Quang Ninh (decided 2026-10-24):* **none in the first training run**, so its
+  result shows what our own labels do.
+  - **TERRA-CD** (Sentinel-2, 232 cities) is ruled out: its labels come from NDVI thresholds and an
+    SVM, the same signal as our detector, so the model would learn to copy the detector.
+  - **OSCD** is ruled out: its labels are urban change only, so its "no change" isn't trustworthy.
+  - **DynamicEarthNet** (Planet 3 m, 75 areas, hand-made monthly land-cover maps) is the candidate
+    for a second run with the Planet chips from November, after confirming its licence and
+    downloading only the monthly frames needed.
+  - Any outside data is training-only: the held-out set and the 30 sites stay Quang Ninh.
+
+**Labelling scheme v2 (2026-10-25).**
+- *Why:* on the first scheme (change / no change at 10 m), P2 and P3 agreed on 9 of 14 boxes they
+  both labelled. That is Cohen's κ = 0.05, chance level. The 10 m chips are too blurry, and "did it
+  change?" leaves too much to judgement (size, crops, gradual greening, tide). So the labels are
+  remade with two changes:
+  1. **Google Earth's high-resolution historical imagery** is the main view. Each box has a link, and
+     each page a KML for the history slider in Google Earth Pro. The month of the image used is
+     recorded per window, and the Sentinel-2 chips stay for reference. Google Earth imagery is only
+     looked at to make labels; it never goes into training.
+  2. **Land cover per date, not change.** For each date: the covers taking up at least about a fifth
+     of the box (water / dense vegetation / sparse vegetation / crops / bare / built-up), and the main
+     one, or "can't tell". Change and change types are **derived** from the two dates
+     (`scripts/finetune_mcq.py derive()`), never judged. This multiple-choice format follows
+     GEOBench-VLM (Danish et al., ICCV 2025).
+- *Order:*
+  1. 40 **calibration** boxes, labelled by both P2 and P3. κ is computed on the derived change and on
+     the main cover per date. Training needs κ ≥ 0.5; below that, the task is too ambiguous to train on.
+  2. The 80 **held-out** boxes, labelled by both; disagreements are settled together, so it is a
+     trustworthy answer key.
+  3. The **training** boxes.
+- *The first-scheme labels* (329 boxes) are kept, as a comparison of what 10 m labelling got right.
+- *Outside yardstick:* both Qwen models are scored on GEOBench-VLM's temporal multiple-choice tasks
+  (`scripts/geobench_eval.py`, evaluation only).
+
+**Limits.**
+- Two labellers, one of whom (P2) built the system; P2 labelled most of the boxes.
+- A few hundred boxes from one area and one date pair: the adapter learns Quang Ninh 2018/19 →
+  2022/23, not change in general.
+- 10 m chips.

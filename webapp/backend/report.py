@@ -10,12 +10,16 @@ Phase 3 replaces ungated_claims() / gated_claims() with real Qwen2.5-VL output
 
 Ungated arms with a real model (agents/ungated.py, D16) pass their output in as `ungated`:
 free text plus the claims the extractor split it into. "ungated_gpt" has no demo stand-in,
-so without that output its report says it was not run.
+so without that output its report says it was not run. The gated arm with the real Geo-VLM
+(agents/gated.py) passes its output in as `gated`.
+
+Evidence may carry shoreline transects and coastal-strip built areas (D13); the template
+states them too, so every claim type has a rule-based reference.
 
 Claims are checked by agents/verifier.py and must match agents/schema.py.
 """
 from agents.schema import CHANGE_TYPES, REASONS, T_IDX, region_change_types
-from agents.verifier import verify
+from agents.verifier import COASTAL_MIN_HA, verify
 
 
 def _ha(area):
@@ -30,11 +34,34 @@ def _number(claims):
     return claims
 
 
+def _coast_claims(ev):
+    """Template claims for the shoreline transects and coastal strips (D13), if the evidence has any."""
+    claims = []
+    for t in ev.get("transects") or []:
+        if t["change"] in ("advancing", "retreating"):
+            way = "seaward" if t["change"] == "advancing" else "landward"
+            claims.append(dict(level="L2", type="shoreline", shoreline_change=t["change"], transect_ref=t["id"],
+                               text=f"Transect {t['id']}: the shoreline moved about {abs(t['nsm']):.0f} m {way} "
+                                    f"in the {t['location']} ({t['lrr']:+.1f} m/yr).",
+                               region_ref=None, evidence_ref=["change", "nsm", "lrr"], stated_conf=None))
+    for st in ev.get("coastal_strips") or []:
+        delta = st["built_ha_after"] - st["built_ha_before"]
+        where = f" in the {st['location']}" if st.get("location") else ""
+        if abs(delta) < COASTAL_MIN_HA:
+            text = f"Built area {st['strip']} m from the shore{where} was unchanged."
+        else:
+            text = (f"Built area {st['strip']} m from the shore{where} {'grew' if delta > 0 else 'decreased'} "
+                    f"by about {_ha(abs(delta))} ha.")
+        claims.append(dict(level="L2", type="coastal_built", strip=st["strip"], text=text, region_ref=None,
+                           evidence_ref=["built_ha_before", "built_ha_after"], stated_conf=None))
+    return claims
+
+
 def template_claims(ev):
     claims = []
     if not ev["regions"]:
         return _number([dict(level="L1", type="presence", text="No change detected in the selected area.",
-                             region_ref=None, evidence_ref=["change_frac"], stated_conf=1.0)])
+                             region_ref=None, evidence_ref=["change_frac"], stated_conf=1.0), *_coast_claims(ev)])
     claims.append(dict(level="L1", type="presence", text="Change detected between the two dates.",
                        region_ref=None, evidence_ref=["change_frac"], stated_conf=1.0))
     total = sum(r["area_ha"] for r in ev["regions"])
@@ -49,7 +76,7 @@ def template_claims(ev):
             claims.append(dict(level="L3", type="change_type", change_type=name,
                                text=f"Region {r['id']}: spectral signal indicates {label}.",
                                region_ref=r["id"], evidence_ref=[field], stated_conf=r["mean_conf"]))
-    return _number(claims)
+    return _number(claims + _coast_claims(ev))
 
 
 def ungated_claims(ev):
@@ -89,13 +116,21 @@ def gated_claims(ev):
         if not region_change_types(r):
             abstain.append({"topic": f"type of change in region {r['id']}",
                             "reason": f"All spectral index changes are within ±{T_IDX} (no clear change)."})
+    for t in ev.get("transects") or []:
+        if t["change"] == "unconfirmed":
+            abstain.append({"topic": f"shoreline movement at transect {t['id']}",
+                            "reason": "The radar trend is not confirmed by the optical imagery."})
     return _number(claims), abstain
 
 
-def build_report(ev, condition, ungated=None):
-    """`ungated`: run_ungated() output for the "ungated" / "ungated_gpt" arms, else None."""
+def build_report(ev, condition, ungated=None, gated=None):
+    """`ungated`: run_ungated() output for the "ungated" / "ungated_gpt" arms; `gated`: run_gated() output
+    (agents/gated.py) for the "gated" arm. Without them, the arms use the demo stand-ins above."""
     raw, abstain, model, extra = None, [], "demo (no AI yet)", {}
-    if condition in ("ungated", "ungated_gpt") and ungated is not None:
+    if condition == "gated" and gated is not None:
+        raw, claims, abstain, model = gated["raw"], [dict(c) for c in gated["claims"]], list(gated["abstain"]), gated["model"]
+        extra = {k: gated[k] for k in ("parse_ok", "dropped", "prompt_version")}
+    elif condition in ("ungated", "ungated_gpt") and ungated is not None:
         raw, claims, model = ungated["raw"], [dict(c) for c in ungated["claims"]], ungated["model"]
         extra = {k: ungated[k] for k in ("parse_ok", "dropped", "extractor_model", "prompt_version", "extract_version")}
     elif condition == "ungated_gpt":

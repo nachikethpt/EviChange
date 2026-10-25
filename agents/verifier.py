@@ -14,6 +14,13 @@ quoted numbers from the text. Rules run in order; the first decisive one wins:
   2 L4 (cause/intent/legality/future)-> unsupported beyond_evidence
   3 cites a field not in evidence    -> unsupported cites_missing_evidence
   4 quotes an index value wrongly    -> unsupported misquoted_evidence
+  4b shoreline (D13) vs the transect statistics (evidence transects[])
+                                     -> shoreline_matches / shoreline_mismatch / shoreline_unconfirmed /
+                                        extent_mismatch / unknown_transect / no_transect_at_location /
+                                        shoreline_not_in_evidence
+  4c coastal_built (D13) vs the coastal-strip built areas (evidence coastal_strips[])
+                                     -> coastal_built_matches / coastal_built_mismatch / extent_mismatch /
+                                        coastal_not_in_evidence
   5 L1 presence vs change mask       -> denies_detected_change / change_not_in_evidence
   6 resolve region(s): region_ref, else location words in the text
   7 L2 extent / location             -> extent_mismatch / location_mismatch / ...
@@ -34,6 +41,9 @@ AREA_REL_TOL = 0.25      # stated hectares may differ from evidence by 25%
 FRAC_ABS_TOL = 0.02      # stated change fraction may differ by 2 percentage points ...
 FRAC_REL_TOL = 0.25      # ... or 25% relative, whichever is larger
 QUOTE_ABS_TOL = 0.02     # a quoted index value may differ by rounding only
+SHORE_ABS_TOL_M = 20     # stated shoreline movement may differ from nsm by 2 Sentinel pixels ...
+SHORE_REL_TOL = 0.25     # ... or 25% relative, whichever is larger; a stated rate by its 95 % CI or 25%
+COASTAL_MIN_HA = 0.5     # built-area change below this is "no clear change" (provisional until Phase 12 is checked)
 
 
 class Verdict(NamedTuple):
@@ -102,6 +112,45 @@ def claimed_class_transition(claim: dict) -> tuple[str | None, str | None]:
     if _REVERSE_RE.search(text):
         return names[1], names[0]
     return None, None
+
+
+_SHORE_ADV = re.compile(r"\b(advanc|seaward|accret|reclaim|prograd|grew|grown|extend|built\s+out|gain)", re.I)
+_SHORE_RET = re.compile(r"\b(retreat|landward|erod|erosion|recede|receded|receding|lost|loss|eaten)", re.I)
+_STABLE = re.compile(r"\b(stable|unchanged|did\s+not\s+(?:move|change)|no\s+(?:clear\s+|significant\s+|net\s+)?"
+                     r"(?:shoreline\s+)?(?:change|movement))", re.I)
+_RATE_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:m|metres?|meters?)\s*(?:/|per\s+)\s*(?:yr|year|a)\b", re.I)
+_DIST_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(km|kilomet(?:re|er)s?|m|met(?:re|er)s?)\b", re.I)
+_STRIP_RE = re.compile(r"\b(200|500)\b(?!\s*(?:ha\b|hectares?|%))", re.I)
+_BUILT_UP = re.compile(r"\b(grew|grow|increas|expan|new|more|added|rose|risen)", re.I)
+_BUILT_DOWN = re.compile(r"\b(decreas|declin|shr[iau]nk|fewer|less|lost|demolish|removed|fell)", re.I)
+_TO_FROM_RE = re.compile(r"\b(to|from)\s+(?:about\s+|around\s+|roughly\s+|approximately\s+|~\s*)?$", re.I)
+
+
+def claimed_shoreline(claim: dict) -> tuple[str | None, list[float], list[float]]:
+    """(direction, distances m, rates m/yr) a shoreline claim states. Structured shoreline_change wins
+    for the direction; a text naming both directions states none."""
+    text = claim.get("text", "")
+    direction = claim.get("shoreline_change")
+    if direction is None:
+        if _STABLE.search(text):
+            direction = "stable"
+        else:
+            adv, ret = bool(_SHORE_ADV.search(text)), bool(_SHORE_RET.search(text))
+            direction = "advancing" if adv and not ret else "retreating" if ret and not adv else None
+    rates = [float(m.group(1)) for m in _RATE_RE.finditer(text)]
+    rest = _RATE_RE.sub(" ", text)
+    dists = [float(m.group(1)) * (1000 if m.group(2).lower().startswith("k") else 1) for m in _DIST_RE.finditer(rest)]
+    return direction, dists, rates
+
+
+def claimed_strip(claim: dict) -> str:
+    """The coastal strip a coastal_built claim is about: "0-200", "200-500" or "0-500" (both)."""
+    if claim.get("strip"):
+        return claim["strip"]
+    found = {m.group(1) for m in _STRIP_RE.finditer(claim.get("text", ""))}
+    if found == {"200", "500"}:
+        return "200-500"
+    return "0-200" if found == {"200"} else "0-500"
 
 
 def claimed_locations(text: str) -> set[str]:
@@ -179,6 +228,96 @@ def _check_land_cover(claim: dict, pool: list[dict], min_conf: float) -> Verdict
     return Verdict("unsupported", "class_transition_mismatch")
 
 
+def _shoreline_numbers_match(tr: dict, dists: list[float], rates: list[float]) -> bool:
+    if (dists and tr.get("nsm") is None) or (rates and tr.get("lrr") is None):
+        return False
+    nsm, lrr = abs(tr.get("nsm") or 0.0), abs(tr.get("lrr") or 0.0)
+    rate_tol = max(tr.get("ci95") or 0.0, SHORE_REL_TOL * lrr, 1.0)
+    return (all(abs(d - nsm) <= max(SHORE_ABS_TOL_M, SHORE_REL_TOL * nsm) for d in dists)
+            and all(abs(r - lrr) <= rate_tol for r in rates))
+
+
+def _check_shoreline(claim: dict, ev: dict, locations: set[str]) -> Verdict:
+    """A shoreline claim against the transect statistics (D11): the confirmed trend, nsm and lrr."""
+    transects = ev.get("transects") or []
+    if not transects:
+        return Verdict("uncertain", "shoreline_not_in_evidence")
+    if claim.get("transect_ref") is not None:
+        ref = next((t for t in transects if t["id"] == claim["transect_ref"]), None)
+        if ref is None:
+            return Verdict("unsupported", "unknown_transect")
+        if locations and not any(_location_matches(loc, ref["location"]) for loc in locations):
+            return Verdict("unsupported", "location_mismatch")
+        pool = [ref]
+    elif locations:
+        pool = [t for t in transects if any(_location_matches(loc, t["location"]) for loc in locations)]
+        if not pool:
+            return Verdict("unsupported", "no_transect_at_location")
+    else:
+        pool = transects
+    direction, dists, rates = claimed_shoreline(claim)
+    if direction is None and not dists and not rates:
+        return Verdict("uncertain", "type_not_checkable")
+    measured = [t for t in pool if t["change"] != "too_few"]
+    if not measured:
+        return Verdict("uncertain", "shoreline_not_in_evidence")
+    if direction == "stable":
+        # like "no change": wrong if any transect it covers moved
+        if any(t["change"] in ("advancing", "retreating") for t in measured):
+            return Verdict("unsupported", "shoreline_mismatch")
+        if any(t["change"] == "unconfirmed" for t in measured):
+            return Verdict("uncertain", "shoreline_unconfirmed")
+        return Verdict("supported", "shoreline_matches")
+    if direction is None:
+        supporting = measured
+    else:
+        supporting = [t for t in measured if t["change"] == direction]
+        if not supporting:
+            sign = 1 if direction == "advancing" else -1
+            if any(t["change"] == "unconfirmed" and sign * (t.get("lrr") or 0) > 0 for t in measured):
+                return Verdict("uncertain", "shoreline_unconfirmed")
+            return Verdict("unsupported", "shoreline_mismatch")
+    if (dists or rates) and not any(_shoreline_numbers_match(t, dists, rates) for t in supporting):
+        return Verdict("unsupported", "extent_mismatch")
+    return Verdict("supported", "shoreline_matches")
+
+
+def _check_coastal_built(claim: dict, ev: dict, locations: set[str]) -> Verdict:
+    """A coastal_built claim against the built area in the coastal strips (D11, Phase 12)."""
+    strips = ev.get("coastal_strips") or []
+    if locations:
+        strips = [s for s in strips if s.get("location") and any(_location_matches(loc, s["location"]) for loc in locations)]
+    which = claimed_strip(claim)
+    names = ("0-200", "200-500") if which == "0-500" else (which,)
+    pool = [s for s in strips if s["strip"] in names]
+    if not all(any(s["strip"] == n for s in pool) for n in names):
+        return Verdict("uncertain", "coastal_not_in_evidence")
+    before = sum(s["built_ha_before"] for s in pool)
+    after = sum(s["built_ha_after"] for s in pool)
+    delta = after - before
+    text = claim.get("text", "")
+    if _STABLE.search(text) or _DENIES_RE.search(text):
+        direction = 0
+    else:
+        up, down = bool(_BUILT_UP.search(text)), bool(_BUILT_DOWN.search(text))
+        direction = 1 if up and not down else -1 if down and not up else None
+    amounts = []
+    for m in _HA_RE.finditer(text):
+        word = _TO_FROM_RE.search(text[:m.start()])
+        actual = {"to": after, "from": before}.get(word.group(1).lower() if word else "", abs(delta))
+        amounts.append((float(m.group(1).replace(",", "")), actual))
+    if direction is None and not amounts:
+        return Verdict("uncertain", "type_not_checkable")
+    changed = abs(delta) >= COASTAL_MIN_HA
+    if direction == 0:
+        return Verdict("unsupported", "coastal_built_mismatch") if changed else Verdict("supported", "coastal_built_matches")
+    if direction is not None and (not changed or direction * delta < 0):
+        return Verdict("unsupported", "coastal_built_mismatch")
+    if any(abs(value - actual) > AREA_REL_TOL * max(actual, 1.0) for value, actual in amounts):
+        return Verdict("unsupported", "extent_mismatch")
+    return Verdict("supported", "coastal_built_matches")
+
+
 def _with_confidence(verdict: Verdict, regions: list[dict], min_conf: float) -> Verdict:
     if verdict.verdict == "supported" and regions and max(r["mean_conf"] for r in regions) < min_conf:
         return Verdict("uncertain", "low_detection_confidence")
@@ -203,6 +342,12 @@ def verify(claim: dict, ev: dict, min_conf: float = CONF_MIN) -> Verdict:
         pool = [ref_region] if ref_region else regions
         if not any(abs(r[field] - float(value)) <= QUOTE_ABS_TOL for r in pool):
             return Verdict("unsupported", "misquoted_evidence")
+
+    # shoreline and coastal-strip claims are about their own evidence, not the change regions
+    if ctype == "shoreline":
+        return _check_shoreline(claim, ev, claimed_locations(text))
+    if ctype == "coastal_built":
+        return _check_coastal_built(claim, ev, claimed_locations(text))
 
     has_change = bool(regions) or ev.get("change_frac", 0) > 0
     if level == "L1":

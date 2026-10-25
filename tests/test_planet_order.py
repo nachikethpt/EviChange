@@ -240,3 +240,20 @@ def test_old_plans_without_quota_estimate_still_order(tmp_path, monkeypatch):
     fake = FakePlanet({})
     assert po.place_orders(fake, plan, confirm=True, max_km2=3000) == ["order-1"]
     assert po.quota_km2(plan["months"][0]) == 211.9
+
+
+def test_window_plan_picks_one_day_over_the_whole_range_with_4_bands(tmp_path, monkeypatch):
+    monkeypatch.setattr(po, "OUT", tmp_path); monkeypatch.setattr(po, "ORDERS_LOG", tmp_path / "orders.json")
+    session = FakePlanet({"2018-11": [item("a", "2018-11-04T03:00:00Z", WEST_HALF)],
+                          "2018-12": [item("b", "2018-12-17T03:00:00Z", ALL, clear=95)],
+                          "2019-01": [item("c", "2019-01-09T03:00:00Z", ALL, clear=60)]})
+    plan = po.make_plan(session, AOI, po.months("2018-11", "2019-01"), 0.1, today=date(2026, 10, 24),
+                        bands=4, window="before_2018-19")
+    assert [r["month"] for r in plan["months"]] == ["before_2018-19"]
+    row = plan["months"][0]
+    assert row["date"] == "2018-12-17" and row["item_ids"] == ["b"] and row["span"] == ["2018-11", "2019-01"]
+    assert plan["product_bundle"] == "analytic_sr_udm2" and plan["bands"] == 4
+    po.place_orders(session, plan, confirm=True, max_km2=3000)
+    assert session.orders[0]["name"] == "evichange-qn-before_2018-19-2018-12-17"
+    assert session.orders[0]["products"][0]["product_bundle"] == "analytic_sr_udm2"
+    assert "order_id" in po.load_log()["before_2018-19"]
