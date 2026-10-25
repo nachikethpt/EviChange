@@ -46,6 +46,14 @@ def test_empty_box_has_no_regions():
     assert ev["regions"] == [] and ev["change_frac"] == 0
 
 
+def test_sliver_under_one_pixel_is_not_an_overlap():
+    """Less than MIN_INSIDE_M2 (one 10 m pixel) inside the box doesn't count: no region, change_frac 0."""
+    sliver = feature("r4", square(107.31 - 0.00005, 21.002, 107.32, 21.0021))     # ~5 m x 11 m inside
+    ev = se.site_evidence(BOX, [sliver], ["a", "b"], ["c", "d"], "t", "p")
+    assert se.inside_part(sliver["geometry"], BOX)[0] > 0
+    assert ev["regions"] == [] and ev["change_frac"] == 0
+
+
 def test_reversed_ring_gives_the_same_area():
     ring = square(107.302, 21.002, 107.304, 21.004)["coordinates"][0]
     cw = {"type": "Polygon", "coordinates": [ring[::-1]]}

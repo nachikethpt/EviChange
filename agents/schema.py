@@ -151,6 +151,8 @@ def validate_aoi(aoi: object) -> list[str]:
         polygons = [coordinates]
     else:
         polygons = coordinates
+    if not all(isinstance(polygon, list) and all(isinstance(ring, list) for ring in polygon) for polygon in polygons):
+        return ["AOI coordinates must be lists of rings"]
     results = [_polygon_area_km2(polygon) for polygon in polygons]
     points = [point for polygon in polygons for ring in polygon for point in ring]
     errors = []
@@ -183,7 +185,8 @@ def validate_windows(before_window: object, after_window: object) -> list[str]:
         if end > start + timedelta(days=366):
             errors.append(f"{name} must be at most 12 months")
         parsed.append((start, end))
-    if len(parsed) == 2 and parsed[0][1] > parsed[1][0] and parsed[1][1] > parsed[0][0]:
+    # end dates are inclusive (ee_engine._inclusive_end), so a shared day is an overlap
+    if len(parsed) == 2 and parsed[0][1] >= parsed[1][0] and parsed[1][1] >= parsed[0][0]:
         errors.append("before_window and after_window must not overlap")
     if len(parsed) == 2 and parsed[0][0] >= parsed[1][0]:
         errors.append("before_window must precede after_window")
@@ -330,7 +333,7 @@ def validate_change_regions(fc: object) -> list[str]:
         if not isinstance(geometry, dict) or geometry.get("type") not in ("Polygon", "MultiPolygon", "Point"):
             errors.append(f"feature {i}: missing or unsupported geometry")
         errors += validate_region(feature.get("properties") if isinstance(feature, dict) else None)
-    ids = [f.get("properties", {}).get("id") for f in fc.get("features", []) if isinstance(f, dict)]
+    ids = [f["properties"].get("id") for f in fc.get("features", []) if isinstance(f, dict) and isinstance(f.get("properties"), dict)]
     if len(ids) != len(set(ids)):
         errors.append("region ids are not unique")
     return errors

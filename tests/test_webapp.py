@@ -117,6 +117,16 @@ def test_run_rejects_oversized_multipolygon(client):
     assert client.post("/api/runs", json=run_request(aoi=huge)).status_code == 400
 
 
+@pytest.mark.parametrize("aoi", [
+    {"type": "Polygon", "coordinates": [5]},
+    {"type": "MultiPolygon", "coordinates": [5]},
+    {"type": "MultiPolygon", "coordinates": [[5]]},
+])
+def test_run_rejects_malformed_aoi(client, aoi):
+    """A malformed AOI is a 400 with a message, not a crash in the validator."""
+    assert client.post("/api/runs", json=run_request(aoi=aoi)).status_code == 400
+
+
 def test_run_rejects_invalid_condition(client):
     assert client.post("/api/runs", json=run_request(condition="xyz")).status_code == 400
 
@@ -128,6 +138,7 @@ def test_run_rejects_invalid_condition(client):
     (["2019-03-31", "2018-11-01"], AFTER),              # start after end
     (["2018-11-01"], AFTER),                            # not [start, end]
     (["Nov 2018", "Mar 2019"], AFTER),                  # not ISO dates
+    (["2022-06-01", "2022-11-01"], AFTER),              # share 2022-11-01 (end dates are inclusive)
 ])
 def test_run_rejects_bad_windows(client, before, after):
     assert client.post("/api/runs", json=run_request(before_window=before, after_window=after)).status_code == 400
