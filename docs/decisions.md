@@ -438,6 +438,20 @@ built when more than half the cell is built. (d) on the Planet months with a win
 Dates for (b) and (c) are Oct 2024 and Sep 2026, with the last delivered Planet month standing in for
 Sep 2026 until the November order lands.
 
+**As implemented (Phase 15 verifier, 2026-10-23).** `schema.py` adds the claim types `shoreline` and
+`coastal_built` and two optional evidence lists: `transects[]` (`id`, `location`, `change`, `nsm`, `lrr`,
+`ci95` from `agents/shoreline.py`) and `coastal_strips[]` (`strip` "0-200" / "200-500", `built_ha_before`,
+`built_ha_after`, optional `location`; Phase 12 fills them). Both rules run before the change-region rules,
+since these claims are about their own evidence. *Shoreline:* the claim's transects (by `transect_ref`,
+location words, or all) are checked against the optically confirmed `change`: a direction is supported
+when some transect has it, a stated distance must match `nsm` within 20 m or 25 %, a rate `lrr` within its
+95 % CI or 25 %; "stable" is wrong if any covered transect moved. A radar trend the imagery does not
+confirm (`unconfirmed`) gives *uncertain*, never a verdict either way. *Coastal built:* the strip comes from
+the text ("within 200 m" → 0–200, "200–500 m" → 200–500, else both); the change must exceed 0.5 ha in the
+stated direction (provisional), and stated hectares are read as the change, or the before / after area
+after "from" / "to". No evidence for the claim gives *uncertain* (`shoreline_not_in_evidence`,
+`coastal_not_in_evidence`). Tests: `tests/test_verifier_coastal.py`.
+
 ## D14 — Time series analysis with CCDC (2026-10-11, proposed)
 
 **Why.** The teacher asked for time series analysis. Two-date comparison (D6) says *what* changed
@@ -585,10 +599,10 @@ scored by the same verifier and labels. It is a **pre-specified secondary compar
 vs ungated GPT. The primary comparison (gated vs ungated Qwen) is unchanged, and template stays a
 reference.
 - **Same input and prompt as ungated Qwen.** Both ungated arms use `agents/ungated.py`
-  (`ungated_report_v0`): the before/after chips with the box outlined, the dates, nothing from the
+  (`ungated_report_v1`; v1 also asks about the shoreline and buildings near it, D13): the before/after chips with the box outlined, the dates, nothing from the
   evidence. The arms differ only in the model that writes, so the difference is the model's.
 - **One extractor for both ungated arms.** Free text is split into claims by the Geo-VLM (Qwen,
-  text only, `claim_extract_v0`), which copies statements and never judges them. Using the same
+  text only, `claim_extract_v1`), which copies statements and never judges them. Using the same
   extractor for GPT and Qwen keeps extraction errors from favouring either arm. Items that break the
   claim schema are dropped and counted as parse failures (metric 8), never repaired.
 - **Report arm, not a pipeline condition.** `schema.REPORT_CONDITIONS` adds `ungated_gpt`;
@@ -597,7 +611,7 @@ reference.
   on. Running it needs `EVICHANGE_GPT=http` and an explicit `OPENAI_MODEL`, and the model name is
   reported. It sends the chips to OpenAI, so it costs money and moves imagery off our own GPU. The
   labelled-site lock (D7) applies to it too. Answers can be replayed (`GPT_REPLAY_FILE`).
-- **Prompt hygiene.** The ungated report prompt and the extractor prompt are drafts (v0). They are
+- **Prompt hygiene.** The ungated report prompt and the extractor prompt are drafts (v1). They are
   developed outside the 30 sites and frozen with the other Phase 4 prompts.
 
 **Open before freezing.**

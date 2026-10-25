@@ -8,9 +8,13 @@ here and the tests catch every place that disagrees.
     region   {id, area_ha, mean_conf, dNDVI, dNDBI, dMNDWI, location,
               [date_before, date_after, source],
               [class_before, class_after, class_frac_before, class_frac_after] (D10)}
-    evidence {pair_id, dates, source, change_frac, regions[]}
+    evidence {pair_id, dates, source, change_frac, regions[],
+              [transects[]], [coastal_strips[]] (D13)}
+    transect {id, location, change, nsm, lrr, ci95}   shoreline statistics per transect (D11)
+    strip    {strip, built_ha_before, built_ha_after, [location]}   built area in a coastal strip (D11)
     claim    {claim_id, level, type, text, region_ref, evidence_ref[], stated_conf,
               [change_type], [class_before, class_after] (land_cover claims, D13),
+              [transect_ref, shoreline_change] (shoreline claims, D13), [strip] (coastal_built claims, D13),
               [verdict, verdict_reason]}
 """
 from __future__ import annotations
@@ -25,7 +29,7 @@ CONF_MIN = 0.2    # detections with mean_conf below this only support "uncertain
 CONDITIONS = ("template", "ungated", "gated")
 REPORT_CONDITIONS = (*CONDITIONS, "ungated_gpt")   # D16: GPT is a report-only comparison arm, not a pipeline run
 LEVELS = ("L1", "L2", "L3", "L4")
-CLAIM_TYPES = ("presence", "extent", "location", "change_type", "land_cover", "cause", "other")
+CLAIM_TYPES = ("presence", "extent", "location", "change_type", "land_cover", "shoreline", "coastal_built", "cause", "other")
 VERDICTS = ("supported", "unsupported", "uncertain")
 LOCATIONS = ("north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west", "centre")
 INDEX_FIELDS = ("dNDVI", "dNDBI", "dMNDWI")
@@ -34,8 +38,16 @@ REGION_FIELDS = ("id", "area_ha", "mean_conf", "dNDVI", "dNDBI", "dMNDWI", "loca
 LANDCOVER_CLASSES = ("water", "trees", "grass", "flooded_vegetation", "crops", "shrub_and_scrub", "built", "bare",
                      "snow_and_ice")   # Dynamic World V1 (D10); optional region fields, null when unknown
 REGION_PROVENANCE_FIELDS = ("date_before", "date_after", "source")
+# Shoreline transects (D11, agents/shoreline.py): `change` is the optically confirmed trend; nsm is net
+# movement in m and lrr the rate in m/yr, both seaward positive; null when the transect has too few quarters
+SHORELINE_CHANGES = ("advancing", "retreating", "stable", "unconfirmed", "too_few")
+TRANSECT_FIELDS = ("id", "location", "change", "nsm", "lrr", "ci95")
+# Coastal strips (D11, Phase 12): distance from the Oct 2024 shoreline in m
+COASTAL_STRIPS = ("0-200", "200-500")
+STRIP_FIELDS = ("strip", "built_ha_before", "built_ha_after")
 EVIDENCE_REF_FIELDS = frozenset({"change_frac", "area_ha", "location", "mean_conf", *INDEX_FIELDS,
-                                 "class_before", "class_after", "class_frac_before", "class_frac_after"})
+                                 "class_before", "class_after", "class_frac_before", "class_frac_after",
+                                 "change", "nsm", "lrr", "ci95", "built_ha_before", "built_ha_after"})
 
 # change_type -> (evidence field, sign the field must have beyond T_IDX, human label)
 CHANGE_TYPES = {
@@ -72,6 +84,15 @@ REASONS = {
     "class_transition_matches": "The land-cover classes before and after match the evidence.",
     "class_transition_mismatch": "The stated land-cover change disagrees with the evidence classes.",
     "class_not_in_evidence": "The region has no land-cover classes in the evidence, so this cannot be checked.",
+    "unknown_transect": "Refers to a transect id that is not in the evidence.",
+    "no_transect_at_location": "No shoreline transect at the stated location.",
+    "shoreline_not_in_evidence": "The evidence has no shoreline transects, so this cannot be checked.",
+    "shoreline_matches": "The stated shoreline movement matches the transect statistics.",
+    "shoreline_mismatch": "The stated shoreline movement disagrees with the transect statistics.",
+    "shoreline_unconfirmed": "The radar trend here is not confirmed by the imagery, so the movement cannot be checked.",
+    "coastal_not_in_evidence": "The evidence has no coastal-strip built areas for this, so it cannot be checked.",
+    "coastal_built_matches": "The stated built-area change near the shore matches the evidence.",
+    "coastal_built_mismatch": "The built area near the shore changed the other way, or not by enough.",
 }
 
 
@@ -217,6 +238,34 @@ def validate_region(region: object) -> list[str]:
     return [f"region {rid}: {e}" for e in errors]
 
 
+def validate_transect(tr: object) -> list[str]:
+    if not isinstance(tr, dict):
+        return ["transect is not an object"]
+    errors = [f"missing field '{f}'" for f in TRANSECT_FIELDS if f not in tr]
+    if "location" in tr and tr["location"] not in LOCATIONS:
+        errors.append(f"'location' must be one of {LOCATIONS}, got {tr['location']!r}")
+    if "change" in tr and tr["change"] not in SHORELINE_CHANGES:
+        errors.append(f"'change' must be one of {SHORELINE_CHANGES}, got {tr['change']!r}")
+    for f in ("nsm", "lrr", "ci95"):
+        if tr.get(f) is not None and not _is_number(tr[f]):
+            errors.append(f"'{f}' must be a number or null, got {tr[f]!r}")
+    return [f"transect {tr.get('id', '?')}: {e}" for e in errors]
+
+
+def validate_strip(st: object) -> list[str]:
+    if not isinstance(st, dict):
+        return ["coastal strip is not an object"]
+    errors = [f"missing field '{f}'" for f in STRIP_FIELDS if f not in st]
+    if "strip" in st and st["strip"] not in COASTAL_STRIPS:
+        errors.append(f"'strip' must be one of {COASTAL_STRIPS}, got {st['strip']!r}")
+    for f in ("built_ha_before", "built_ha_after"):
+        if f in st and not (_is_number(st[f]) and st[f] >= 0):
+            errors.append(f"'{f}' must be a number >= 0, got {st[f]!r}")
+    if st.get("location") is not None and st["location"] not in LOCATIONS:
+        errors.append(f"'location' must be one of {LOCATIONS} or null, got {st['location']!r}")
+    return [f"coastal strip {st.get('strip', '?')}: {e}" for e in errors]
+
+
 def validate_evidence(ev: object) -> list[str]:
     if not isinstance(ev, dict):
         return ["evidence is not an object"]
@@ -231,6 +280,16 @@ def validate_evidence(ev: object) -> list[str]:
     ids = [r.get("id") for r in regions if isinstance(r, dict)]
     if len(ids) != len(set(ids)):
         errors.append("evidence: region ids are not unique")
+    for name, check_item in (("transects", validate_transect), ("coastal_strips", validate_strip)):
+        items = ev.get(name, [])
+        if not isinstance(items, list):
+            errors.append(f"evidence: '{name}' must be a list")
+            continue
+        for item in items:
+            errors += check_item(item)
+    tids = [t.get("id") for t in ev.get("transects", []) if isinstance(t, dict)] if isinstance(ev.get("transects", []), list) else []
+    if len(tids) != len(set(tids)):
+        errors.append("evidence: transect ids are not unique")
     return errors
 
 
@@ -250,6 +309,10 @@ def validate_claim(claim: object) -> list[str]:
     for f in ("class_before", "class_after"):
         if claim.get(f) is not None and claim[f] not in LANDCOVER_CLASSES:
             errors.append(f"'{f}' must be one of {LANDCOVER_CLASSES} or null, got {claim[f]!r}")
+    if claim.get("shoreline_change") is not None and claim["shoreline_change"] not in ("advancing", "retreating", "stable"):
+        errors.append(f"'shoreline_change' must be advancing, retreating, stable or null, got {claim['shoreline_change']!r}")
+    if claim.get("strip") is not None and claim["strip"] not in (*COASTAL_STRIPS, "0-500"):
+        errors.append(f"'strip' must be one of {(*COASTAL_STRIPS, '0-500')} or null, got {claim['strip']!r}")
     if claim.get("verdict") is not None and claim["verdict"] not in VERDICTS:
         errors.append(f"'verdict' must be one of {VERDICTS}, got {claim['verdict']!r}")
     if claim.get("verdict_reason") is not None and claim["verdict_reason"] not in REASONS:

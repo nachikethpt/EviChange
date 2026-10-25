@@ -17,10 +17,15 @@ import json
 import re
 
 from . import vlm_check
-from .schema import CHANGE_TYPES, CLAIM_TYPES, EVIDENCE_REF_FIELDS, LANDCOVER_CLASSES, LOCATIONS, T_IDX, validate_claim
+from .schema import CHANGE_TYPES, LOCATIONS, T_IDX, validate_claim
 
 PROMPT_VERSION = "gated_report_v0"
 EVIDENCE_FIELDS = ("id", "area_ha", "location", "mean_conf", "dNDVI", "dNDBI", "dMNDWI", "class_before", "class_after")
+# The box evidence (site_evidence) has regions only, so v0 offers the region claim types and fields. shoreline /
+# coastal_built (D13) join with the transect / coastal-strip evidence, in a new prompt version.
+PROMPT_TYPES = ("presence", "extent", "location", "change_type", "land_cover")
+PROMPT_REF_FIELDS = ("area_ha", "change_frac", "class_after", "class_before", "class_frac_after", "class_frac_before",
+                     "dMNDWI", "dNDBI", "dNDVI", "location", "mean_conf")
 
 PROMPT = """You are writing a short change report about the area inside the yellow box, for a decision maker.
 You get {count} Sentinel-2 images of the same place:
@@ -83,8 +88,8 @@ def build_prompt(ev: dict, before_window: list[str], after_window: list[str], ch
     return PROMPT.format(count=vlm_check._COUNT[2 * len(kinds)], images="   ".join(labels), keys=keys,
                          before=" to ".join(before_window), after=" to ".join(after_window),
                          evidence=evidence_for_prompt(ev), locations=", ".join(LOCATIONS), t=f"{T_IDX:.2f}",
-                         types=", ".join(t for t in CLAIM_TYPES if t not in ("cause", "other")),
-                         fields=", ".join(sorted(EVIDENCE_REF_FIELDS)), change_types=", ".join(CHANGE_TYPES))
+                         types=", ".join(PROMPT_TYPES), fields=", ".join(PROMPT_REF_FIELDS),
+                         change_types=", ".join(CHANGE_TYPES))
 
 
 def parse_report(text: str) -> tuple[list[dict], list[dict], bool, int]:
@@ -106,7 +111,7 @@ def parse_report(text: str) -> tuple[list[dict], list[dict], bool, int]:
         claim = {"level": item.get("level"), "type": item.get("type"), "text": str(item["text"]).strip(),
                  "region_ref": item.get("region_ref") if isinstance(item.get("region_ref"), str) else None,
                  "evidence_ref": [str(f) for f in refs] if isinstance(refs, list) else refs, "stated_conf": None}
-        for field in ("change_type", "class_before", "class_after"):
+        for field in ("change_type", "class_before", "class_after", "transect_ref", "shoreline_change", "strip"):
             if item.get(field) is not None:
                 claim[field] = item[field]
         if validate_claim(claim):
