@@ -29,7 +29,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, List, Literal, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -40,6 +40,7 @@ from agents.vlm_client import VLMClient, VLMUnavailable
 from agents.graph import run_pipeline
 from agents.study import REPO_ROOT, load_study_config
 from agents.schema import CHANGE_TYPES, CONDITIONS, CONF_MIN, REPORT_CONDITIONS, T_IDX, validate_aoi, validate_windows
+from eval import adjudication
 
 from . import data_store
 from .report import build_report
@@ -501,6 +502,107 @@ def shoreline_transect(tid: str):
     return {**feat["properties"], "geometry": feat["geometry"],
             "series": [{"month": m, "pos": p} for m, p in zip(pos["months"], pos["positions"][tid])],
             "quarterly": [{"quarter": q, "pos": p} for q, p in zip(pos.get("quarters", []), pos.get("quarter_positions", {}).get(tid, []))]}
+
+
+# ---------- Phase 5: claim adjudication (eval/adjudication.py; rules docs/adjudication_rules.md) ----------
+ADJ_SOURCES = {"dev": REPO_ROOT / "data" / "reports_dev.jsonl", "sites": REPO_ROOT / "data" / "reports_sites.jsonl"}
+ADJ_DIR = REPO_ROOT / "data" / "adjudication"
+_CHIP_NAME_RE = re.compile(r"^(before|after)_[a-z_]+\.png$")
+_chip_params: dict = {}
+
+
+def _adj_reports(source: str) -> list[dict]:
+    path = ADJ_SOURCES.get(source)
+    if path is None:
+        raise HTTPException(404, f"source must be one of {list(ADJ_SOURCES)}")
+    if not path.exists():
+        raise HTTPException(404, f"no reports yet: {path.relative_to(REPO_ROOT)}")
+    return adjudication.read_jsonl(path)
+
+
+def _adj_file(source: str, adjudicator: str) -> Path:
+    if adjudication.check_judgement({"item_id": "x", "adjudicator": adjudicator}):
+        raise HTTPException(400, "adjudicator must be 1-32 letters, digits, - or _")
+    return ADJ_DIR / f"{source}_{adjudicator}.jsonl"
+
+
+def _adj_judgements(source: str, adjudicator: str) -> list[dict]:
+    path = _adj_file(source, adjudicator)
+    return adjudication.read_jsonl(path) if path.exists() else []
+
+
+def _chip_folder(box: list) -> Optional[Path]:
+    """Where scripts/vlm_batch.py cached the chips for this box, or None without the regions file."""
+    import sys
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    import vlm_batch
+    if "params" not in _chip_params:
+        fc = json.loads(vlm_batch.REGIONS.read_text(encoding="utf-8")) if vlm_batch.REGIONS.exists() else None
+        _chip_params["params"] = vlm_batch.analysis_params(fc) if fc and fc.get("metadata") else None
+    params = _chip_params["params"]
+    return vlm_batch.chip_dir(params, tuple(box)) if params else None
+
+
+@app.get("/api/adjudicate/{source}")
+def adjudicate_queue(source: str, adjudicator: str, role: Literal["first", "second"] = "first",
+                     pass_: int = Query(1, alias="pass", ge=1, le=2)):
+    """The blinded queue: sites in seeded order, their claims from every condition shuffled, this
+    adjudicator's judgements so far. Pass 1 (truth) has no evidence; pass 2 (support) adds it."""
+    reports = _adj_reports(source)
+    judged = adjudication.latest_judgements(_adj_judgements(source, adjudicator))
+    boxes = {r["box_id"]: r.get("box") for r in reports}
+    labels = {r["site_id"]: r for r in adjudication.read_jsonl(adjudication.LABELS_FILE)} if source == "sites" else {}
+    sites = []
+    for site in adjudication.queue(reports, role):
+        folder = _chip_folder(boxes[site["site_id"]]) if boxes.get(site["site_id"]) else None
+        chips = sorted(f.name for f in folder.glob("*.png")) if folder and folder.exists() else []
+        label = labels.get(site["site_id"])
+        sites.append({**site, "evidence": site["evidence"] if pass_ == 2 else None, "chips": chips,
+                      "label": {k: label.get(k) for k in ("change_occurred", "change_types", "confidence", "notes")} if label else None,
+                      "judgements": {it["item_id"]: judged.get(it["item_id"], {}) for it in site["items"]}})
+    return {"source": source, "adjudicator": adjudicator, "role": role, "pass": pass_,
+            "progress": adjudication.progress(reports, _adj_judgements(source, adjudicator), role), "sites": sites}
+
+
+class Judgement(BaseModel):
+    item_id: str
+    adjudicator: str
+    truth: Optional[Literal["true", "false", "unverifiable"]] = None
+    support: Optional[Literal["supported", "unsupported"]] = None
+    about_detector: Optional[bool] = None
+    compound: Optional[bool] = None
+    note: Optional[str] = None
+
+
+@app.post("/api/adjudicate/{source}")
+def adjudicate_save(source: str, j: Judgement):
+    """Append one judgement; the latest value of each field wins (so a pass can be corrected)."""
+    reports = _adj_reports(source)
+    if j.item_id not in adjudication.build_items(reports):
+        raise HTTPException(404, f"unknown item {j.item_id}")
+    path = _adj_file(source, j.adjudicator)
+    row = {k: v for k, v in j.model_dump().items() if v is not None}
+    row["time"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row) + "\n")
+    return {"ok": True, "progress": adjudication.progress(reports, adjudication.read_jsonl(path))}
+
+
+@app.get("/api/adjudicate/{source}/chip/{site_id}/{name}")
+def adjudicate_chip(source: str, site_id: str, name: str):
+    if not _CHIP_NAME_RE.match(name):
+        raise HTTPException(400, "bad chip name")
+    box = next((r.get("box") for r in _adj_reports(source) if r["box_id"] == site_id), None)
+    folder = _chip_folder(box) if box else None
+    if not folder or not (folder / name).exists():
+        raise HTTPException(404, "chip not cached: run scripts/report_dev.py with a model first")
+    return FileResponse(folder / name, media_type="image/png")
+
+
+@app.get("/adjudicate")
+def adjudicate_page():
+    return FileResponse(FRONTEND / "adjudicate.html")
 
 
 app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
