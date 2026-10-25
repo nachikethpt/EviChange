@@ -713,6 +713,13 @@ weights stay frozen):
      one, or "can't tell". Change and change types are **derived** from the two dates
      (`scripts/finetune_mcq.py derive()`), never judged. This multiple-choice format follows
      GEOBench-VLM (Danish et al., ICCV 2025).
+  3. **Aquaculture is water** (rule added 2026-10-25, after P2 had ticked crops on some fish farms):
+     fish / shrimp ponds and floating cage farms count as **water**, never crops. Built-up is ticked as
+     well only when rafts and walkways cover about a fifth of the box; wide pond walls are bare. So open
+     water that gains cages derives as no change, and mangrove or fields dug into ponds derive as
+     vegetation → water. Dynamic World also classes aquaculture as water, so the labels match the
+     classes the evaluation uses (D10, D13). Pages labelled before the rule are corrected to it before
+     κ is computed, with the reason in the page's notes.
 - *Order:*
   1. 40 **calibration** boxes, labelled by both P2 and P3. κ is computed on the derived change and on
      the main cover per date. Training needs κ ≥ 0.5; below that, the task is too ambiguous to train on.
