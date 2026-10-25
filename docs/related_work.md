@@ -3,7 +3,7 @@
 EviChange draws on five bodies of work that have not yet been joined: bi-temporal remote-sensing vision-language models (VLMs), hallucination measurement, attribution and claim verification, index-based land-change monitoring, and small-sample evaluation statistics. The central finding is that **no prior work found measures how many unsupported change claims reach a user after a deterministic evidence gate**, in remote sensing or in any other domain. The searches behind this review were broad but not exhaustive, so the paper should say "to our knowledge". Each neighbouring literature leaves a specific opening:
 
 - **Temporal RS VLMs.** They have multiplied since mid-2024 (ChangeChat, CDChat, TEOChat, EarthDial, CCExpert and others). Almost all are trained on sub-metre to ~3 m imagery and scored with n-gram caption metrics, which reward template matching rather than factual support.
-- **General VLMs on change tasks.** They score near chance. GPT-4o reaches 0.17 and Qwen2-VL 0.20 on GEOBench-VLM's change task.
+- **General VLMs on change tasks.** They score poorly. On GEOBench-VLM the best model (LLaVA-OneVision) reaches only 41.7 % multiple-choice accuracy, about twice random [V], and per-model change-task scores near 0.2 are reported but [U] (see § 1).
 - **RS hallucination benchmarks.** These appeared in 2024–2026 (RSPOPE, RSHallu, RSHBench, VHM, GeoArbiter). All are single-image, and none counts hallucinated *changes* or hallucinated *causes* of change.
 - **Attribution research.** Citing a source does not make a claim supported. About half of generative-search sentences are not fully supported by their citations, and learned attribution checkers reach only ~80% macro-F1.
 - **Tool-using RS agents.** Change-Agent, RS-Agent, GeoLLM-Engine and ThinkGeo ground the LLM's *inputs* in tool outputs but never check its *output* claims.
@@ -28,6 +28,32 @@ The notes behind this review were compiled in a session where arxiv.org, MDPI, T
 
 Items with no tag in the remote-sensing VLM section come from search results that quote the papers, CVF pages or GitHub READMEs, which is the [V] level. The notes do not mark them individually.
 
+## Verification log (2026-10-25)
+
+Checked by web search after the review was written; the tags in the text are updated to match.
+
+| Item | Result |
+|---|---|
+| Change-Agent venue | **V**: IEEE TGRS 2024, doi:10.1109/TGRS.2024.3425815 |
+| EarthDial downstream count | **V**: 44 datasets (CVPR 2025, pp. 14303–14313) |
+| Abstention survey | **V**: Wen, Yao, Feng, Xu, Tsvetkov, Howe & Wang, TACL 13:529–556, doi:10.1162/tacl_a_00754 |
+| SourceCheckup | **V**: Wu, Wu et al., Nature Communications 16:3615 (2025); 50–90 % not fully supported; GPT-4o + search ≈ 30 % of statements unsupported |
+| Magesh et al. | **V**: Journal of Empirical Legal Studies 22:216–242 (2025); 17–33 % hallucination |
+| HallusionBench | **V**: GPT-4V 31.42 % question-pair accuracy (CVPR 2024) |
+| FActScore | **V**: ChatGPT 58 % (EMNLP 2023, doi:10.18653/v1/2023.emnlp-main.741) |
+| SAFE / LongFact | **V**: 72 % agreement with crowd annotators; right in 76 % of 100 disagreements (NeurIPS 2024) |
+| GEOBench-VLM | **Corrected**: best overall is LLaVA-OneVision 41.7 %, not GPT-4o; per-model change-task scores still **U** |
+| DDFAV / RSPOPE | arXiv:2411.02733 only; no journal version found |
+| Nguyen et al. 2022 | **V**: Giang Cong Nguyen, Khac Vu Dang, Tuan Anh Vu, Anh Khac Nguyen & Christiane Weber, Remote Sensing 14(5):1241 |
+| Vu et al. 2024 | **V**: Anh Tuan Vu, Duc Anh Ngo, Thi Phuong Hao Nguyen & Cong Giang Nguyen, Eur. J. Remote Sens. 57(1), doi:10.1080/22797254.2024.2398108 |
+| Duong Thi Loi et al. 2021 | **V**: Vietnam J. Earth Sci. 43(3):249–272, doi:10.15625/2615-9783/16066 |
+| Pelich et al. 2021 (notes) | **V, title differs**: “Coastline detection based on Sentinel-1 time series for ship- and flood-monitoring applications”, IEEE GRSL 18(10):1771–1775, doi:10.1109/LGRS.2020.3008011 |
+| Quang Ninh PSInSAR (IJRS 2021) | **Not found**: confirm the DOI or drop |
+| Bui, Maier & Austin 2014 | Figures V, journal still unconfirmed |
+
+Not re-checked here (still as tagged): the remaining [PK] canon (FEVER, SciFact, TabFact, FactCC, QAGS, SummaC, AlignScore,
+CoVe, SelfCheckGPT, ProgramFC, the index and change-detection classics) and the 2025–2026 preprints tagged [U].
+
 ## Temporal remote-sensing VLMs learned sub-metre change, not Sentinel-2 change
 
 ### A first wave of single-image models, then a temporal second wave
@@ -49,7 +75,7 @@ Four surveys frame the field:
 Since mid-2024 a second wave has taken **bi- or multi-temporal input**. The spatiotemporal survey lists ChangeExp, ChangeChat, CDChat, TEOChat, GeoLLaVA, VisTA, RSUniVLM, EarthDial, UniRS, Falcon, DynamicVL and Change-Agent among them ([Awesome-RS-SpatioTemporal-VLMs](https://github.com/Chen-Yang-Liu/Awesome-RS-SpatioTemporal-VLMs)).
 
 - **TEOChat** (Irvin et al., ICLR 2025) is a LLaVA-style assistant trained on TEOChatlas. That set has **554,071 examples**, of which 245,210 are temporal, drawn from xBD, S2Looking, QFabric and fMoW sequences of 1–8 images. The authors claim it beats GPT-4o and Gemini-1.5 Pro at modelling image sequences, but the numbers sit in table images the session could not read ([GitHub](https://github.com/ermongroup/teochat); [HF dataset](https://huggingface.co/datasets/jirvin16/TEOChatlas)).
-- **EarthDial** (Soni et al., CVPR 2025) fine-tunes InternVL2 with a Phi-3-mini LLM on **more than 11.11M instruction pairs** spanning RGB, SAR and multispectral data, and handles bi- and multi-temporal change detection ([CVF](https://openaccess.thecvf.com/content/CVPR2025/papers/Soni_EarthDial_Turning_Multi-sensory_Earth_Observations_to_Interactive_Dialogues_CVPR_2025_paper.pdf)). Its poster says 37 downstream applications while the paper says 44 downstream datasets, so the authors should check which count to cite ([CVPR poster](https://cvpr.thecvf.com/virtual/2025/poster/34460)). Whether its multispectral data is Sentinel-2 specifically could not be confirmed.
+- **EarthDial** (Soni et al., CVPR 2025) fine-tunes InternVL2 with a Phi-3-mini LLM on **more than 11.11M instruction pairs** spanning RGB, SAR and multispectral data, and handles bi- and multi-temporal change detection ([CVF](https://openaccess.thecvf.com/content/CVPR2025/papers/Soni_EarthDial_Turning_Multi-sensory_Earth_Observations_to_Interactive_Dialogues_CVPR_2025_paper.pdf)). The CVPR paper, the IBM Research listing and the MBZUAI record all say **44 downstream datasets** [V], so cite 44 (the poster's 37 applications is a different count) ([CVPR poster](https://cvpr.thecvf.com/virtual/2025/poster/34460)). Whether its multispectral data is Sentinel-2 specifically could not be confirmed.
 - **CDChat** (IGARSS 2025) uses a shared ViT-L/14 encoder for both dates and trains on SYSU-CD and LEVIR-CD change text ([README](https://github.com/techmn/cdchat/blob/main/README.md)).
 - **ChangeChat** (ICASSP 2025) calls itself the first bi-temporal VLM and uses ChangeChat-87k built from LEVIR-CC/MCI ([ResearchGate](https://www.researchgate.net/publication/390536998_ChangeChat_An_Interactive_Model_for_Remote_Sensing_Change_Analysis_via_Multimodal_Instruction_Tuning)).
 - **GeoLLaVA** LoRA-tunes LLaVA-NeXT on 100k fMoW pairs ([survey list](https://github.com/Chen-Yang-Liu/Awesome-RS-SpatioTemporal-VLMs)).
@@ -90,7 +116,7 @@ A high CIDEr score therefore says nothing about whether each stated change is su
 
 Benchmarks consistently report weak general-VLM performance on temporal RS tasks.
 
-- **GEOBench-VLM** (Danish et al., ICCV 2025) finds the best model, GPT-4o, at only **~40% MCQ accuracy, about twice random**. On its farm-pond change-detection task **GPT-4o scores 0.1711 and Qwen2-VL 0.1974**. The authors read this as evidence that VLMs struggle to use temporal dependencies ([CVF](https://openaccess.thecvf.com/content/ICCV2025/papers/Danish_GEOBench-VLM_Benchmarking_Vision-Language_Models_for_Geospatial_Tasks_ICCV_2025_paper.pdf)). The preprint and published numbers differ, so cite the ICCV version ([ResearchGate](https://www.researchgate.net/publication/386336171_GEOBench-VLM_Benchmarking_Vision-Language_Models_for_Geospatial_Tasks)).
+- **GEOBench-VLM** (Danish et al., ICCV 2025) finds the best model, **LLaVA-OneVision, at only 41.7% MCQ accuracy, about twice random, with GPT-4o slightly lower** [V, corrected 2026-10-25: earlier notes named GPT-4o as best]. On its farm-pond change-detection task **GPT-4o scores 0.1711 and Qwen2-VL 0.1974** [U: not found in the abstract or category tables; read the ICCV results table before quoting]. The authors read this as evidence that VLMs struggle to use temporal dependencies ([CVF](https://openaccess.thecvf.com/content/ICCV2025/papers/Danish_GEOBench-VLM_Benchmarking_Vision-Language_Models_for_Geospatial_Tasks_ICCV_2025_paper.pdf)). The preprint and published numbers differ, so cite the ICCV version ([ResearchGate](https://www.researchgate.net/publication/386336171_GEOBench-VLM_Benchmarking_Vision-Language_Models_for_Geospatial_Tasks)).
 - Zhang & Wang's VLEO benchmark finds GPT-4V good at captioning but poor at localization and counting ([CVPRW 2024](https://openaccess.thecvf.com/content/CVPR2024W/EarthVision/html/Zhang_Good_at_Captioning_Bad_at_Counting_Benchmarking_GPT-4V_on_Earth_CVPRW_2024_paper.html)).
 - XLRS-Bench calls both general and RS MLLMs "still insufficient" ([arXiv:2503.23771](https://arxiv.org/pdf/2503.23771)).
 - Zero-shot VILA-1.5 scored **6.22 CIDEr-D on LEVIR-CC** and hallucinated a non-existent object ([UniRS, arXiv:2412.20742](https://arxiv.org/pdf/2412.20742)).
@@ -108,7 +134,7 @@ Direct evidence on medium-resolution and multispectral input is thin but points 
 
 ### Tool-using RS agents call detectors but do not audit their own sentences
 
-Change-Agent is the nearest precedent for an LLM orchestrating a change detector (Liu et al., arXiv:2403.19646 [V]; IEEE TGRS 2024 venue [PK]). Its MCI model, trained on LEVIR-MCI, acts as the "eyes" with pixel-level detection and captioning branches. An LLM acts as the "brain" for counting and **change-cause analysis** ([arXiv](https://arxiv.org/html/2403.19646v3)). Change-Agent offers causes; EviChange deliberately abstains on them.
+Change-Agent is the nearest precedent for an LLM orchestrating a change detector (Liu, Chen, Zhang, Qi, Zou & Shi, IEEE TGRS 2024, doi:10.1109/TGRS.2024.3425815 [V]; arXiv:2403.19646). Its MCI model, trained on LEVIR-MCI, acts as the "eyes" with pixel-level detection and captioning branches. An LLM acts as the "brain" for counting and **change-cause analysis** ([arXiv](https://arxiv.org/html/2403.19646v3)). Change-Agent offers causes; EviChange deliberately abstains on them.
 
 - **GeoLLM-Engine** (CVPRW 2024) generated more than 500k multi-tool tasks over 1.1M images and scores task completion ([CVF](https://openaccess.thecvf.com/content/CVPR2024W/EarthVision/html/Singh_GeoLLM-Engine_A_Realistic_Environment_for_Building_Geospatial_Copilots_CVPRW_2024_paper.html)).
 - **RS-Agent** reports more than 95% task-planning accuracy over 18 tasks ([arXiv:2406.07089](https://arxiv.org/html/2406.07089v3)).
@@ -140,7 +166,7 @@ VLM hallucination benchmarks fall into three families.
 - **Yes/no probes.** POPE samples random, popular and adversarial negatives. Its authors argue that CHAIR is unstable across prompts ([Li et al., EMNLP 2023](https://arxiv.org/abs/2305.10355), CHAIR critique [V], details [PK]). AMBER combines generative and discriminative tracks ([arXiv:2311.07397](https://arxiv.org/abs/2311.07397), [PK]).
 - **Judge-scored free-form QA.** MMHal-Bench has GPT-4 rate 96 free-form answers on a 0–6 scale ([Sun et al.](https://arxiv.org/abs/2309.14525), [PK]). GAVIE/LRV-Instruction introduced negative instructions so models learn to reject false premises ([ICLR 2024](https://arxiv.org/abs/2306.14565), [PK]).
 
-Other benchmarks add diagnostic depth. HallusionBench separates language hallucination from visual illusion and reports GPT-4V at about 31% question-pair accuracy [PK, figure ~31.42% to verify] ([CVPR 2024](https://arxiv.org/abs/2310.14566)). M-HalDetect annotates descriptions below the sentence level ([AAAI 2024](https://arxiv.org/abs/2308.06394), [PK]). **FaithScore**, the closest VLM analogue to EviChange's metric, splits answers into atomic facts and checks each against the image with a visual-entailment model ([Findings EMNLP 2024](https://arxiv.org/abs/2311.01477), [PK]).
+Other benchmarks add diagnostic depth. HallusionBench separates language hallucination from visual illusion and reports GPT-4V at 31.42% question-pair accuracy, the best of 15 models, all others below 16% [V] ([CVPR 2024](https://arxiv.org/abs/2310.14566)). M-HalDetect annotates descriptions below the sentence level ([AAAI 2024](https://arxiv.org/abs/2308.06394), [PK]). **FaithScore**, the closest VLM analogue to EviChange's metric, splits answers into atomic facts and checks each against the image with a visual-entailment model ([Findings EMNLP 2024](https://arxiv.org/abs/2311.01477), [PK]).
 
 Meta-evaluation counsels caution. The HQM study finds that closed-ended benchmarks have stronger validity but weaker test-retest reliability. Free-form benchmarks lose reliability partly through variance in the LLM judge [V] ([arXiv:2406.17115](https://arxiv.org/abs/2406.17115)). MLLM-as-a-Judge finds that multimodal judges agree with humans on pairwise comparisons but "diverge significantly" on scoring [V] ([ICML 2024](https://proceedings.mlr.press/v235/chen24h.html)). By contrast, HALP reports **97% agreement** between a GPT-4 labeller and a 3-expert consensus (Fleiss' κ = 0.89) in a narrowly specified task [V] ([arXiv:2603.05465](https://arxiv.org/abs/2603.05465)). This supports EviChange's use of human ground truth for the primary endpoint. It also sets a standard: any automatic judge should come with a reported human-agreement statistic.
 
@@ -164,7 +190,7 @@ EviChange has the VLM emit atomic claims in a fixed schema. That **sidesteps dec
 
 RS-specific hallucination research dates from 2024–2026.
 
-- **RSPOPE** (from DDFAV) ports POPE to RS ([arXiv:2411.02733](https://arxiv.org/abs/2411.02733)). Its MDPI *Remote Sensing* 17(4):719 journal version is [U], with conflicting search results. RSHallu later criticized it for detecting only object hallucinations.
+- **RSPOPE** (from DDFAV) ports POPE to RS ([arXiv:2411.02733](https://arxiv.org/abs/2411.02733)). No journal version was found (2026-10-25); cite the arXiv preprint (Li, Qu & Zhang 2024) [V]. RSHallu later criticized it for detecting only object hallucinations.
 - **CHOICE** finds RS-specific VLMs underperform general ones on hallucination detection, except VHM, and shows that "can't judge" behaviour changes scores [V] ([arXiv:2411.18145](https://arxiv.org/abs/2411.18145); author list [PK]).
 - **VHM** (AAAI 2025) is trained on an "honest" set of deceptive questions and is still the best on HnstD in 2026. Its authors concede it cannot do change detection [V] ([AAAI](https://ojs.aaai.org/index.php/AAAI/article/view/32683); [SkyNative, arXiv:2605.17949](https://arxiv.org/abs/2605.17949)).
 - **RSHallu** releases RSHalluEval (2,023 QA pairs), RSHalluCheck (15,396) and RSHalluShield (30k). It finds LHRS-Bot most and VHM least hallucination-prone; headline numbers were not retrieved [V] ([arXiv:2602.10799](https://arxiv.org/abs/2602.10799)).
@@ -304,8 +330,8 @@ The Quang Ninh literature is modest and Landsat-dominated:
 - **Nguyen et al.** build Landsat change matrices for 1991, 2001 and 2019. They tie Cam Pha's artificial surfaces to opencast mines and report **waste rock dumped into the sea replacing water at Cam Trung and Cam Thinh** [V] ([Remote Sensing 2022](https://doi.org/10.3390/rs14051241)).
 - **Hens et al.** find that **39.9% of the 1988 land cover had changed by 1998**, with the coal-mining area up about 75% [V citation; figures from snippet, full text not read] ([EDS 2000](https://doi.org/10.1023/A:1011466108499)).
 - **Vu et al.** use Random Forest object-based classification of six Landsat dates and find Ha Long's 2023 urban area **more than 4× its 2000 extent**, with land reclaimed from the bay a significant contributor [V] ([EuJRS 2024](https://doi.org/10.1080/22797254.2024.2398108)).
-- A Sentinel-1 PSInSAR study finds underground-mining subsidence up to ~14.5 mm/yr in Ha Long and Mong Duong [V for title, journal and figures; **authors U**] ([IJRS 2021](https://doi.org/10.1080/01431161.2021.1875513)). Optical index deltas cannot capture that process.
-- **Bui et al.** report mangrove loss of ~927.5 ha in Ha Long and ~1,144.4 ha in Mong Cai to shrimp ponds [figures V via snippet; **journal U**] ([Deakin figshare](https://deakin.figshare.com/articles/journal_contribution/Land_cover_and_land_use_change_related_to_shrimp_farming_in_coastal_areas_of_Quang_Ninh_Vietnam_using_remotely_sensed_data/20861860)).
+- A Sentinel-1 PSInSAR study finds underground-mining subsidence up to ~14.5 mm/yr in Ha Long and Mong Duong [**U**: a 2026-10-25 search did not find this paper in IJRS; confirm the DOI resolves before citing, else drop it] ([IJRS 2021](https://doi.org/10.1080/01431161.2021.1875513)). Optical index deltas cannot capture that process.
+- **Bui et al.** report mangrove loss of ~927.5 ha in Ha Long and ~1,144.4 ha in Mong Cai to shrimp ponds [figures V; Bui, Maier & Austin, Dec 2014, pp. 441–455; **journal still U**: check the Deakin record] ([Deakin figshare](https://deakin.figshare.com/articles/journal_contribution/Land_cover_and_land_use_change_related_to_shrimp_farming_in_coastal_areas_of_Quang_Ninh_Vietnam_using_remotely_sensed_data/20861860)).
 - Several Vietnamese mangrove studies of Quang Yen, Tien Yen and the Hai Phong–Quang Ninh coast are [U] ([VNUF](https://journal.vnuf.edu.vn/en/article/download/728/642/1281); [VJMST](https://vjst.vast.vn/jmst/article/view/6348)), as is a post-mining land-use planning paper ([ResearchGate](https://www.researchgate.net/publication/268138819_Development_of_methods_for_post-mining_land_use_planning_for_coal_mines_in_urban_areas_in_Quang_Ninh_Vietnam)).
 - News reports (non-peer-reviewed) describe sea-encroachment projects around Ha Long Bay, which the province disputes ([VietNamNet](https://vietnamnet.vn/en/sea-encroachment-projects-in-quang-ninh-result-in-environmental-concerns-2056842.html); [Viet Nam News](https://vietnamnews.vn/environment/1298807/quang-ninh-refutes-allegations-of-sea-encroachment-in-ha-long-bay.html)).
 

@@ -45,7 +45,7 @@ const FALLBACK_TYPES = {
   built_up_increase: { field: 'dNDBI', sign: 1 }, built_up_decrease: { field: 'dNDBI', sign: -1 },
   water_increase: { field: 'dMNDWI', sign: 1 }, water_decrease: { field: 'dMNDWI', sign: -1 },
 };
-const EXAMPLES = ['vegetation loss bigger than 10 ha', 'trees to built', 'new water in the north', 'mining-like changes in this area', 'largest 5 changes', 'select new water bigger than 5 ha'];
+const EXAMPLES = ['vegetation loss bigger than 10 ha', 'trees to built', 'new water in the north', 'mining-like changes in this area', 'largest 5 changes', 'select new water bigger than 5 ha', 'buffer the change regions by 200 m'];
 
 const explore = {
   types: FALLBACK_TYPES, tIdx: 0.1,
@@ -368,6 +368,12 @@ const SELECT_MODES = { add: 'add', 'also select': 'add', remove: 'remove', desel
 function askChat(text) {
   text = text.trim(); if (!text) return;
   explore.chat.push({ who: 'you', html: esc(text) });
+  // map actions first (assistant.js, D9): "buffer …", "make … red", "show the NDVI change", "undo"
+  askAssistant(text).then(handled => { if (!handled) searchChat(text); })
+    .catch(err => { explore.chat.push({ who: 'bot', html: `<span class="chip unsupported">Error</span> ${esc(err.message)}` }); renderPanel(); });
+}
+
+function searchChat(text) {
   const verb = text.match(SELECT_VERBS);
   if (verb) return askSelect(verb[1].toLowerCase(), text.slice(verb[0].length));
   const r = parseQuery(text);
@@ -375,7 +381,7 @@ function askChat(text) {
     explore.scope = 'all'; clearFilter();
     explore.chat.push({ who: 'bot', html: `Showing all ${allRegions().length} change regions again.` });
   } else if (!r.understood) {
-    explore.chat.push({ who: 'bot', html: `I can search by <b>type</b> (vegetation, bare/built-up ground, water, mining-like), <b>gain or loss</b>, <b>size</b> ("bigger than 10 ha"), <b>location</b> ("in the north-east"), <b>largest N</b>, and <b>where</b> ("in this area" for a drawn area, "in view"). Start with <b>select</b>, <b>add</b> or <b>remove</b> to change the map selection instead. Try one of the examples below.` });
+    explore.chat.push({ who: 'bot', html: `I can search by <b>type</b> (vegetation, bare/built-up ground, water, mining-like), <b>gain or loss</b>, <b>size</b> ("bigger than 10 ha"), <b>location</b> ("in the north-east"), <b>largest N</b>, and <b>where</b> ("in this area" for a drawn area, "in view"). Start with <b>select</b>, <b>add</b> or <b>remove</b> to change the map selection instead. I can also run map tools: <i>buffer the change regions by 200 m</i>, <i>clip the change regions to the study area</i>, <i>make the AOI purple, 80% transparent</i>, <i>show the NDVI change</i>, <i>export the selected change regions as CSV</i>, <i>undo</i>. Try one of the examples below.` });
   } else {
     if (r.scope === 'drawn' && !explore.drawnIds) explore.chat.push({ who: 'bot', html: 'No area drawn yet: searching the whole study area. Use ✎ Draw area first to search inside an area.' });
     else if (r.scope) explore.scope = r.scope;
