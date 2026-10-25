@@ -99,6 +99,15 @@ RUNS = [{"site_id": s, "condition": cond, "n_claims": sum(x["site_id"] == s and 
         for s in KEY for cond in ("gated", "ungated")]
 
 
+def test_paired_cluster_bootstrap():
+    a = {f"s{i}": (1, 4) for i in range(20)}                    # 25 % everywhere
+    b = {f"s{i}": (2 if i % 2 else 1, 4) for i in range(20)}    # 37.5 % pooled
+    diff, lo, hi = m.paired_cluster_bootstrap(a, b, reps=2000)
+    assert diff == pytest.approx(-0.125) and lo < diff < hi < 0
+    assert m.paired_cluster_bootstrap(a, a, reps=200) == (0.0, 0.0, 0.0)     # pairing kept: no spread
+    assert m.paired_cluster_bootstrap(a, {s: (0, 0) for s in a}) == (None, None, None)
+
+
 def test_claim_rates():
     gated = [x for x in CLAIMS if x["condition"] == "gated"]
     r = m.claim_rates(gated, KEY, reps=200)
@@ -136,6 +145,8 @@ def test_report_and_comparison():
     prim = rep["comparisons"]["primary"]
     assert prim["sites"] == 4 and prim["a_fewer_on"] == 1 and prim["b_fewer_on"] == 0   # post-gate: s3 gated fewer, s2 a tie
     assert "secondary_d16" not in rep["comparisons"]
+    diff = prim["pooled_rate_diff"]          # post-gate: gated 1/2 vs ungated 2/3 hallucinated
+    assert diff[0] == pytest.approx(1 / 2 - 2 / 3) and diff[1] <= diff[0] <= diff[2]
     assert set(rep["conditions"]["ungated"]["by_claim_type"]) == {"change_type", "cause", "shoreline"}
     assert rep["conditions"]["gated"]["detected"]["n_claims"] == 2
     out = io.StringIO()
