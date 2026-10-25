@@ -1,4 +1,5 @@
 """eval/metrics.py: the statistics against known values, and the report on a small synthetic study."""
+import io
 import itertools
 import math
 
@@ -135,7 +136,9 @@ def test_report_and_comparison():
     assert "secondary_d16" not in rep["comparisons"]
     assert set(rep["conditions"]["ungated"]["by_claim_type"]) == {"change_type", "cause", "shoreline"}
     assert rep["conditions"]["gated"]["detected"]["n_claims"] == 2
-    m.print_report(rep, out=open("/dev/null", "w"))
+    out = io.StringIO()
+    m.print_report(rep, out=out)
+    assert out.getvalue()
 
 
 def test_claim_records_are_checked():
