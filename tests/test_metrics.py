@@ -29,6 +29,8 @@ def test_cohen_kappa():
 def test_sign_test_exact():
     assert m.sign_test([1] * 9 + [-1] + [0, 0]) == (9, 1, pytest.approx(2 * 11 / 1024))
     assert m.sign_test([0, 0]) == (0, 0, None)
+    d = [3, -1, 2, 0, 4, -2, 5, 1]
+    assert m.sign_test(x for x in d) == m.sign_test(d) == (5, 2, pytest.approx(0.453125))   # any iterable, read once
 
 
 def _brute_wilcoxon_p(d):

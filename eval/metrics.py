@@ -89,6 +89,7 @@ def cluster_bootstrap(clusters: dict[str, tuple[int, int]], reps: int = BOOT_REP
 
 def sign_test(diffs: Iterable[float]) -> tuple[int, int, float | None]:
     """(positives, negatives, exact two-sided p); zero differences are dropped."""
+    diffs = list(diffs)
     pos = sum(d > 0 for d in diffs if d)
     neg = sum(d < 0 for d in diffs if d)
     n = pos + neg
