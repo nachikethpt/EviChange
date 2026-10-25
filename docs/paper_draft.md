@@ -31,7 +31,7 @@ how much, and why. VLMs promise to supply those answers in plain language. They 
 EarthDial, CCExpert; `related_work.md` § 1) and can be asked to compare a before and an after scene. For monitoring,
 that convenience is also the risk. A fluent sentence about "open-pit mining expanding into forest" carries the same
 apparent authority whether the imagery shows it or the model inferred it from context. On change tasks, general VLMs
-score close to chance (GPT-4o 0.17 and Qwen2-VL 0.20 on GEOBench-VLM's change task). Remote-sensing hallucination
+score poorly: the best model on GEOBench-VLM reaches 41.7 % multiple-choice accuracy, about twice chance, and change tasks are among the hardest. Remote-sensing hallucination
 benchmarks still evaluate single images and never count a hallucinated *change* or a hallucinated *cause* of change.
 
 Two remedies come from the language-model literature, and neither is enough on its own:
