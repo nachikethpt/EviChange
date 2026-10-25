@@ -483,6 +483,15 @@ the labelled data show a reason to change them, and any change is recorded here.
 **Evaluation.** Break-month agreement with the Phase 14d labels (share within ± 1 month and within
 the reported window), and the share of detector regions CCDC calls seasonal rather than lasting.
 
+**As implemented (2026-10-25, `agents/ccdc.py`, `scripts/ccdc_change_month.py`; not yet run on Earth
+Engine).** Per site box: CCDC with the Earth Engine defaults on green, red, NIR, SWIR1, SWIR2 (+ NDVI /
+NDBI / MNDWI in the collection), `dateFormat` 2 (ms). For each pixel, the first break in Oct 2024 – Sep
+2026; the site is `lasting` when at least **0.5** of its modelled pixels break there (`LASTING_SHARE`,
+provisional, set before any site result exists). The change window runs from the last clear look before
+the modal break month (a look is clear when ≥ 50 % of the box is unmasked) to that month. `--sites` refuses
+to run until all 30 sites have a Phase 14 (d) label, so the labels stay blind; development regions can be
+run any time. The output's `windows` is the `--ccdc` input of `scripts/phase14_report.py`.
+
 ## D15 — Choosing the Geo-VLM model and image set before the freeze (2026-10-23; decided 2026-10-24)
 
 **Question.** Which model (Qwen2.5-VL-7B-Instruct, the default, or Qwen3-VL-8B-Instruct) and which
