@@ -62,10 +62,10 @@ _PCT_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:%|percent\b)", re.I)
 _QUOTE_RE = re.compile(r"\b(dNDVI|dNDBI|dMNDWI)\s*[:=]?\s*([+-]?\d*\.\d+)")
 
 _VEG = re.compile(r"\b(vegetat|forest|tree|green|crop|plant|grass|canopy)", re.I)
-_BARE = re.compile(r"\b(built|urban|building|construct|bare|soil|exposed|excavat|pit|spoil|road|paved|concrete|settlement)", re.I)
+_BARE = re.compile(r"\b(built|urban|building|construct|bare(?!ly)|soil|exposed|excavat|pit|spoil|road|paved|concrete|settlement)", re.I)
 _WATER = re.compile(r"\b(water|reservoir|lake|pond|flood|river|wetland|inundat)", re.I)
-_LOSS = re.compile(r"\b(loss|lost|los[ei]|clear|remov|replac|declin|decreas|reduc|destroy|disappear|fewer|less|drain|dr(?:y|ied)|shr[iau]nk|demolish)", re.I)
-_GAIN = re.compile(r"\b(gain|increas|regrow|recover|greener|more|new|expan|appear|planted|reforest)", re.I)
+_LOSS = re.compile(r"\b(loss|lost|los[ei]|clear(?:ed|ing|ance|s\b|-?cut)|remov|replac|declin|decreas|reduc|destroy|disappear|fewer|less|drain|dr(?:y|ied)|shr[iau]nk|demolish)", re.I)
+_GAIN = re.compile(r"\b(gain|increas|(?:re)?gr[eo]w|recover|greener|more|new|expan|appear|planted|reforest)", re.I)
 
 
 # Words that name a Dynamic World class. Deliberately a short, conservative list: a word that is
@@ -350,13 +350,17 @@ def verify(claim: dict, ev: dict, min_conf: float = CONF_MIN) -> Verdict:
         return _check_coastal_built(claim, ev, claimed_locations(text))
 
     has_change = bool(regions) or ev.get("change_frac", 0) > 0
+    locations = claimed_locations(text)
     if level == "L1":
+        if locations:   # "no change in the south" is about the south only
+            has_change = any(_location_matches(loc, r["location"]) for r in regions for loc in locations)
         if _DENIES_RE.search(text):
             return Verdict("unsupported", "denies_detected_change") if has_change else Verdict("supported", "consistent_with_mask")
-        return Verdict("supported", "consistent_with_mask") if has_change else Verdict("unsupported", "change_not_in_evidence")
+        if has_change:
+            return Verdict("supported", "consistent_with_mask")
+        return Verdict("unsupported", "no_change_at_location" if locations else "change_not_in_evidence")
 
     # ---- resolve which region(s) the claim is about
-    locations = claimed_locations(text)
     if claim.get("region_ref") is not None:
         if ref_region is None:
             return Verdict("unsupported", "unknown_region")
@@ -365,7 +369,7 @@ def verify(claim: dict, ev: dict, min_conf: float = CONF_MIN) -> Verdict:
         candidates = [ref_region]
     elif locations:
         candidates = [r for r in regions if any(_location_matches(loc, r["location"]) for loc in locations)]
-        if not candidates:
+        if not candidates and not _DENIES_RE.search(text):
             return Verdict("unsupported", "no_change_at_location")
     else:
         candidates = []   # unlocated: judged against all regions below

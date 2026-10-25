@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from agents import ee_engine, nodes, tools, webapp_bridge
 from agents.graph import run_pipeline
-from agents.schema import CHANGE_TYPES, T_IDX, validate_claim, validate_change_regions
+from agents.schema import CHANGE_TYPES, T_IDX, aoi_area_ha, validate_claim, validate_change_regions
 from webapp.backend import data_store, main
 from webapp.backend.main import app
 from webapp.backend.report import build_report
@@ -213,3 +213,15 @@ def test_index_layer_reports_earth_engine_errors(client, monkeypatch):
     main._index_tiles.clear()
     resp = client.get("/api/index_layer", params={"index": "NDVI", "kind": "before"})
     assert resp.status_code == 502 and "No Sentinel-2" in resp.json()["detail"]
+
+
+def test_evidence_for_multipolygon_aoi(monkeypatch):
+    """The map can draw a multi-part AOI (geomops.js); change_frac uses its polygon area."""
+    square = lambda x: [[x, 21.0], [x + 0.05, 21.0], [x + 0.05, 21.05], [x, 21.05], [x, 21.0]]
+    geometry = {"type": "MultiPolygon", "coordinates": [[square(107.0)], [square(107.2)]]}
+    monkeypatch.setattr(data_store, "get_aoi", lambda run_id=None: {
+        "type": "FeatureCollection", "features": [{"type": "Feature", "properties": {}, "geometry": geometry}]})
+    rid = data_store.get_change_regions()["features"][0]["properties"]["id"]
+    ev = data_store.evidence_for([rid])
+    area = sum(r["area_ha"] for r in ev["regions"])
+    assert ev["change_frac"] == round(area / aoi_area_ha(geometry), 4)
