@@ -718,8 +718,8 @@ weights stay frozen):
      well only when rafts and walkways cover about a fifth of the box; wide pond walls are bare. So open
      water that gains cages derives as no change, and mangrove or fields dug into ponds derive as
      vegetation → water. Dynamic World also classes aquaculture as water, so the labels match the
-     classes the evaluation uses (D10, D13). Pages labelled before the rule are corrected to it before
-     κ is computed, with the reason in the page's notes.
+     classes the evaluation uses (D10, D13). Boxes labelled before the rule are corrected to it by
+     the labeller before κ is computed (P2's calibration page: done, no box has crops).
 - *Order:*
   1. 40 **calibration** boxes, labelled by both P2 and P3. κ is computed on the derived change and on
      the main cover per date. Training needs κ ≥ 0.5; below that, the task is too ambiguous to train on.
