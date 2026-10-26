@@ -7,7 +7,7 @@ evidence (agents/site_evidence.py: regions cut to the box, locations relative to
 answers with JSON; items that break the claim schema are dropped and counted (parse failures,
 evaluation metric 8), never repaired.
 
-Prompt is a draft (v0): develop it on boxes outside the 30 labelled sites (scripts/report_dev.py) and
+Prompt is a draft (v1): develop it on boxes outside the 30 labelled sites (scripts/report_dev.py) and
 freeze it with the other Phase-4 prompts. The web app's report panel still uses the rule-based
 stand-in in webapp/backend/report.py until the freeze.
 """
@@ -19,13 +19,17 @@ import re
 from . import vlm_check
 from .schema import CHANGE_TYPES, LOCATIONS, T_IDX, validate_claim
 
-PROMPT_VERSION = "gated_report_v0"
+PROMPT_VERSION = "gated_report_v1"    # v1: shoreline / coastal_built claims when the box has that evidence (D13)
 EVIDENCE_FIELDS = ("id", "area_ha", "location", "mean_conf", "dNDVI", "dNDBI", "dMNDWI", "class_before", "class_after")
-# The box evidence (site_evidence) has regions only, so v0 offers the region claim types and fields. shoreline /
-# coastal_built (D13) join with the transect / coastal-strip evidence, in a new prompt version.
+TRANSECT_PROMPT_FIELDS = ("id", "location", "change", "nsm", "lrr")
+STRIP_PROMPT_FIELDS = ("strip", "built_ha_before", "built_ha_after")
+# Region claim types always; shoreline / coastal_built (D13) only when the box's evidence has transects /
+# coastal strips, so a box without coast evidence isn't invited to make claims nothing can check.
 PROMPT_TYPES = ("presence", "extent", "location", "change_type", "land_cover")
 PROMPT_REF_FIELDS = ("area_ha", "change_frac", "class_after", "class_before", "class_frac_after", "class_frac_before",
                      "dMNDWI", "dNDBI", "dNDVI", "location", "mean_conf")
+SHORE_REF_FIELDS = ("change", "nsm", "lrr")
+STRIP_REF_FIELDS = ("built_ha_before", "built_ha_after")
 
 PROMPT = """You are writing a short change report about the area inside the yellow box, for a decision maker.
 You get {count} Sentinel-2 images of the same place:
@@ -45,7 +49,7 @@ What the fields mean:
   dNDVI, dNDBI, dMNDWI: change of the vegetation, built-up/bare and water index (after minus before);
   above +{t} means a clear increase, below -{t} a clear decrease, in between no clear change.
   class_before, class_after: Dynamic World land cover, or null when unknown.
-
+{coast_fields}
 Rules:
 1. Write 1 to 8 claims. Each claim is one statement with:
    "level": "L1" whether change happened, "L2" how much or where, "L3" what kind of change or land cover;
@@ -54,21 +58,48 @@ Rules:
    "evidence_ref": the evidence fields the claim rests on, from: {fields};
    "change_type": one of {change_types}, only for type "change_type", else null;
    "class_before", "class_after": only for type "land_cover", copied from the evidence, else null.
-2. Copy numbers from the evidence. Do not invent numbers or regions.
+{coast_keys}2. Copy numbers from the evidence. Do not invent numbers or regions.
 3. Name a change type only where its index moved beyond +/-{t} in that direction.
-4. If "regions" is empty, make one L1 claim that no change was detected in the box (evidence_ref
-   ["change_frac"]) and no other claim about change.
+4. If "regions" is empty, make one L1 claim that no land-cover change was detected in the box
+   (evidence_ref ["change_frac"]) and no other claim about land-cover change.
 5. Never say what caused the change, what it is for, whether it is legal, who did it, or what will
    happen next. Put each such topic, and anything else the evidence can't support, under "abstain".
-
+{coast_rules}
 Answer with JSON only, no other text:
 {{"claims": [{{"level": ..., "type": ..., "text": ..., "region_ref": ..., "evidence_ref": [...],
-              "change_type": ..., "class_before": ..., "class_after": ...}}],
+              "change_type": ..., "class_before": ..., "class_after": ...{coast_json}}}],
  "abstain": [{{"topic": ..., "reason": ...}}]}}"""
 
 
+TRANSECT_TEXT = """- transects: shoreline transects (lines across the coast) crossing the box. id: the transect's name.
+  location: where in the box. change: how the shoreline moved between the two dates, "advancing" (land
+  moved seaward), "retreating" (sea moved landward), "stable", "unconfirmed" (the radar saw a move the
+  images do not confirm) or "too_few" (not measured). nsm: movement in metres, seaward positive.
+  lrr: the same as metres per year.
+"""
+STRIP_TEXT = """- coastal_strips: built-up area near the shore. strip: "0-200" or "200-500" metres from the shoreline.
+  built_ha_before, built_ha_after: hectares of built-up land in that strip at each date.
+"""
+TRANSECT_KEYS = """   "transect_ref", "shoreline_change": only for type "shoreline": the transect id, and its change
+     ("advancing", "retreating" or "stable"), else null;
+"""
+STRIP_KEYS = """   "strip": only for type "coastal_built": "0-200", "200-500" or "0-500", else null;
+"""
+TRANSECT_RULES = """6. Make shoreline claims only from transects whose change is advancing, retreating or stable, citing
+   one transect each. Put "unconfirmed" and "too_few" transects under "abstain".
+"""
+STRIP_RULES = """{n}. Make coastal_built claims only from the coastal_strips numbers: say which strip, and the change.
+"""
+
+
+def coast_parts(ev: dict) -> tuple[bool, bool]:
+    """(has transects, has coastal strips) in this box's evidence."""
+    return bool(ev.get("transects")), bool(ev.get("coastal_strips"))
+
+
 def evidence_for_prompt(ev: dict) -> str:
-    """The evidence as the model sees it: change_frac and the regions' prompt fields, rounded."""
+    """The evidence as the model sees it: change_frac, the regions' prompt fields (rounded) and, when
+    the box has them, its transects and coastal strips."""
     regions = []
     for r in ev["regions"]:
         row = {k: r.get(k) for k in EVIDENCE_FIELDS}
@@ -76,7 +107,13 @@ def evidence_for_prompt(ev: dict) -> str:
             if row[k] is not None:
                 row[k] = round(float(row[k]), 3)
         regions.append(row)
-    return json.dumps({"change_frac": ev["change_frac"], "regions": regions}, indent=1)
+    out = {"change_frac": ev["change_frac"], "regions": regions}
+    shore, strips = coast_parts(ev)
+    if shore:
+        out["transects"] = [{k: t.get(k) for k in TRANSECT_PROMPT_FIELDS} for t in ev["transects"]]
+    if strips:
+        out["coastal_strips"] = [{k: c.get(k) for k in STRIP_PROMPT_FIELDS} for c in ev["coastal_strips"]]
+    return json.dumps(out, indent=1)
 
 
 def build_prompt(ev: dict, before_window: list[str], after_window: list[str], chip_set: str = "rgb_swir") -> str:
@@ -85,11 +122,19 @@ def build_prompt(ev: dict, before_window: list[str], after_window: list[str], ch
     text = vlm_check._CHIP_TEXT
     labels = [f"{n}. {when}, {text[kind][i]}" for n, (kind, i, when) in enumerate(pairs, 1)]
     keys = "".join(text[kind][2] + "\n" for kind in kinds if text[kind][2])
+    shore, strips = coast_parts(ev)
+    types = PROMPT_TYPES + (("shoreline",) if shore else ()) + (("coastal_built",) if strips else ())
+    fields = PROMPT_REF_FIELDS + (SHORE_REF_FIELDS if shore else ()) + (STRIP_REF_FIELDS if strips else ())
+    coast_json = (', "transect_ref": ..., "shoreline_change": ...' if shore else "") + (', "strip": ...' if strips else "")
     return PROMPT.format(count=vlm_check._COUNT[2 * len(kinds)], images="   ".join(labels), keys=keys,
                          before=" to ".join(before_window), after=" to ".join(after_window),
                          evidence=evidence_for_prompt(ev), locations=", ".join(LOCATIONS), t=f"{T_IDX:.2f}",
-                         types=", ".join(PROMPT_TYPES), fields=", ".join(PROMPT_REF_FIELDS),
-                         change_types=", ".join(CHANGE_TYPES))
+                         types=", ".join(types), fields=", ".join(fields),
+                         change_types=", ".join(CHANGE_TYPES),
+                         coast_fields=(TRANSECT_TEXT if shore else "") + (STRIP_TEXT if strips else ""),
+                         coast_keys=(TRANSECT_KEYS if shore else "") + (STRIP_KEYS if strips else ""),
+                         coast_rules=(TRANSECT_RULES if shore else "") + (STRIP_RULES.format(n=7 if shore else 6) if strips else ""),
+                         coast_json=coast_json)
 
 
 def parse_report(text: str) -> tuple[list[dict], list[dict], bool, int]:
