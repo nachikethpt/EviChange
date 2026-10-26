@@ -19,7 +19,7 @@ import re
 from . import vlm_check
 from .schema import CHANGE_TYPES, LOCATIONS, T_IDX, validate_claim
 
-PROMPT_VERSION = "gated_report_v1"    # v1: shoreline / coastal_built claims when the box has that evidence (D13)
+PROMPT_VERSION = "gated_report_v2"    # v2: rule 4 names type "presence" (v1 answered "no_change", dropped); v1: coast claim types (D13)
 EVIDENCE_FIELDS = ("id", "area_ha", "location", "mean_conf", "dNDVI", "dNDBI", "dMNDWI", "class_before", "class_after")
 TRANSECT_PROMPT_FIELDS = ("id", "location", "change", "nsm", "lrr")
 STRIP_PROMPT_FIELDS = ("strip", "built_ha_before", "built_ha_after")
@@ -60,8 +60,8 @@ Rules:
    "class_before", "class_after": only for type "land_cover", copied from the evidence, else null.
 {coast_keys}2. Copy numbers from the evidence. Do not invent numbers or regions.
 3. Name a change type only where its index moved beyond +/-{t} in that direction.
-4. If "regions" is empty, make one L1 claim that no land-cover change was detected in the box
-   (evidence_ref ["change_frac"]) and no other claim about land-cover change.
+4. If "regions" is empty, make one L1 claim of type "presence" that no land-cover change was detected
+   in the box (evidence_ref ["change_frac"]) and no other claim about land-cover change.
 5. Never say what caused the change, what it is for, whether it is legal, who did it, or what will
    happen next. Put each such topic, and anything else the evidence can't support, under "abstain".
 {coast_rules}
