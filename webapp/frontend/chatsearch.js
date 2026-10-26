@@ -124,10 +124,10 @@ function cancelProposal(id) {
 async function confirmProposal(id) {
   const prop = CS.proposals.get(id); if (!prop) return;
   CS.proposals.delete(id);
-  replaceProposal(id, '<div class="muted small" data-run-status>Run started…</div>');
+  replaceProposal(id, `<div class="muted small" data-run-status="${id}">Run started…</div>`);
   const say = html => { explore.chat.push({ who: 'bot', html }); explore.chat = explore.chat.slice(-8); if (state.panel === 'changes') renderPanel(); };
   await startRun(prop.payload, {
-    onProgress: st => replaceRunStatus(`Run ${esc(st.status)} (${Math.round((st.progress || 0) * 100)}%)…`),
+    onProgress: st => replaceRunStatus(id, `Run ${esc(st.status)} (${Math.round((st.progress || 0) * 100)}%)…`),
     onError: msg => say(`<span class="chip unsupported">The run failed: ${esc(msg)}</span>`),
     onDone: runId => {
       const { filter, scope } = prop.r;
@@ -143,8 +143,9 @@ async function confirmProposal(id) {
   });
 }
 
-function replaceRunStatus(text) {
-  const m = explore.chat.find(c => c.html.includes('data-run-status'));
-  if (m) m.html = `<div class="muted small" data-run-status>${text}</div>`;
+function replaceRunStatus(id, text) {                   // only this proposal's status line, so a second run doesn't overwrite the first
+  const tag = `data-run-status="${id}"`;
+  const m = explore.chat.find(c => c.html.includes(tag));
+  if (m) m.html = m.html.replace(new RegExp(`<div class="muted small" ${tag}>.*?</div>`, 's'), `<div class="muted small" ${tag}>${text}</div>`);
   if (state.panel === 'changes' && !explore.regionId) renderPanel();
 }
