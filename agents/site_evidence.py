@@ -11,7 +11,9 @@ All arms see the same box (the yellow outline on the chips), so the evidence is 
 A box with no region in it gives an empty region list and change_frac 0 (the "random site" case of
 the evaluation design: gated should abstain from change claims).
 - shoreline transects crossing the box, with their movement between the SAME two windows
-  (`transects`, D13 / D16), when scripts/make_shoreline_windows.py has run for those windows.
+  (`transects`, D13 / D16), when scripts/make_shoreline_windows.py has run for those windows;
+- the built area of the coastal strips inside the box between the same windows (`coastal_strips`,
+  coastal.box_strips, Phase 12), when scripts/make_coastal_windows.py has run for them.
 
 Plain geometry on a local equirectangular projection (fine at site scale, no shapely needed).
 scripts/restratify_sites.py uses the same clipping.
@@ -142,8 +144,9 @@ def box_transects(box: tuple, before_window: list[str], after_window: list[str])
 def site_evidence(box: tuple, features: list[dict], before_window: list[str], after_window: list[str],
                   source: str, pair_id: str, coast: bool = True) -> dict:
     """The evidence for `box` from the detector's region features (see the module docstring). With
-    coast, the shoreline transects crossing the box (box_transects) join as `transects` when a window
-    run exists; a box no transect crosses gets an empty list (no coast in the box)."""
+    coast, the shoreline transects crossing the box (box_transects) join as `transects`, and the built
+    area of the coastal strips in it (coastal.box_strips, Phase 12) as `coastal_strips`, each when a
+    run exists for exactly these windows; a box without coast gets an empty list."""
     regions, inside_total = [], 0.0
     for f in features:
         if not overlaps(bbox(f["geometry"]), box):
@@ -158,7 +161,10 @@ def site_evidence(box: tuple, features: list[dict], before_window: list[str], af
     regions.sort(key=lambda r: -r["area_ha"])
     ev = {"pair_id": pair_id, "dates": [before_window, after_window], "source": source,
           "change_frac": round(min(1.0, inside_total / box_area_m2(box)), 4), "regions": regions}
-    transects = box_transects(box, before_window, after_window) if coast else None
-    if transects is not None:
-        ev["transects"] = transects
+    if coast:
+        from .coastal import box_strips
+        for name, items in (("transects", box_transects(box, before_window, after_window)),
+                            ("coastal_strips", box_strips(box, before_window, after_window))):
+            if items is not None:
+                ev[name] = items
     return ev
