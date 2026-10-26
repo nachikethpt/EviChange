@@ -34,7 +34,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from agents import ee_engine, landcover, monthly, shoreline, ungated, vlm_check
+from agents import coastal, ee_engine, landcover, monthly, shoreline, ungated, vlm_check
 from agents.gpt_client import GPTClient
 from agents.vlm_client import VLMClient, VLMUnavailable
 from agents.graph import run_pipeline
@@ -502,6 +502,67 @@ def shoreline_transect(tid: str):
     return {**feat["properties"], "geometry": feat["geometry"],
             "series": [{"month": m, "pos": p} for m, p in zip(pos["months"], pos["positions"][tid])],
             "quarterly": [{"quarter": q, "pos": p} for q, p in zip(pos.get("quarters", []), pos.get("quarter_positions", {}).get(tid, []))]}
+
+
+# ---------- Phase 12 (D11): buildings near the shoreline ----------
+Strip = Literal["0-200", "200-500"]
+
+
+def _coastal(name: str) -> Any:
+    data = coastal.load(name)
+    if data is None:
+        raise HTTPException(404, "no coastal analysis yet: run scripts/make_coastal.py")
+    return data
+
+
+@app.get("/api/coastal")
+def coastal_summary():
+    """Strip land areas, monthly and dry-season built area, built-area change between the first and last dry
+    season, patch counts, the Open Buildings reference and the method. Hectares of built area (Dynamic World),
+    never building counts. See agents/coastal.py."""
+    return _coastal(coastal.SUMMARY)
+
+
+@app.get("/api/coastal/strips")
+def coastal_strips():
+    """The 0-200 m and 200-500 m land strips landward of the Oct 2024 shoreline, as GeoJSON polygons (property `strip`)."""
+    return _coastal("strips.geojson")
+
+
+@app.get("/api/coastal/monthly")
+def coastal_monthly(strip: Optional[Strip] = None):
+    """Built hectares per month, Oct 2024 - Sep 2026. A month Dynamic World saw on under half of the strip
+    (the monsoon months) has built_ha null: a gap, not zero. ?strip= gives one strip as a flat series for a chart;
+    without it every month carries both strips."""
+    return {"period": _coastal(coastal.SUMMARY)["period"], "strip": strip, "series": coastal.series(_coastal(coastal.SUMMARY), strip)}
+
+
+@app.get("/api/coastal/seasons")
+def coastal_seasons():
+    """Built hectares per dry season (Oct-Mar, steadier than single months) and the change between the first and last."""
+    s = _coastal(coastal.SUMMARY)
+    return {"seasons": s["seasons"], "change": s["season_change"]}
+
+
+@app.get("/api/coastal/patches")
+def coastal_patches(strip: Optional[Strip] = None, min_ha: float = Query(0.0, ge=0)):
+    """New built patches (built in the last dry season, not in the first) as GeoJSON regions with area_ha, strip
+    and location. Patches on a Phase 14 coastal cell are withheld until those labels exist (coastal.hide_patches)."""
+    fc = coastal.hide_patches(_coastal("patches.geojson"))
+    feats = [f for f in fc["features"] if f["properties"]["area_ha"] >= min_ha and (strip is None or f["properties"]["strip"] == strip)]
+    return {**fc, "features": feats}
+
+
+@app.get("/api/coastal/open-buildings")
+def coastal_open_buildings(strip: Optional[Strip] = None):
+    """Open Buildings Temporal reference, 2016-2023: built hectares per strip and year at confidence cut-offs
+    (the confidence is uncalibrated). Reference only; a different measure from the Dynamic World series."""
+    s = _coastal(coastal.SUMMARY)
+    rows = s["open_buildings"]
+    if strip:
+        rows = [{"year": r["year"], "tiles": r["tiles"], **r["strips"][strip]} for r in rows]
+    return {"collection": coastal.OB_COLLECTION, "headline_threshold": coastal.OB_HEADLINE, "strip": strip, "years": rows,
+            "note": s["method"]["open_buildings"]}
 
 
 # ---------- Phase 5: claim adjudication (eval/adjudication.py; rules docs/adjudication_rules.md) ----------
