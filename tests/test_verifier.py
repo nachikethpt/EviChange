@@ -58,6 +58,15 @@ def claim(level, type_, text, **extra):
     # a true claim resting only on a weak detection
     (claim("L3", "change_type", "Vegetation loss in the west.", change_type="vegetation_loss"), EV, ("uncertain", "low_detection_confidence")),
     (claim("L2", "location", "No change in the north-east."), EV, ("unsupported", "denies_detected_change")),
+    # a denial where no region is is correct, at every level
+    (claim("L2", "location", "No change in the south-east."), EV, ("supported", "consistent_with_mask")),
+    (claim("L3", "change_type", "Nothing changed in the centre."), EV, ("supported", "consistent_with_mask")),
+    (claim("L1", "presence", "No change in the south-east."), EV, ("supported", "consistent_with_mask")),
+    (claim("L1", "presence", "No change in the north-east."), EV, ("unsupported", "denies_detected_change")),
+    (claim("L1", "presence", "Change occurred in the south-east."), EV, ("unsupported", "no_change_at_location")),
+    # "clearly" / "clear increase" is not clearing, and "grew" is a gain
+    (claim("L3", "change_type", "There was a clear increase in bare soil in the north-east."), EV, ("supported", "index_supports_type")),
+    (claim("L3", "change_type", "The lake in the south-west clearly grew."), EV, ("supported", "index_supports_type")),
 ])
 def test_verdicts(c, ev, expected):
     assert tuple(verify(c, ev)) == expected
@@ -73,4 +82,8 @@ def test_text_parsing_helpers():
     assert claimed_locations("southwest") == {"south-west"}
     assert claimed_change_types({"text": "Forest was cleared for an open pit"}) == {"vegetation_loss", "built_up_increase"}
     assert claimed_change_types({"text": "The pond dried up"}) == {"water_decrease"}
+    assert claimed_change_types({"text": "Vegetation clearly increased"}) == {"vegetation_gain"}
+    assert claimed_change_types({"text": "A clear-cut removed the forest"}) == {"vegetation_loss"}
+    assert claimed_change_types({"text": "Barely any vegetation was lost"}) == {"vegetation_loss"}
+    assert claimed_change_types({"text": "Trees grew back"}) == {"vegetation_gain"}
     assert claimed_change_types({"text": "anything", "change_type": "water_increase"}) == {"water_increase"}

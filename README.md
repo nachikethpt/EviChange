@@ -42,6 +42,9 @@ python -m venv .venv
 
 Delete `webapp/backend/data/` to return the map to the built-in demo data.
 
+Place search in the run panel sends the typed name to OpenStreetMap Nominatim (`/api/geocode`, on click only);
+nothing else leaves the machine except Earth Engine requests and, when connected, the Geo-VLM server.
+
 The pipeline defaults to a deterministic offline detector. Set
 `EVICHANGE_ENGINE=ee` and `EE_PROJECT=<project-id>` after running
 `earthengine authenticate` to use `agents/ee_engine.py` with Sentinel-2 SR.

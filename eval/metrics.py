@@ -87,8 +87,33 @@ def cluster_bootstrap(clusters: dict[str, tuple[int, int]], reps: int = BOOT_REP
     return rate, q(0.025), q(0.975)
 
 
+def paired_cluster_bootstrap(a: dict[str, tuple[int, int]], b: dict[str, tuple[int, int]], reps: int = BOOT_REPS,
+                             seed: int = SEED) -> tuple[float | None, float | None, float | None]:
+    """Difference of pooled rates, a minus b, over the same sites {site: (k, n)}, with a percentile
+    95 % CI from resampling sites with replacement (both conditions together, so the pairing is
+    kept). Resamples where either condition has no claims are skipped."""
+    sites = sorted(set(a) & set(b))
+    na, nb = sum(a[s][1] for s in sites), sum(b[s][1] for s in sites)
+    if not na or not nb:
+        return None, None, None
+    diff = sum(a[s][0] for s in sites) / na - sum(b[s][0] for s in sites) / nb
+    rng = random.Random(seed)
+    draws = []
+    for _ in range(reps):
+        ka = na_ = kb = nb_ = 0
+        for _ in sites:
+            s = sites[rng.randrange(len(sites))]
+            ka, na_, kb, nb_ = ka + a[s][0], na_ + a[s][1], kb + b[s][0], nb_ + b[s][1]
+        if na_ and nb_:
+            draws.append(ka / na_ - kb / nb_)
+    draws.sort()
+    q = lambda f: draws[min(len(draws) - 1, max(0, int(round(f * (len(draws) - 1)))))]
+    return diff, q(0.025), q(0.975)
+
+
 def sign_test(diffs: Iterable[float]) -> tuple[int, int, float | None]:
     """(positives, negatives, exact two-sided p); zero differences are dropped."""
+    diffs = list(diffs)
     pos = sum(d > 0 for d in diffs if d)
     neg = sum(d < 0 for d in diffs if d)
     n = pos + neg
@@ -230,10 +255,12 @@ def detector_scores(labels: dict[str, dict], key: dict[str, dict]) -> dict:
 
 
 def paired_comparison(claims_a: list[dict], claims_b: list[dict], sites: Iterable[str],
-                      only_passed: bool = True) -> dict:
+                      only_passed: bool = True, reps: int = BOOT_REPS) -> dict:
     """Per-site hallucination counts and rates, condition a minus condition b (the primary
     comparison is gated vs ungated, post-gate). Counts are compared on every site; rates only on
-    sites where both conditions have claims, and the excluded sites are counted."""
+    sites where both conditions have claims, and the excluded sites are counted. The effect size
+    is the difference of pooled rates with a paired site-level bootstrap CI (PLAN: "report the
+    effect size with its CI, not only p")."""
     sites = list(sites)
     keep = passed if only_passed else (lambda c: True)
     ca, cb = _clusters(claims_a, sites, hallucinated, keep), _clusters(claims_b, sites, hallucinated, keep)
@@ -247,6 +274,7 @@ def paired_comparison(claims_a: list[dict], claims_b: list[dict], sites: Iterabl
         "count_wilcoxon": wilcoxon_signed_rank(count_d), "count_sign": sign_test(count_d),
         "rate_wilcoxon": wilcoxon_signed_rank(rate_d), "rate_sign": sign_test(rate_d),
         "mean_rate_diff": sum(rate_d) / len(rate_d) if rate_d else None,
+        "pooled_rate_diff": paired_cluster_bootstrap(ca, cb, reps),
     }
 
 
@@ -378,7 +406,7 @@ def report(claims: list[dict], runs: list[dict], labels: dict[str, dict], key: d
     for name, a, b in (("primary", "gated", "ungated"), ("secondary_d16", "gated", "ungated_gpt")):
         if a in runs_by_cond and b in runs_by_cond:
             common = sorted({r["site_id"] for r in runs_by_cond[a]} & {r["site_id"] for r in runs_by_cond[b]})
-            out["comparisons"][name] = {"a": a, "b": b, **paired_comparison(by_cond[a], by_cond[b], common)}
+            out["comparisons"][name] = {"a": a, "b": b, **paired_comparison(by_cond[a], by_cond[b], common, reps=reps)}
     return out
 
 

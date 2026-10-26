@@ -19,7 +19,7 @@ from . import vlm_check
 from .schema import CHANGE_TYPES, CLAIM_TYPES, LANDCOVER_CLASSES, validate_claim
 
 REPORT_PROMPT_VERSION = "ungated_report_v1"   # v1: asks about the shoreline and buildings near it (D13)
-EXTRACT_PROMPT_VERSION = "claim_extract_v1"  # v1: shoreline / coastal_built fields
+EXTRACT_PROMPT_VERSION = "claim_extract_v2"  # v2: JSON null, one class (v1 wrote "null" strings, dropped); v1: coast fields
 
 REPORT_PROMPT = """You are a remote-sensing analyst. You get {count} Sentinel-2 images of the same place:
 {images}
@@ -46,6 +46,10 @@ For each claim give:
                       or null (only for shoreline statements)
   "strip": "0-200" or "200-500" (metres inland of the shore), "0-500", or null (only for statements
            about buildings near the shore)
+
+Fill only the fields that apply to the statement. For every other field write null, the JSON value
+without quotes, never the text "null". class_before and class_after are ONE class name each, never a
+list; if the report names several, use the one it says covers most, else null.
 
 Answer with a JSON list only, no other text.
 

@@ -237,8 +237,14 @@ map.on('click', e => {
     : `<strong>Location</strong><br>Lon ${e.lngLat.lng.toFixed(5)}, Lat ${e.lngLat.lat.toFixed(5)}`;
   new maplibregl.Popup({ maxWidth: '320px' }).setLngLat(e.lngLat).setHTML(html).addTo(map);
 });
-map.on('mousemove', e => {
+const showCoords = e => {
   $('#statusbar').textContent = `Lon ${e.lngLat.lng.toFixed(5)}  Lat ${e.lngLat.lat.toFixed(5)}  ·  Zoom ${map.getZoom().toFixed(1)}`;
+};
+// touch screens have no hover: coordinates follow taps, and the hint says so
+if (window.matchMedia('(hover: none)').matches) $('#statusbar').textContent = 'Tap the map for coordinates';
+map.on('click', showCoords);
+map.on('mousemove', e => {
+  showCoords(e);
   if (!state.sketch) {
     const over = map.queryRenderedFeatures(e.point, { layers: visibleVectorMapLayers() }).length > 0;
     map.getCanvas().style.cursor = over ? 'pointer' : '';
@@ -991,7 +997,7 @@ function renderPanel() {
     body.innerHTML = `
       ${state.liveData
         ? '<div class="demo-banner" style="background:var(--ok-bg);color:var(--ok);border-color:#bbe5c7;">Live data — from the multi-agent pipeline or Person 1\'s real export.</div>'
-        : '<div class="demo-banner">DEMO data — run <code>agents/run_demo.py</code> or import Person 1\'s export to see real data here. Claims come from <code>backend/report.py</code>; Person 2 plugs the Qwen notebook code in there.</div>'}
+        : '<div class="demo-banner">DEMO data — run <code>run_and_publish.py</code> (agent pipeline) or <code>import_geojson.py</code> (an Earth Engine export) to see real data here. The report arms use the rule-based stand-ins in <code>backend/report.py</code> until the Phase 4 prompts are frozen.</div>'}
       <div class="section"><div class="pane-subtitle">Selected change regions</div>
         <div class="chips">${ids.length ? ids.map(i => `<span class="chip">${esc(i)}</span>`).join('') : '<span class="muted">none</span>'}</div>
         <p class="muted">Click a coloured region on the map (Shift+click to add more) or use ✎ Draw area.</p>

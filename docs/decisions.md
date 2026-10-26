@@ -356,6 +356,45 @@ threshold is 2 Sentinel-2 pixels, so the 5 confirmed cases sit near the detectio
 Mar 2026 can't be confirmed optically until Planet's monsoon months are in (Phase 13c), and the
 Phase 14 reference shorelines will give the extraction error in metres.
 
+**As implemented (Phase 12, `agents/coastal.py`, `scripts/make_coastal.py`, `scripts/make_coastal_windows.py`).**
+Built area near the coast, never building counts. Outputs in `data/quangninh/coastal/`; QN totals are quoted
+in the PR (the code was written and unit-tested without an Earth Engine login; the QN run is the next step).
+- *Strips:* the Phase 11 baseline (Oct 2024 shoreline) gives each pixel's distance to the coast
+  (`FeatureCollection.distance`, 500 m reach); the sea is removed with the Phase 11 sea polygons (recomputed
+  by `shoreline.sea_polygons`, since Phase 11 doesn't save them, and cached in `coastal/sea.geojson`).
+  Distance ≤ 200 m is `0-200`, over 200 up to 500 m is `200-500`. Rasters at 10 m (Dynamic World's pixel;
+  Phase 10's 20 m is too coarse for a 200 m strip), areas are sums of pixel areas, not buffered polygons.
+  `strips.geojson` is drawn at 20 m for the map.
+- *Built:* Dynamic World `built` (class 6), the per-pixel mode of the label over the month (`monthly.class_image`).
+  Per strip and month: strip land, hectares Dynamic World saw, `cover` = seen / land, `built_ha`. A strip-month
+  under **50 % cover** is a gap (`built_ha` null, status `patchy` / `none`), never 0. One figure per dry season
+  (`monthly.dry_seasons`: 2024-25, 2025-26), and the change between the first and last season over the pixels
+  seen in both (`compared_ha`, `gained_ha`, `lost_ha`).
+- *New built patches:* built in the last dry season, not in the first, seen in both; connected (8-neighbour)
+  patches of **≥ 0.5 ha** (50 pixels; the same size as the verifier's `COASTAL_MIN_HA`), vectorised with
+  `area_ha`, `strip`, `location`, as the Phase 2 regions; a patch crossing the 200 m line is split in two.
+  Patches on a Phase 14 (c) coastal cell are withheld by the API until those labels exist
+  (`coastal.COASTAL_CELLS_UNLOCKED`).
+- *Open Buildings Temporal* (`building_presence`, yearly mosaic, 2016–2023, 4 m): built area per strip and year
+  where the confidence is ≥ 0.3 / 0.5 / 0.7 (headline 0.5). The dataset says the confidence is uncalibrated
+  (good for ranking and thresholds only), hence three cut-offs. It measures building footprints; Dynamic World
+  `built` also takes roads, ports and yards, so the two series are not comparable in level. Reference only.
+- *Box evidence (Phase 15):* the strips are tiled into ~100 m cells (0.001°); per window pair
+  `make_coastal_windows.py` saves, per cell, the strip land, the area seen in both windows and the built area
+  before / after over those pixels (`coastal/windows_<before>_<after>.json`). `coastal.evidence_strips(box, windows)`
+  clips the cells to a box (by the share of each cell inside it) and returns `coastal_strips[]` per strip **and**
+  3 × 3 location, so a claim about the north is checked against the north part. A (strip, location) with under
+  0.5 ha of land in the box, or with under half of it seen in both windows, gets no entry (the claim stays
+  *uncertain*). `coastal.box_strips(box, before, after)` returns `None` unless a run exists for exactly those
+  windows, like `site_evidence.box_transects`; P2 wires it into `site_evidence`.
+- *API:* `GET /api/coastal` (summary), `/api/coastal/strips` (GeoJSON), `/api/coastal/monthly?strip=`,
+  `/api/coastal/seasons`, `/api/coastal/patches?strip=&min_ha=`, `/api/coastal/open-buildings?strip=`.
+- *Caveats:* Dynamic World labels bare ground, coal yards and port apron as built in places, and the monthly
+  mode flickers between built and bare (Phase 10 found 12–38 % of the AOI "changing" against Oct 2024 every
+  month): trust the dry-season figures and the trend, not single months. The strips follow the 2024 coast, so for
+  the 2018–19 / 2022–23 windows a strip is where the coast is now (the same caveat as the window transects).
+  Narrow water the sea mask's opening leaves out (docks, channels) counts as strip land, with no built area.
+
 ## D12 — Planet-ready imagery source (2026-10-08, proposed)
 
 **Decision.** `ee_engine` gets an imagery `source` (`sentinel2` now, `planet` when the data arrives)
@@ -452,6 +491,24 @@ stated direction (provisional), and stated hectares are read as the change, or t
 after "from" / "to". No evidence for the claim gives *uncertain* (`shoreline_not_in_evidence`,
 `coastal_not_in_evidence`). Tests: `tests/test_verifier_coastal.py`.
 
+**Coast evidence in the box frame (Phase 15, 2026-10-26).** The box reports compare the detector's two
+windows (QN: Nov 2018 – Mar 2019 vs Nov 2022 – Mar 2023), but the Phase 11 statistics cover Oct 2024 –
+Sep 2026. Using those would check claims about the images against other years, so the box evidence
+gets shoreline statistics **between its own two windows** (user decision, option B):
+`scripts/make_shoreline_windows.py` → `shoreline.build_windows()` measures, on the same Phase 11
+transects, one tide-averaged radar shoreline per window (Sentinel-1 water in at least half of the
+window's looks) and the optical (MNDWI) shoreline of each window. `nsm` = after − before; a radar move of
+≥ 30 m (3 samples) is a direction, confirmed when the optical line moves ≥ 20 m the same way, else
+`unconfirmed`; below 30 m `stable`. `lrr` = nsm / years between the window middles, with no CI (two
+points). `site_evidence` adds the transects crossing the box (location in the box's 3 × 3 grid) only
+when a run exists for exactly the box's windows; otherwise the evidence has no `transects` and shoreline
+claims stay *uncertain*. Coastal strips need the same per-window treatment when Phase 12 builds them.
+Gated prompt `gated_report_v1` offers the `shoreline` / `coastal_built` claim types and fields only for
+a box whose evidence has transects / strips, and asks it to abstain on `unconfirmed` and `too_few`
+transects. Caveat for the transects: they were laid out on the 2024–26 coast, so where the coast moved
+more than their 300 m landward / 500 m seaward reach since 2018, the window positions are missing
+(`too_few`).
+
 ## D14 — Time series analysis with CCDC (2026-10-11, proposed)
 
 **Why.** The teacher asked for time series analysis. Two-date comparison (D6) says *what* changed
@@ -482,6 +539,15 @@ the labelled data show a reason to change them, and any change is recorded here.
 
 **Evaluation.** Break-month agreement with the Phase 14d labels (share within ± 1 month and within
 the reported window), and the share of detector regions CCDC calls seasonal rather than lasting.
+
+**As implemented (2026-10-25, `agents/ccdc.py`, `scripts/ccdc_change_month.py`; not yet run on Earth
+Engine).** Per site box: CCDC with the Earth Engine defaults on green, red, NIR, SWIR1, SWIR2 (+ NDVI /
+NDBI / MNDWI in the collection), `dateFormat` 2 (ms). For each pixel, the first break in Oct 2024 – Sep
+2026; the site is `lasting` when at least **0.5** of its modelled pixels break there (`LASTING_SHARE`,
+provisional, set before any site result exists). The change window runs from the last clear look before
+the modal break month (a look is clear when ≥ 50 % of the box is unmasked) to that month. `--sites` refuses
+to run until all 30 sites have a Phase 14 (d) label, so the labels stay blind; development regions can be
+run any time. The output's `windows` is the `--ccdc` input of `scripts/phase14_report.py`.
 
 ## D15 — Choosing the Geo-VLM model and image set before the freeze (2026-10-23; decided 2026-10-24)
 
@@ -713,6 +779,13 @@ weights stay frozen):
      one, or "can't tell". Change and change types are **derived** from the two dates
      (`scripts/finetune_mcq.py derive()`), never judged. This multiple-choice format follows
      GEOBench-VLM (Danish et al., ICCV 2025).
+  3. **Aquaculture is water** (rule added 2026-10-25, after P2 had ticked crops on some fish farms):
+     fish / shrimp ponds and floating cage farms count as **water**, never crops. Built-up is ticked as
+     well only when rafts and walkways cover about a fifth of the box; wide pond walls are bare. So open
+     water that gains cages derives as no change, and mangrove or fields dug into ponds derive as
+     vegetation → water. Dynamic World also classes aquaculture as water, so the labels match the
+     classes the evaluation uses (D10, D13). Boxes labelled before the rule are corrected to it by
+     the labeller before κ is computed (P2's calibration page: done, no box has crops).
 - *Order:*
   1. 40 **calibration** boxes, labelled by both P2 and P3. κ is computed on the derived change and on
      the main cover per date. Training needs κ ≥ 0.5; below that, the task is too ambiguous to train on.
@@ -728,3 +801,25 @@ weights stay frozen):
 - A few hundred boxes from one area and one date pair: the adapter learns Quang Ninh 2018/19 →
   2022/23, not change in general.
 - 10 m chips.
+
+## D18 — Claim adjudication rules (2026-10-25, proposed)
+
+**Problem.** Two gaps in the Phase 5 truth axis would decide the comparison by wording alone
+(`docs/eval_audit.md`, findings 1–2):
+- 8 of the 10 random sites are labelled "change", so a "no change was detected" claim is true
+  about the detector but false about the ground;
+- precise numbers (ha, index values) could be marked `unverifiable`, which counts as a hallucination
+  and penalises gated for quoting its evidence.
+
+**Proposal** (full rules: `docs/adjudication_rules.md`):
+- Claims about the detector's output are tagged `about_detector` and left out of the hallucination
+  denominator. They are reported separately, with "missed change at random sites" added to metric 6.
+- `unverifiable` is only for what no imagery can show: cause, intent, legality, ownership, the future.
+  Numbers are judged with stated tolerances (area within a factor of 2, share within ±15 points,
+  index values by their implied direction only).
+- A second adjudicator on a seeded 20 % of sites, with κ on both axes.
+
+**Alternative.** Read every presence claim as a statement about the ground, and reword gated's rule-4
+sentence to "The detector found no change in the box" before the freeze.
+
+**Decide before the Phase 4 freeze**; the rules are then pinned by commit with the prompts.

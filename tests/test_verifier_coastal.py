@@ -122,6 +122,8 @@ def test_shoreline_parsing(text, expected):
     ("within 500 m of the coast", "0-500"),
     ("near the coast", "0-500"),
     ("grew by 200 ha near the coast", "0-500"),
+    ("grew by 200.5 ha near the coast", "0-500"),        # a decimal area is not the 200 m strip
+    ("grew by 500,000 m² near the coast", "0-500"),
 ])
 def test_strip_parsing(text, expected):
     assert claimed_strip({"text": text}) == expected

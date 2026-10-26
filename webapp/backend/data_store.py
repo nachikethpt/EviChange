@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from agents.schema import REGION_FIELDS
+from agents.schema import REGION_FIELDS, aoi_area_ha
 
 from . import demo_data
 
@@ -148,18 +148,13 @@ def evidence_for(region_ids: list[str], run_id: Optional[str] = None) -> dict:
     fc = get_change_regions(run_id)
     feats = [f["properties"] for f in fc["features"] if f["properties"]["id"] in region_ids]
     total_area = sum(p.get("area_ha", 0) for p in feats)
-    coords = get_aoi(run_id)["features"][0]["geometry"]["coordinates"][0]
-    lons = [c[0] for c in coords]; lats = [c[1] for c in coords]
-    w, e, s, n = min(lons), max(lons), min(lats), max(lats)
-    import math
-    km_per_deg_lat = 111.0
-    km_per_deg_lon = 111.0 * abs(math.cos(math.radians((s + n) / 2)))
-    aoi_area_ha = max((e - w) * km_per_deg_lon * (n - s) * km_per_deg_lat * 100, 1)
+    # the AOI's polygon area, as the pipeline's change_frac uses; Polygon or MultiPolygon
+    aoi_ha = max(aoi_area_ha(get_aoi(run_id)["features"][0]["geometry"]), 1)
     return {
         "pair_id": fc["features"][0]["properties"].get("source", "unknown") if fc["features"] else "empty",
         "dates": [feats[0].get("date_before", "?"), feats[0].get("date_after", "?")] if feats else ["?", "?"],
         "source": "live" if is_live_data(run_id) else "demo",
-        "change_frac": round(total_area / aoi_area_ha, 4),
+        "change_frac": round(total_area / aoi_ha, 4),
         "regions": [{k: p[k] for k in REGION_FIELDS} for p in sorted(feats, key=lambda p: -p["area_ha"])],
     }
 

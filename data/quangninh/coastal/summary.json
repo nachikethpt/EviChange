@@ -1,0 +1,798 @@
+{
+ "period": [
+  "2024-10",
+  "2026-09"
+ ],
+ "strips": {
+  "0-200": {
+   "land_ha": 1482.9
+  },
+  "200-500": {
+   "land_ha": 1353.7
+  }
+ },
+ "months": [
+  {
+   "month": "2024-10",
+   "strips": {
+    "0-200": {
+     "land_ha": 1482.9,
+     "observed_ha": 1482.9,
+     "cover": 1.0,
+     "status": "clear",
+     "built_ha": 302.89,
+     "built_share": 0.2043
+    },
+    "200-500": {
+     "land_ha": 1353.7,
+     "observed_ha": 1353.7,
+     "cover": 1.0,
+     "status": "clear",
+     "built_ha": 569.24,
+     "built_share": 0.4205
+    }
+   }
+  },
+  {
+   "month": "2024-11",
+   "strips": {
+    "0-200": {
+     "land_ha": 1482.9,
+     "observed_ha": 1482.9,
+     "cover": 1.0,
+     "status": "clear",
+     "built_ha": 290.75,
+     "built_share": 0.1961
+    },
+    "200-500": {
+     "land_ha": 1353.7,
+     "observed_ha": 1353.7,
+     "cover": 1.0,
+     "status": "clear",
+     "built_ha": 550.07,
+     "built_share": 0.4064
+    }
+   }
+  },
+  {
+   "month": "2024-12",
+   "strips": {
+    "0-200": {
+     "land_ha": 1482.9,
+     "observed_ha": 1482.9,
+     "cover": 1.0,
+     "status": "clear",
+     "built_ha": 191.13,
+     "built_share": 0.1289
+    },
+    "200-500": {
+     "land_ha": 1353.7,
+     "observed_ha": 1353.7,
+     "cover": 1.0,
+     "status": "clear",
+     "built_ha": 429.1,
+     "built_share": 0.317
+    }
+   }
+  },
+  {
+   "month": "2025-01",
+   "strips": {
+    "0-200": {
+     "land_ha": 1482.9,
+     "observed_ha": 1482.9,
+     "cover": 1.0,
+     "status": "clear",
+     "built_ha": 158.56,
+     "built_share": 0.1069
+    },
+    "200-500": {
+     "land_ha": 1353.7,
+     "observed_ha": 1353.7,
+     "cover": 1.0,
+     "status": "clear",
+     "built_ha": 389.23,
+     "built_share": 0.2875
+    }
+   }
+  },
+  {
+   "month": "2025-02",
+   "strips": {
+    "0-200": {
+     "land_ha": 1482.9,
+     "observed_ha": 1347.0,
+     "cover": 0.908,
+     "status": "clear",
+     "built_ha": 93.7,
+     "built_share": 0.0696
+    },
+    "200-500": {
+     "land_ha": 1353.7,
+     "observed_ha": 1197.5,
+     "cover": 0.885,
+     "status": "clear",
+     "built_ha": 265.96,
+     "built_share": 0.2221
+    }
+   }
+  },
+  {
+   "month": "2025-03",
+   "strips": {
+    "0-200": {
+     "land_ha": 1482.9,
+     "observed_ha": 1482.9,
+     "cover": 1.0,
+     "status": "clear",
+     "built_ha": 52.23,
+     "built_share": 0.0352
+    },
+    "200-500": {
+     "land_ha": 1353.7,
+     "observed_ha": 1353.7,
+     "cover": 1.0,
+     "status": "clear",
+     "built_ha": 218.95,
+     "built_share": 0.1617
+    }
+   }
+  },
+  {
+   "month": "2025-04",
+   "strips": {
+    "0-200": {
+     "land_ha": 1482.9,
+     "observed_ha": 0.0,
+     "cover": 0.0,
+     "status": "none",
+     "built_ha": null,
+     "built_share": null
+    },
+    "200-500": {
+     "land_ha": 1353.7,
+     "observed_ha": 0.0,
+     "cover": 0.0,
+     "status": "none",
+     "built_ha": null,
+     "built_share": null
+    }
+   }
+  },
+  {
+   "month": "2025-05",
+   "strips": {
+    "0-200": {
+     "land_ha": 1482.9,
+     "observed_ha": 0.0,
+     "cover": 0.0,
+     "status": "none",
+     "built_ha": null,
+     "built_share": null
+    },
+    "200-500": {
+     "land_ha": 1353.7,
+     "observed_ha": 0.0,
+     "cover": 0.0,
+     "status": "none",
+     "built_ha": null,
+     "built_share": null
+    }
+   }
+  },
+  {
+   "month": "2025-06",
+   "strips": {
+    "0-200": {
+     "land_ha": 1482.9,
+     "observed_ha": 0.0,
+     "cover": 0.0,
+     "status": "none",
+     "built_ha": null,
+     "built_share": null
+    },
+    "200-500": {
+     "land_ha": 1353.7,
+     "observed_ha": 0.0,
+     "cover": 0.0,
+     "status": "none",
+     "built_ha": null,
+     "built_share": null
+    }
+   }
+  },
+  {
+   "month": "2025-07",
+   "strips": {
+    "0-200": {
+     "land_ha": 1482.9,
+     "observed_ha": 0.0,
+     "cover": 0.0,
+     "status": "none",
+     "built_ha": null,
+     "built_share": null
+    },
+    "200-500": {
+     "land_ha": 1353.7,
+     "observed_ha": 0.0,
+     "cover": 0.0,
+     "status": "none",
+     "built_ha": null,
+     "built_share": null
+    }
+   }
+  },
+  {
+   "month": "2025-08",
+   "strips": {
+    "0-200": {
+     "land_ha": 1482.9,
+     "observed_ha": 0.0,
+     "cover": 0.0,
+     "status": "none",
+     "built_ha": null,
+     "built_share": null
+    },
+    "200-500": {
+     "land_ha": 1353.7,
+     "observed_ha": 0.0,
+     "cover": 0.0,
+     "status": "none",
+     "built_ha": null,
+     "built_share": null
+    }
+   }
+  },
+  {
+   "month": "2025-09",
+   "strips": {
+    "0-200": {
+     "land_ha": 1482.9,
+     "observed_ha": 437.0,
+     "cover": 0.295,
+     "status": "patchy",
+     "built_ha": null,
+     "built_share": null
+    },
+    "200-500": {
+     "land_ha": 1353.7,
+     "observed_ha": 331.6,
+     "cover": 0.245,
+     "status": "patchy",
+     "built_ha": null,
+     "built_share": null
+    }
+   }
+  },
+  {
+   "month": "2025-10",
+   "strips": {
+    "0-200": {
+     "land_ha": 1482.9,
+     "observed_ha": 1230.6,
+     "cover": 0.83,
+     "status": "clear",
+     "built_ha": 237.19,
+     "built_share": 0.1927
+    },
+    "200-500": {
+     "land_ha": 1353.7,
+     "observed_ha": 1075.2,
+     "cover": 0.794,
+     "status": "clear",
+     "built_ha": 447.8,
+     "built_share": 0.4165
+    }
+   }
+  },
+  {
+   "month": "2025-11",
+   "strips": {
+    "0-200": {
+     "land_ha": 1482.9,
+     "observed_ha": 1482.9,
+     "cover": 1.0,
+     "status": "clear",
+     "built_ha": 257.16,
+     "built_share": 0.1734
+    },
+    "200-500": {
+     "land_ha": 1353.7,
+     "observed_ha": 1353.7,
+     "cover": 1.0,
+     "status": "clear",
+     "built_ha": 512.77,
+     "built_share": 0.3788
+    }
+   }
+  },
+  {
+   "month": "2025-12",
+   "strips": {
+    "0-200": {
+     "land_ha": 1482.9,
+     "observed_ha": 419.0,
+     "cover": 0.283,
+     "status": "patchy",
+     "built_ha": null,
+     "built_share": null
+    },
+    "200-500": {
+     "land_ha": 1353.7,
+     "observed_ha": 262.5,
+     "cover": 0.194,
+     "status": "patchy",
+     "built_ha": null,
+     "built_share": null
+    }
+   }
+  },
+  {
+   "month": "2026-01",
+   "strips": {
+    "0-200": {
+     "land_ha": 1482.9,
+     "observed_ha": 1482.9,
+     "cover": 1.0,
+     "status": "clear",
+     "built_ha": 242.17,
+     "built_share": 0.1633
+    },
+    "200-500": {
+     "land_ha": 1353.7,
+     "observed_ha": 1353.7,
+     "cover": 1.0,
+     "status": "clear",
+     "built_ha": 483.9,
+     "built_share": 0.3575
+    }
+   }
+  },
+  {
+   "month": "2026-02",
+   "strips": {
+    "0-200": {
+     "land_ha": 1482.9,
+     "observed_ha": 793.8,
+     "cover": 0.535,
+     "status": "clear",
+     "built_ha": 21.58,
+     "built_share": 0.0272
+    },
+    "200-500": {
+     "land_ha": 1353.7,
+     "observed_ha": 682.8,
+     "cover": 0.504,
+     "status": "clear",
+     "built_ha": 104.34,
+     "built_share": 0.1528
+    }
+   }
+  },
+  {
+   "month": "2026-03",
+   "strips": {
+    "0-200": {
+     "land_ha": 1482.9,
+     "observed_ha": 1103.7,
+     "cover": 0.744,
+     "status": "clear",
+     "built_ha": 105.17,
+     "built_share": 0.0953
+    },
+    "200-500": {
+     "land_ha": 1353.7,
+     "observed_ha": 1062.0,
+     "cover": 0.785,
+     "status": "clear",
+     "built_ha": 290.5,
+     "built_share": 0.2735
+    }
+   }
+  },
+  {
+   "month": "2026-04",
+   "strips": {
+    "0-200": {
+     "land_ha": 1482.9,
+     "observed_ha": 165.8,
+     "cover": 0.112,
+     "status": "patchy",
+     "built_ha": null,
+     "built_share": null
+    },
+    "200-500": {
+     "land_ha": 1353.7,
+     "observed_ha": 176.9,
+     "cover": 0.131,
+     "status": "patchy",
+     "built_ha": null,
+     "built_share": null
+    }
+   }
+  },
+  {
+   "month": "2026-05",
+   "strips": {
+    "0-200": {
+     "land_ha": 1482.9,
+     "observed_ha": 1482.9,
+     "cover": 1.0,
+     "status": "clear",
+     "built_ha": 338.87,
+     "built_share": 0.2285
+    },
+    "200-500": {
+     "land_ha": 1353.7,
+     "observed_ha": 1353.7,
+     "cover": 1.0,
+     "status": "clear",
+     "built_ha": 609.32,
+     "built_share": 0.4501
+    }
+   }
+  },
+  {
+   "month": "2026-06",
+   "strips": {
+    "0-200": {
+     "land_ha": 1482.9,
+     "observed_ha": 0.0,
+     "cover": 0.0,
+     "status": "none",
+     "built_ha": null,
+     "built_share": null
+    },
+    "200-500": {
+     "land_ha": 1353.7,
+     "observed_ha": 0.0,
+     "cover": 0.0,
+     "status": "none",
+     "built_ha": null,
+     "built_share": null
+    }
+   }
+  },
+  {
+   "month": "2026-07",
+   "strips": {
+    "0-200": {
+     "land_ha": 1482.9,
+     "observed_ha": 0.0,
+     "cover": 0.0,
+     "status": "none",
+     "built_ha": null,
+     "built_share": null
+    },
+    "200-500": {
+     "land_ha": 1353.7,
+     "observed_ha": 0.0,
+     "cover": 0.0,
+     "status": "none",
+     "built_ha": null,
+     "built_share": null
+    }
+   }
+  },
+  {
+   "month": "2026-08",
+   "strips": {
+    "0-200": {
+     "land_ha": 1482.9,
+     "observed_ha": 1338.3,
+     "cover": 0.902,
+     "status": "clear",
+     "built_ha": 275.22,
+     "built_share": 0.2056
+    },
+    "200-500": {
+     "land_ha": 1353.7,
+     "observed_ha": 1228.9,
+     "cover": 0.908,
+     "status": "clear",
+     "built_ha": 530.15,
+     "built_share": 0.4314
+    }
+   }
+  },
+  {
+   "month": "2026-09",
+   "strips": {
+    "0-200": {
+     "land_ha": 1482.9,
+     "observed_ha": 1482.9,
+     "cover": 1.0,
+     "status": "clear",
+     "built_ha": 275.33,
+     "built_share": 0.1857
+    },
+    "200-500": {
+     "land_ha": 1353.7,
+     "observed_ha": 1353.7,
+     "cover": 1.0,
+     "status": "clear",
+     "built_ha": 535.65,
+     "built_share": 0.3957
+    }
+   }
+  }
+ ],
+ "seasons": [
+  {
+   "season": "2024-25",
+   "window": [
+    "2024-10-01",
+    "2025-04-01"
+   ],
+   "strips": {
+    "0-200": {
+     "land_ha": 1482.9,
+     "observed_ha": 1482.9,
+     "cover": 1.0,
+     "status": "clear",
+     "built_ha": 267.63,
+     "built_share": 0.1805
+    },
+    "200-500": {
+     "land_ha": 1353.7,
+     "observed_ha": 1353.7,
+     "cover": 1.0,
+     "status": "clear",
+     "built_ha": 531.92,
+     "built_share": 0.393
+    }
+   }
+  },
+  {
+   "season": "2025-26",
+   "window": [
+    "2025-10-01",
+    "2026-04-01"
+   ],
+   "strips": {
+    "0-200": {
+     "land_ha": 1482.9,
+     "observed_ha": 1482.9,
+     "cover": 1.0,
+     "status": "clear",
+     "built_ha": 246.54,
+     "built_share": 0.1663
+    },
+    "200-500": {
+     "land_ha": 1353.7,
+     "observed_ha": 1353.7,
+     "cover": 1.0,
+     "status": "clear",
+     "built_ha": 515.37,
+     "built_share": 0.3807
+    }
+   }
+  }
+ ],
+ "season_change": [
+  {
+   "from": "2024-25",
+   "to": "2025-26",
+   "strips": {
+    "0-200": {
+     "compared_ha": 1482.9,
+     "cover": 1.0,
+     "gained_ha": 41.64,
+     "lost_ha": 62.74,
+     "net_ha": -21.1
+    },
+    "200-500": {
+     "compared_ha": 1353.7,
+     "cover": 1.0,
+     "gained_ha": 46.02,
+     "lost_ha": 62.58,
+     "net_ha": -16.56
+    }
+   }
+  }
+ ],
+ "patches": {
+  "count": 37,
+  "min_ha": 0.5,
+  "by_strip": {
+   "0-200": {
+    "count": 20,
+    "area_ha": 25.6,
+    "largest_ha": 4.433
+   },
+   "200-500": {
+    "count": 17,
+    "area_ha": 33.22,
+    "largest_ha": 7.009
+   }
+  }
+ },
+ "open_buildings": [
+  {
+   "year": 2016,
+   "tiles": 1,
+   "strips": {
+    "0-200": {
+     "observed_ha": 1472.8,
+     "built_ha": {
+      "0.3": 22.04,
+      "0.5": 14.16,
+      "0.7": 8.67
+     }
+    },
+    "200-500": {
+     "observed_ha": 1354.1,
+     "built_ha": {
+      "0.3": 70.23,
+      "0.5": 47.37,
+      "0.7": 25.32
+     }
+    }
+   }
+  },
+  {
+   "year": 2017,
+   "tiles": 1,
+   "strips": {
+    "0-200": {
+     "observed_ha": 1472.8,
+     "built_ha": {
+      "0.3": 24.02,
+      "0.5": 15.72,
+      "0.7": 9.56
+     }
+    },
+    "200-500": {
+     "observed_ha": 1354.1,
+     "built_ha": {
+      "0.3": 74.96,
+      "0.5": 52.41,
+      "0.7": 28.64
+     }
+    }
+   }
+  },
+  {
+   "year": 2018,
+   "tiles": 1,
+   "strips": {
+    "0-200": {
+     "observed_ha": 1472.8,
+     "built_ha": {
+      "0.3": 25.93,
+      "0.5": 17.55,
+      "0.7": 11.13
+     }
+    },
+    "200-500": {
+     "observed_ha": 1354.1,
+     "built_ha": {
+      "0.3": 76.94,
+      "0.5": 54.36,
+      "0.7": 31.22
+     }
+    }
+   }
+  },
+  {
+   "year": 2019,
+   "tiles": 1,
+   "strips": {
+    "0-200": {
+     "observed_ha": 1472.8,
+     "built_ha": {
+      "0.3": 26.37,
+      "0.5": 18.17,
+      "0.7": 11.36
+     }
+    },
+    "200-500": {
+     "observed_ha": 1354.1,
+     "built_ha": {
+      "0.3": 78.68,
+      "0.5": 56.34,
+      "0.7": 32.58
+     }
+    }
+   }
+  },
+  {
+   "year": 2020,
+   "tiles": 1,
+   "strips": {
+    "0-200": {
+     "observed_ha": 1472.8,
+     "built_ha": {
+      "0.3": 26.76,
+      "0.5": 17.7,
+      "0.7": 11.13
+     }
+    },
+    "200-500": {
+     "observed_ha": 1354.1,
+     "built_ha": {
+      "0.3": 78.93,
+      "0.5": 55.63,
+      "0.7": 31.57
+     }
+    }
+   }
+  },
+  {
+   "year": 2021,
+   "tiles": 1,
+   "strips": {
+    "0-200": {
+     "observed_ha": 1472.8,
+     "built_ha": {
+      "0.3": 34.21,
+      "0.5": 23.68,
+      "0.7": 15.09
+     }
+    },
+    "200-500": {
+     "observed_ha": 1354.1,
+     "built_ha": {
+      "0.3": 87.6,
+      "0.5": 64.04,
+      "0.7": 37.85
+     }
+    }
+   }
+  },
+  {
+   "year": 2022,
+   "tiles": 1,
+   "strips": {
+    "0-200": {
+     "observed_ha": 1472.8,
+     "built_ha": {
+      "0.3": 32.24,
+      "0.5": 22.69,
+      "0.7": 14.74
+     }
+    },
+    "200-500": {
+     "observed_ha": 1354.1,
+     "built_ha": {
+      "0.3": 89.1,
+      "0.5": 65.13,
+      "0.7": 38.78
+     }
+    }
+   }
+  },
+  {
+   "year": 2023,
+   "tiles": 1,
+   "strips": {
+    "0-200": {
+     "observed_ha": 1472.8,
+     "built_ha": {
+      "0.3": 36.68,
+      "0.5": 25.72,
+      "0.7": 16.31
+     }
+    },
+    "200-500": {
+     "observed_ha": 1354.1,
+     "built_ha": {
+      "0.3": 94.13,
+      "0.5": 68.74,
+      "0.7": 40.49
+     }
+    }
+   }
+  }
+ ],
+ "method": {
+  "strips": "land within 0-200 m and 200-500 m of the Oct 2024 shoreline (Phase 11 baseline), the sea (Phase 11 sea polygons) removed; rasters at 10 m, areas are sums of pixel areas; a pixel 200 m away is in the inner strip",
+  "built": "Dynamic World V1 `built` (label 6): the per-pixel mode of the label over the month / dry season (monthly.class_image)",
+  "gaps": "a strip-month with Dynamic World on under 50% of its land is a gap (built_ha null): the monsoon months, not zeros",
+  "seasons": "dry-season (Oct-Mar) modes (monthly.dry_seasons); change over the pixels observed in both seasons",
+  "patches": "built in the last dry season, not in the first, observed in both; >= 0.5 ha connected (8-neighbour); split where they cross the 200 m line; area_ha computed from the polygon",
+  "open_buildings": "GOOGLE/Research/open-buildings-temporal/v1 `building_presence` yearly mosaic, area where the confidence >= [0.3, 0.5, 0.7] (headline 0.5) at 4 m; uncalibrated confidence, footprints only (Dynamic World also counts roads, ports, yards): reference only, not part of the evaluation",
+  "units": "hectares of built area, never building counts (10 m, D11)",
+  "caveats": "Dynamic World labels bare ground, coal yards and port apron as built in places and the mode flickers between built / bare from month to month: trust the dry-season figures and the trend over the single months; the strips follow the 2024 coast, so for earlier windows the strip is where the coast is now"
+ }
+}

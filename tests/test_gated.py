@@ -46,6 +46,14 @@ def test_empty_box_has_no_regions():
     assert ev["regions"] == [] and ev["change_frac"] == 0
 
 
+def test_sliver_under_one_pixel_is_not_an_overlap():
+    """Less than MIN_INSIDE_M2 (one 10 m pixel) inside the box doesn't count: no region, change_frac 0."""
+    sliver = feature("r4", square(107.31 - 0.00005, 21.002, 107.32, 21.0021))     # ~5 m x 11 m inside
+    ev = se.site_evidence(BOX, [sliver], ["a", "b"], ["c", "d"], "t", "p")
+    assert se.inside_part(sliver["geometry"], BOX)[0] > 0
+    assert ev["regions"] == [] and ev["change_frac"] == 0
+
+
 def test_reversed_ring_gives_the_same_area():
     ring = square(107.302, 21.002, 107.304, 21.004)["coordinates"][0]
     cw = {"type": "Polygon", "coordinates": [ring[::-1]]}
@@ -160,7 +168,7 @@ def test_dev_run_all_arms_then_resume(dev_env):
     assert len(vlm.calls) == 3 + 2 * 3                                                       # gated 3, ungated 2 x 3
     assert rd.run(vlm, list(rd.ARMS), log_path=log, render=render, **quiet)["skipped"] == 9
     text = rd.summary(recs)
-    assert "| gated | Qwen2.5-VL-7B-Instruct | gated_report_v0 | control | 1 |" in text
+    assert "| gated | Qwen2.5-VL-7B-Instruct | gated_report_v2 | control | 1 |" in text
     assert "ungated: beyond_evidence × 3" in text
     assert "No change was detected" in rd.show(recs, "c1")
 
@@ -188,10 +196,17 @@ COAST_EV = {
 }
 
 
-def test_v0_prompt_offers_only_region_claim_types():
-    """The box evidence has no transects or strips yet, so gated_report_v0 must not invite coast claims."""
+def test_prompt_offers_coast_claim_types_only_with_coast_evidence():
+    """gated_report_v1+: shoreline / coastal_built (and their fields) only when the box has transects / strips."""
     p = gated.build_prompt({"change_frac": 0.0, "regions": []}, ["a", "b"], ["c", "d"])
-    assert "shoreline" not in p and "coastal_built" not in p and "built_ha_before" not in p
+    assert "shoreline" not in p and "coastal_built" not in p and "built_ha_before" not in p and "{" + "coast" not in p
+    shore_only = gated.build_prompt({**COAST_EV, "coastal_strips": []}, ["a", "b"], ["c", "d"])
+    assert "transect_ref" in shore_only and '"t0001"' in shore_only and "coastal_built" not in shore_only
+    assert "ci95" not in shore_only                                        # not shown to the model
+    both = gated.build_prompt(COAST_EV, ["a", "b"], ["c", "d"])
+    assert "coastal_built" in both and "7. Make coastal_built claims" in both
+    strips_only = gated.build_prompt({**COAST_EV, "transects": []}, ["a", "b"], ["c", "d"])
+    assert "6. Make coastal_built claims" in strips_only and "transect_ref" not in strips_only
 
 
 def test_parser_keeps_coast_fields():
@@ -220,3 +235,39 @@ def test_template_states_the_coast_and_the_verifier_agrees():
 def test_demo_gated_abstains_on_unconfirmed_shoreline():
     rep = build_report(COAST_EV, "gated")
     assert any("t0004" in a["topic"] for a in rep["abstain"])
+
+
+# ---------- shoreline between the box's own windows (D13 / D16) ----------
+def test_window_stats_confirms_with_the_optical_shift():
+    from agents import shoreline as sh
+    assert sh.window_stats(10, 60, 0, 40, 4.0)["change"] == "advancing"
+    assert sh.window_stats(10, 60, 0, 5, 4.0)["change"] == "unconfirmed"          # optical doesn't follow
+    st = sh.window_stats(60, 10, None, None, 4.0)
+    assert st["change"] == "unconfirmed" and st["nsm"] == -50 and st["lrr"] == -12.5 and st["ci95"] is None
+    assert sh.window_stats(10, 25, 0, 0, 4.0)["change"] == "stable"
+    assert sh.window_stats(None, 25, 0, 0, 4.0)["change"] == "too_few"
+    assert sh.window_years(["2018-11-01", "2019-03-31"], ["2022-11-01", "2023-03-31"]) == pytest.approx(4.0, abs=0.01)
+
+
+def test_box_evidence_takes_transects_only_from_the_same_windows(tmp_path, monkeypatch):
+    from agents import shoreline as sh
+    from agents.schema import validate_evidence
+    tr = {"type": "FeatureCollection", "features": [
+        {"type": "Feature", "id": "t0001", "geometry": {"type": "LineString", "coordinates": [[107.305, 21.012], [107.305, 20.998]]},
+         "properties": {"id": "t0001"}},
+        {"type": "Feature", "id": "t0002", "geometry": {"type": "LineString", "coordinates": [[107.5, 21.012], [107.5, 21.002]]},
+         "properties": {"id": "t0002"}}]}
+    (tmp_path / "transects.geojson").write_text(json.dumps(tr))
+    win = [["2018-11-01", "2019-03-31"], ["2022-11-01", "2023-03-31"]]
+    stats = {"windows": win, "transects": {"t0001": sh.window_stats(0, 50, 0, 45, 4.0), "t0002": sh.window_stats(0, 0, 0, 0, 4.0)}}
+    (tmp_path / sh.windows_file(*win).name).write_text(json.dumps(stats))
+    monkeypatch.setattr(sh, "SHORELINE_DIR", tmp_path)
+    se._coast_cache.clear()
+    ev = se.site_evidence(BOX, [], *win, "t", "p")
+    assert ev["transects"] == [{"id": "t0001", "location": "centre", "change": "advancing", "nsm": 50, "lrr": 12.5, "ci95": None}]
+    assert validate_evidence(ev) == []
+    assert "transects" not in se.site_evidence(BOX, [], ["2018-12-01", "2019-03-31"], win[1], "t", "p")   # other windows
+    assert "transects" not in se.site_evidence(BOX, [], *win, "t", "p", coast=False)
+    far = se.site_evidence((107.0, 20.0, 107.01, 20.01), [], *win, "t", "p")
+    assert far["transects"] == []                                               # run exists, no coast in this box
+    se._coast_cache.clear()
