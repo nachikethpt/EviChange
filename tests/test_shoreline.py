@@ -181,6 +181,10 @@ def test_api(written, monkeypatch):
     assert one["quarterly"][0] == {"quarter": "2024-10/2024-12", "pos": 0.0} and len(one["quarterly"]) == 4
     assert c.get("/api/shoreline/lines", params={"month": "bad"}).status_code == 400
     assert c.get("/api/shoreline/transects/t9999").status_code == 404
+    pos = json.loads((path / "positions.json").read_text())       # a transect in positions.json only
+    pos["positions"]["t0099"] = pos["positions"]["t0002"]
+    (path / "positions.json").write_text(json.dumps(pos))
+    assert c.get("/api/shoreline/transects/t0099").status_code == 404
 
 
 def test_api_before_any_run(tmp_path, monkeypatch):

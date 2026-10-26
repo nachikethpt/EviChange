@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Claim adjudication</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script>
+    (function () {
+      let t = 'dark';
+      try { t = localStorage.getItem('evichange-theme') || t; } catch (e) {}
+      document.documentElement.dataset.theme = t;
+    })();
+  </script>
+  <style>
+    body { overflow: auto; }
+    .adj { flex: 1; overflow-y: auto; padding: 16px; max-width: 1100px; width: 100%; margin: 0 auto; }
+    .adj-bar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: end; padding: 12px; background: var(--surface);
+               border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; }
+    .adj-bar label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); }
+    .adj-bar input, .adj-bar select, .adj-note { font: inherit; color: var(--text); background: var(--bg);
+               border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; }
+    .adj-btn { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 6px; padding: 6px 12px; }
+    .adj-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    [data-theme="dark"] .adj-btn.primary { color: #04201c; }
+    .adj-btn:disabled { opacity: .5; cursor: default; }
+    .adj-progress { margin-left: auto; font-size: 12px; color: var(--muted); }
+    .adj-site { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+    .adj-site-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .adj-site-head h2 { font-size: 15px; margin: 0; }
+    .adj-chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 10px; }
+    .adj-chips figure { margin: 0; }
+    .adj-chips img { width: 100%; image-rendering: pixelated; border-radius: 4px; border: 1px solid var(--border); display: block; }
+    .adj-chips figcaption { font-size: 11px; color: var(--muted); text-align: center; }
+    .adj-ref { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 10px; }
+    .adj-ref pre { max-height: 220px; overflow: auto; font-size: 11px; background: var(--bg); padding: 8px; border-radius: 6px; margin: 0; }
+    .adj-item { border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 8px; }
+    .adj-item.done { border-color: var(--accent); }
+    .adj-text { font-size: 14px; margin-bottom: 8px; }
+    .adj-level { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; margin-right: 6px; }
+    .adj-choices { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 13px; }
+    .adj-choices label { display: inline-flex; gap: 4px; align-items: center; cursor: pointer; }
+    .adj-note { width: 100%; margin-top: 6px; }
+    .adj-empty { color: var(--muted); padding: 24px; text-align: center; }
+    .adj-err { color: var(--bad); }
+    .adj-rules { font-size: 12px; margin-bottom: 12px; }
+    .adj-rules li { margin: 2px 0; }
+    @media (max-width: 600px) { .adj { padding: 8px; } .adj-progress { margin-left: 0; width: 100%; } }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo">◆</span> EviChange <span class="tag">claim adjudication</span></div>
+  </header>
+  <main class="adj">
+    <form class="adj-bar" id="setup">
+      <label>Reports <select id="source"><option value="dev">development boxes</option><option value="sites">30 labelled sites</option></select></label>
+      <label>Adjudicator <input id="who" required pattern="[A-Za-z0-9_\-]{1,32}" placeholder="e.g. p3" size="10"></label>
+      <label>Role <select id="role"><option value="first">first adjudicator</option><option value="second">second (20 % overlap)</option></select></label>
+      <label>Pass <select id="pass"><option value="1">1: truth (label + chips)</option><option value="2">2: evidence support</option></select></label>
+      <button class="adj-btn primary" type="submit">Start</button>
+      <span class="adj-progress" id="progress"></span>
+    </form>
+    <details class="adj-rules">
+      <summary>Rules (proposed, docs/adjudication_rules.md)</summary>
+      <ul>
+        <li>Judge only what is inside the box, at the box's dates. The condition and verdict are hidden on purpose.</li>
+        <li><b>Unverifiable</b> only for what no imagery can show: cause, purpose, legality, ownership, the future. "Mining" is a cause.</li>
+        <li><b>About the detector</b>: tick it when the claim describes the detector or evidence ("no change was detected") rather than the ground.</li>
+        <li>Area within a factor of 2 of what is visible, share within ±15 points: true. Index values: judge only the direction they imply.</li>
+        <li>Change types: the label is the reference; the chips may add a type it misses, never contradict one it has.</li>
+        <li>Hedges don't change the judgement. A claim with a false part is false; tick <b>compound</b> when it joins statements.</li>
+        <li>Pass 2 (support) is judged against the evidence JSON only, not the chips.</li>
+      </ul>
+    </details>
+    <div id="site"><p class="adj-empty">Choose the reports, your name and the pass, then Start.</p></div>
+  </main>
+  <script src="/static/adjudicate.js"></script>
+</body>
+</html>

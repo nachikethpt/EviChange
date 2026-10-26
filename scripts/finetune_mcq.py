@@ -41,8 +41,8 @@ import vlm_batch                               # noqa: E402
 LABEL_DIR = ROOT / "data" / "quangninh" / "ft_labels_v2"
 ASSIGNED = ROOT / "data" / "quangninh" / "ft_assigned_v2.json"
 COVERS = ("water", "dense_vegetation", "sparse_vegetation", "crops", "bare", "built")
-COVER_TEXT = {"water": "water", "dense_vegetation": "dense vegetation (forest, mangrove)",
-              "sparse_vegetation": "sparse vegetation (scrub, grass)", "crops": "crops / fields",
+COVER_TEXT = {"water": "water (sea, rivers, ponds; aquaculture: fish / shrimp ponds, floating cages)", "dense_vegetation": "dense vegetation (forest, mangrove)",
+              "sparse_vegetation": "sparse vegetation (scrub, grass)", "crops": "crops / fields (not fish ponds)",
               "bare": "bare ground (soil, rock, sand, mine, fill)", "built": "built-up (buildings, roads, concrete)"}
 VEG = {"dense_vegetation", "sparse_vegetation", "crops"}
 CALIB_N, SEED, SHEET_SIZE = 40, 23, 50
@@ -187,7 +187,9 @@ def sheet(items: list[dict], params: dict, title: str, windows: list[list[str]])
 Best: open the box in Google Earth (link, or this page's .kml in Google Earth Pro) and use the
 <b>historical imagery</b> slider to find the clearest image <b>inside each window</b> (or the closest to it), and note its month.
 The Sentinel-2 chips below are the same place at 10 m, for reference. Tick every cover taking up at least about
-a fifth of the box, then the main one. Use "can't tell" only when no image lets you see the box.</p>
+a fifth of the box, then the main one. Use "can't tell" only when no image lets you see the box.
+<b>Aquaculture is water</b>: fish / shrimp ponds and floating cages (dots on the water) are water, never crops;
+tick built-up as well only if rafts and walkways cover a fifth of the box; wide pond walls are bare.</p>
 {''.join(cards)}
 <p><button onclick="save()">Save labels</button> <span id="n"></span></p>
 <script>
