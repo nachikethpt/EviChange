@@ -24,6 +24,8 @@ import asyncio
 import json
 import re
 import time
+import urllib.parse
+import urllib.request
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -327,6 +329,26 @@ def vlm_check_region(req: VLMCheckRequest):
     return result
 
 
+class SearchSpecRequest(BaseModel):
+    prompt: str
+
+
+@app.post("/api/search_spec")
+def search_spec_endpoint(req: SearchSpecRequest):
+    """D7 step 1: a typed request -> a validated SearchSpec from the Geo-VLM (text only, no images).
+    503 when no model is reachable and 200 with status "invalid" when the answer is unusable;
+    in both cases the app falls back to its keyword parser."""
+    if not req.prompt.strip():
+        raise HTTPException(400, "prompt is empty")
+    status = vlm.status()
+    if not status["available"]:
+        raise HTTPException(503, status["detail"])
+    try:
+        return search_spec.spec_from_prompt(vlm, req.prompt)
+    except VLMUnavailable as exc:
+        raise HTTPException(503, str(exc))
+
+
 def _bbox(geometry: dict) -> tuple[float, float, float, float]:
     polys = [geometry["coordinates"]] if geometry["type"] == "Polygon" else geometry["coordinates"]
     xs = [p[0] for poly in polys for p in poly[0]]
@@ -426,10 +448,52 @@ def create_run(req: RunRequest):
     return {"run_id": run_id, "status": "queued", "cached": False}
 
 
+@app.get("/api/runs")
+def list_runs():
+    """All stored runs, newest first, so the app can reopen or delete an earlier one."""
+    return data_store.list_runs()
+
+
 @app.get("/api/runs/{run_id}")
 def get_run(run_id: str):
     _require_valid_run(run_id)
     return data_store.get_status(run_id)
+
+
+@app.delete("/api/runs/{run_id}")
+def delete_run(run_id: str):
+    """Delete a finished or failed run. A queued or running run is refused (409): the background
+    worker still holds it and would crash writing its status into a missing folder."""
+    _require_valid_run(run_id)
+    if data_store.get_status(run_id)["status"] in ("queued", "running"):
+        raise HTTPException(409, "run is still in progress; wait for it to finish before deleting it")
+    data_store.delete_run(run_id)
+    return {"deleted": run_id}
+
+
+@app.get("/api/geocode")
+def geocode(q: str):
+    """Place-name search for the AOI picker (OpenStreetMap Nominatim, proxied so the request carries the
+    User-Agent its usage policy asks for). Returns [{name, lon, lat, bbox: [w, s, e, n]}]."""
+    q = q.strip()
+    if len(q) < 2:
+        raise HTTPException(400, "type at least 2 characters")
+    url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode(
+        {"q": q, "format": "jsonv2", "limit": 6})
+    req = urllib.request.Request(url, headers={"User-Agent": "EviChange-GIS/0.1 (research project)"})
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            hits = json.load(resp)
+    except Exception as exc:
+        raise HTTPException(502, f"place search is unavailable: {exc}")
+    out = []
+    for h in hits:
+        try:
+            s, n, w, e = (float(v) for v in h["boundingbox"])     # Nominatim order: south, north, west, east
+            out.append({"name": h["display_name"], "lon": float(h["lon"]), "lat": float(h["lat"]), "bbox": [w, s, e, n]})
+        except (KeyError, ValueError, TypeError):
+            continue
+    return out
 
 
 # ---------- Phase 11 (D11): shoreline change ----------
