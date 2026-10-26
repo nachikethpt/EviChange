@@ -68,8 +68,14 @@ def versions(arm: str) -> list[str]:
             "ungated": [ungated.REPORT_PROMPT_VERSION, ungated.EXTRACT_PROMPT_VERSION]}[arm]
 
 
-def report_key(arm: str, box_id: str, model: str | None, chip_set: str) -> str:
-    blob = json.dumps([arm, box_id, versions(arm), model, chip_set if arm != "template" else None])
+def evidence_tag(ev: dict) -> str:
+    """Fingerprint of a box's evidence: a report verified against older evidence (e.g. before the
+    shoreline transects joined it) is not reused."""
+    return hashlib.sha256(json.dumps(ev, sort_keys=True).encode()).hexdigest()[:12]
+
+
+def report_key(arm: str, box_id: str, model: str | None, chip_set: str, ev_tag: str = "") -> str:
+    blob = json.dumps([arm, box_id, versions(arm), model, chip_set if arm != "template" else None, ev_tag])
     return hashlib.sha256(blob.encode()).hexdigest()[:16]
 
 
@@ -129,11 +135,11 @@ def run(vlm, arms: list[str], limit: int | None = None, log_path: Path | None = 
         arm_model = model if arm != "template" else None
         for box in boxes:
             n += 1
-            key = report_key(arm, box["id"], arm_model, CHIP_SET)
+            ev = box_evidence(fc, box)
+            key = report_key(arm, box["id"], arm_model, CHIP_SET, evidence_tag(ev))
             if key in done_keys:
                 counts["skipped"] += 1
                 continue
-            ev = box_evidence(fc, box)
             t0 = time.time()
             rep = None
             for attempt in range(1, vlm_batch.SERVER_TRIES + 1):
@@ -229,7 +235,10 @@ def show(records: list[dict], box_id: str) -> str:
     if not out:
         return f"No reports for {box_id}."
     ev = next(r for (_, _, _, bid), r in latest(records).items() if bid == box_id)["evidence"]
-    return f"# {box_id}\nEvidence: {json.dumps({'change_frac': ev['change_frac'], 'regions': [{k: r.get(k) for k in gated.EVIDENCE_FIELDS} for r in ev['regions']]})}\n\n" + "\n".join(out)
+    shown = {"change_frac": ev["change_frac"], "regions": [{k: r.get(k) for k in gated.EVIDENCE_FIELDS} for r in ev["regions"]]}
+    if "transects" in ev:
+        shown["transects"] = ev["transects"]
+    return f"# {box_id}\nEvidence: {json.dumps(shown)}\n\n" + "\n".join(out)
 
 
 def main(argv: list[str] | None = None) -> None:
