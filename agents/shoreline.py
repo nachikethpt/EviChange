@@ -566,6 +566,109 @@ def write_outputs(result: dict, out_dir: Path | None = None) -> dict:
     return summary
 
 
+# ---------- two-window mode (box evidence, D13 / D16) ----------
+# The box reports compare two dry-season windows (2018-19 vs 2022-23 for QN), not the 24-month period,
+# so their shoreline evidence is measured in those windows: on the same transects, one tide-averaged
+# radar water map per window (water in >= half of its looks) and the optical (MNDWI) water of the window.
+WINDOW_MIN_SHIFT_M = 30        # radar shift below this is "stable": 3 samples, the noise of a 10 m sample walk
+
+
+def window_stats(pos_before: float | None, pos_after: float | None, opt_before: float | None,
+                 opt_after: float | None, years: float, min_shift: float = WINDOW_MIN_SHIFT_M) -> dict:
+    """Transect statistics between two windows, in the evidence's transect format (schema.TRANSECT_FIELDS
+    minus id / location): nsm = after - before (m, seaward +), lrr = nsm / years, ci95 None (two
+    points), change = radar direction confirmed by the optical shift (confirm()), else unconfirmed."""
+    out = {"pos_before": pos_before, "pos_after": pos_after, "opt_before": opt_before, "opt_after": opt_after,
+           "nsm": None, "lrr": None, "ci95": None}
+    if pos_before is None or pos_after is None:
+        return {**out, "opt_shift": None, "change": "too_few"}
+    nsm = round(pos_after - pos_before, 1)
+    trend = "stable" if abs(nsm) < min_shift else ("advancing" if nsm > 0 else "retreating")
+    return {**out, "nsm": nsm, "lrr": round(nsm / years, 2) if years > 0 else None,
+            **confirm(trend, opt_before, opt_after)}
+
+
+def window_years(before_window: list[str], after_window: list[str]) -> float:
+    """Years between the middles of two [start, end] date windows."""
+    from datetime import date
+    mid = lambda w: date.fromisoformat(w[0]).toordinal() / 2 + date.fromisoformat(w[1]).toordinal() / 2
+    return (mid(after_window) - mid(before_window)) / 365.25
+
+
+def transect_points(feature: dict, offsets: list[float] | None = None) -> list[tuple[float, float]]:
+    """Lon/lat of the sample points of a transects.geojson line (landward end -> seaward end)."""
+    offsets = offsets if offsets is not None else profile_offsets()
+    (lon_a, lat_a), (lon_b, lat_b) = feature["geometry"]["coordinates"]
+    span = LAND_M + SEA_M
+    return [(lon_a + (o + LAND_M) / span * (lon_b - lon_a), lat_a + (o + LAND_M) / span * (lat_b - lat_a)) for o in offsets]
+
+
+def build_windows(aoi: dict, transects: dict, before_window: list[str], after_window: list[str], log=print) -> dict:
+    """Two-window shoreline statistics on the Phase 11 transects. {'windows', 'years', 'transects':
+    {id: window_stats()}, 'status_counts', 'method'}."""
+    from .ee_engine import _ee
+    from .monthly import s1_thresholds, water_image
+    ee = _ee()
+    bands, imgs = [], []
+    for name, (s, e) in (("before", before_window), ("after", after_window)):
+        th = s1_thresholds(ee, aoi, s, e)
+        log(f"{name} {s} - {e}: {len(th)} radar scenes ({sum(1 for v in th.values() if v.get('fallback'))} on the fallback threshold)")
+        imgs += [water_image(ee, aoi, s, e, th).unmask(255).rename(f"r_{name}"), optical_water(ee, aoi, s, e).rename(f"o_{name}")]
+        bands += [f"r_{name}", f"o_{name}"]
+    stack = ee.Image.cat(imgs)
+    offsets = profile_offsets()
+    points = [(f["id"], i, lon, lat) for f in transects["features"] for i, (lon, lat) in enumerate(transect_points(f, offsets))]
+    log(f"{len(transects['features'])} transects, {len(points)} sample points")
+    profiles = sample_profiles(ee, stack, points, bands, log)
+    years = window_years(before_window, after_window)
+    out, counts = {}, {}
+    for f in transects["features"]:
+        prof = profiles.get(f["id"], {})
+        pos = {b: shoreline_position([prof.get(b, {}).get(i) for i in range(len(offsets))], offsets)["pos"] for b in bands}
+        st = window_stats(pos["r_before"], pos["r_after"], pos["o_before"], pos["o_after"], years)
+        counts[st["change"]] = counts.get(st["change"], 0) + 1
+        out[f["id"]] = st
+    return {"windows": [list(before_window), list(after_window)], "years": round(years, 2), "transects": out,
+            "status_counts": counts, "method": WINDOW_METHOD}
+
+
+WINDOW_METHOD = {
+    "transects": "the Phase 11 transects (transects.geojson), unchanged",
+    "radar": "Sentinel-1 VV water over each whole window (per-scene Otsu thresholds, water in >= half of the looks: tide-averaged)",
+    "optical": "Sentinel-2 median MNDWI > 0 over each window's clear looks",
+    "position": "as Phase 11 (landward edge of the sea-connected water); none where the line lies outside the transect",
+    "change": f"radar shift >= {WINDOW_MIN_SHIFT_M} m, confirmed by the optical shift (>= {OPT_MIN_SHIFT_M} m the same way), else unconfirmed; "
+              "below that stable; lrr = nsm / years between the window middles, no CI (two points)",
+}
+
+
+def windows_file(before_window: list[str], after_window: list[str], out_dir: Path | None = None) -> Path:
+    tag = f"{before_window[0][:7]}_{after_window[0][:7]}"
+    return (out_dir or SHORELINE_DIR) / f"windows_{tag}.json"
+
+
+def evidence_transects(box: tuple, transects: dict, stats: dict) -> list[dict]:
+    """Evidence transects (schema.TRANSECT_FIELDS) for a box: every transect whose line crosses the box,
+    its location = where its inside part's middle falls in the box's 3 x 3 grid. A transect the
+    window run has no statistics for is left out."""
+    from .site_evidence import where_in_box
+    w, s, e, n = box
+    out = []
+    for f in transects["features"]:
+        st = stats.get(f["id"])
+        if st is None:
+            continue
+        (x0, y0), (x1, y1) = f["geometry"]["coordinates"]
+        inside = [(x0 + (x1 - x0) * k / 50, y0 + (y1 - y0) * k / 50) for k in range(51)]
+        inside = [p for p in inside if w <= p[0] <= e and s <= p[1] <= n]
+        if not inside:
+            continue
+        mid = inside[len(inside) // 2]
+        out.append({"id": f["id"], "location": where_in_box(*mid, box), "change": st["change"],
+                    "nsm": st["nsm"], "lrr": st["lrr"], "ci95": st["ci95"]})
+    return out
+
+
 # ---------- Phase 14 blind lock ----------
 REFERENCE_TRANSECTS_UNLOCKED = False     # set True in the commit that adds the Phase 14 reference shorelines
 HIDDEN_FIELDS = ("n", "lrr", "ci95", "r2", "nsm", "trend", "monthly_iqr", "tidal", "opt_first", "opt_last", "opt_shift", "change")

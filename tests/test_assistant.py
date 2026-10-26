@@ -17,7 +17,7 @@ def parse(*texts):
     script = (f"const a = require({json.dumps(str(JS))});"
               f"const L = {json.dumps(LAYERS)};"
               f"console.log(JSON.stringify({json.dumps(list(texts))}.map(t => a.parseActions(t, L))));")
-    out = subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True).stdout
+    out = subprocess.run(["node", "-e", script], capture_output=True, text=True, encoding="utf-8", check=True).stdout
     return json.loads(out)
 
 

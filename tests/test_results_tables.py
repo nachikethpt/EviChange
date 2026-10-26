@@ -36,17 +36,17 @@ def test_all_outputs(tmp_path):
     cp, rp = synthetic(tmp_path)
     out = tmp_path / "results"
     rep = rt.write_all(cp, rp, out, reps=200)
-    md = (out / "results.md").read_text()
+    md = (out / "results.md").read_text(encoding="utf-8")
     for n in range(1, 8):
         assert f"## Table {n}." in md
     assert md.count("| Gated (Qwen) |") >= 5 and "Gated (Qwen) − Ungated (Qwen)" in md and "secondary (D16)" in md
-    tex = (out / "table_main.tex").read_text()
+    tex = (out / "table_main.tex").read_text(encoding="utf-8")
     assert tex.startswith(r"\begin{tabular}{lrrrrrr}") and r"\%" in tex and "%" not in tex.replace(r"\%", "")
     assert len([ln for ln in tex.splitlines() if ln.endswith(r"\\")]) == 5        # head + 4 conditions
-    svg = ET.fromstring((out / "figure_rates.svg").read_text())
+    svg = ET.fromstring((out / "figure_rates.svg").read_text(encoding="utf-8"))
     titles = [t.text for t in svg.iter("{http://www.w3.org/2000/svg}title")]
     assert len(titles) == 4 * 2 + 1                                                # 2 marks per condition + the effect
-    assert json.loads((out / "report.json").read_text())["comparisons"]["primary"]["a"] == "gated"
+    assert json.loads((out / "report.json").read_text(encoding="utf-8"))["comparisons"]["primary"]["a"] == "gated"
     assert rep["conditions"]["ungated"]["pooled"]["hallucination"][0] > rep["conditions"]["gated"]["pooled"]["hallucination"][0]
 
 
@@ -54,8 +54,8 @@ def test_without_a_comparison(tmp_path):
     cp, rp = synthetic(tmp_path, conds=("template",))
     out = tmp_path / "r"
     rt.write_all(cp, rp, out, reps=100)
-    assert "not available" in (out / "figure_rates.svg").read_text()
-    assert "## Table 6." in (out / "results.md").read_text()
+    assert "not available" in (out / "figure_rates.svg").read_text(encoding="utf-8")
+    assert "## Table 6." in (out / "results.md").read_text(encoding="utf-8")
 
 
 def test_formatting():
