@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import statistics
 import sys
 import time
@@ -186,10 +187,13 @@ def _pct(n: int, d: int) -> str:
     return f"{n} ({100 * n / d:.0f}%)" if d else "–"
 
 
+_NO_CHANGE_RE = re.compile(r"\bno\b(?:\s+[\w-]+){0,2}\s+change|\bnot\s+detected|\bno\s+detected", re.I)
+
+
 def claims_change(rec: dict) -> bool:
     """The report claims change happened (any L2/L3 claim, or an L1 claim not saying 'no change')."""
     for c in rec.get("claims") or []:
-        if c["level"] in ("L2", "L3") or (c["level"] == "L1" and not any(w in c["text"].lower() for w in ("no change", "no clear change", "not detected", "no detected"))):
+        if c["level"] in ("L2", "L3") or (c["level"] == "L1" and not _NO_CHANGE_RE.search(c["text"])):
             return True
     return False
 

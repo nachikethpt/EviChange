@@ -168,7 +168,7 @@ def test_dev_run_all_arms_then_resume(dev_env):
     assert len(vlm.calls) == 3 + 2 * 3                                                       # gated 3, ungated 2 x 3
     assert rd.run(vlm, list(rd.ARMS), log_path=log, render=render, **quiet)["skipped"] == 9
     text = rd.summary(recs)
-    assert "| gated | Qwen2.5-VL-7B-Instruct | gated_report_v2 | control | 1 |" in text
+    assert "| gated | Qwen2.5-VL-7B-Instruct | gated_report_v3 | control | 1 |" in text
     assert "ungated: beyond_evidence × 3" in text
     assert "No change was detected" in rd.show(recs, "c1")
 

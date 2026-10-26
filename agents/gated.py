@@ -19,7 +19,7 @@ import re
 from . import vlm_check
 from .schema import CHANGE_TYPES, LOCATIONS, T_IDX, validate_claim
 
-PROMPT_VERSION = "gated_report_v2"    # v2: rule 4 names type "presence" (v1 answered "no_change", dropped); v1: coast claim types (D13)
+PROMPT_VERSION = "gated_report_v3"    # v3: never call a detected region unchanged (v2: 17 such claims on 60 dev boxes); v2: type "presence"; v1: coast types
 EVIDENCE_FIELDS = ("id", "area_ha", "location", "mean_conf", "dNDVI", "dNDBI", "dMNDWI", "class_before", "class_after")
 TRANSECT_PROMPT_FIELDS = ("id", "location", "change", "nsm", "lrr")
 STRIP_PROMPT_FIELDS = ("strip", "built_ha_before", "built_ha_after")
@@ -59,7 +59,10 @@ Rules:
    "change_type": one of {change_types}, only for type "change_type", else null;
    "class_before", "class_after": only for type "land_cover", copied from the evidence, else null.
 {coast_keys}2. Copy numbers from the evidence. Do not invent numbers or regions.
-3. Name a change type only where its index moved beyond +/-{t} in that direction.
+3. Name a change type only where its index moved beyond +/-{t} in that direction. Every region in the
+   evidence is a detected change: never say a region, or anything in it, did not change. If its
+   class_before equals class_after, say the land cover stayed that class and state what its indices
+   show instead (e.g. "stayed water, but the water index fell by 0.24").
 4. If "regions" is empty, make one L1 claim of type "presence" that no land-cover change was detected
    in the box (evidence_ref ["change_frac"]) and no other claim about land-cover change.
 5. Never say what caused the change, what it is for, whether it is legal, who did it, or what will
