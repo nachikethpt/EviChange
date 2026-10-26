@@ -19,7 +19,7 @@ import re
 from . import vlm_check
 from .schema import CHANGE_TYPES, LOCATIONS, T_IDX, validate_claim
 
-PROMPT_VERSION = "gated_report_v3"    # v3: never call a detected region unchanged (v2: 17 such claims on 60 dev boxes); v2: type "presence"; v1: coast types
+PROMPT_VERSION = "gated_report_v4"    # v4: leave unused fields out, 1500 tokens (v3: 4 of 80 cut off); v3: never "unchanged"; v2: type "presence"; v1: coast
 EVIDENCE_FIELDS = ("id", "area_ha", "location", "mean_conf", "dNDVI", "dNDBI", "dMNDWI", "class_before", "class_after")
 TRANSECT_PROMPT_FIELDS = ("id", "location", "change", "nsm", "lrr")
 STRIP_PROMPT_FIELDS = ("strip", "built_ha_before", "built_ha_after")
@@ -68,7 +68,7 @@ Rules:
 5. Never say what caused the change, what it is for, whether it is legal, who did it, or what will
    happen next. Put each such topic, and anything else the evidence can't support, under "abstain".
 {coast_rules}
-Answer with JSON only, no other text:
+Answer with JSON only, no other text. Leave out every field that does not apply to a claim (no null fields):
 {{"claims": [{{"level": ..., "type": ..., "text": ..., "region_ref": ..., "evidence_ref": [...],
               "change_type": ..., "class_before": ..., "class_after": ...{coast_json}}}],
  "abstain": [{{"topic": ..., "reason": ...}}]}}"""
@@ -176,7 +176,7 @@ def parse_report(text: str) -> tuple[list[dict], list[dict], bool, int]:
 def run_gated(vlm, key: str, ev: dict, before_window: list[str], after_window: list[str], images: list[bytes],
               chip_set: str = "rgb_swir") -> dict:
     """One gated report for one box. `key` names the box for replay files. Raises VLMUnavailable."""
-    out = vlm.generate(build_prompt(ev, before_window, after_window, chip_set), images, max_new_tokens=900,
+    out = vlm.generate(build_prompt(ev, before_window, after_window, chip_set), images, max_new_tokens=1500,
                        replay_key=f"{PROMPT_VERSION}:{key}")
     claims, abstain, parse_ok, dropped = parse_report(out["text"])
     return {"raw": out["text"], "model": out["model"], "claims": claims, "abstain": abstain, "parse_ok": parse_ok,

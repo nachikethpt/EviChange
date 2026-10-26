@@ -163,7 +163,7 @@ def run(vlm, arms: list[str], limit: int | None = None, log_path: Path | None = 
                    "stratum": box["stratum"], "box": [round(v, 6) for v in box["box"]], "chips": CHIP_SET if arm != "template" else None,
                    "versions": versions(arm), "seconds": round(time.time() - t0, 1),
                    **{k: rep.get(k) for k in ("model", "raw_output", "claims", "abstain", "counts", "parse_ok", "dropped",
-                                               "extractor_model", "evidence")}}
+                                               "extractor_model", "extract_raw", "evidence")}}
             if arm == "template":
                 rec["model"] = "rules"
             append_log(rec, log_path)

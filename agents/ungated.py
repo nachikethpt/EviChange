@@ -19,7 +19,7 @@ from . import vlm_check
 from .schema import CHANGE_TYPES, CLAIM_TYPES, LANDCOVER_CLASSES, validate_claim
 
 REPORT_PROMPT_VERSION = "ungated_report_v1"   # v1: asks about the shoreline and buildings near it (D13)
-EXTRACT_PROMPT_VERSION = "claim_extract_v2"  # v2: JSON null, one class (v1 wrote "null" strings, dropped); v1: coast fields
+EXTRACT_PROMPT_VERSION = "claim_extract_v3"  # v3: most specific level (v2 put 98 % at L1); v2: JSON null, one class; v1: coast fields
 
 REPORT_PROMPT = """You are a remote-sensing analyst. You get {count} Sentinel-2 images of the same place:
 {images}
@@ -35,10 +35,15 @@ or leave out statements.
 
 For each claim give:
   "text":  the statement
-  "level": "L1" = whether change happened at all
-           "L2" = how much changed (hectares, percent, size words) or where it is
-           "L3" = what kind of change or land cover
-           "L4" = cause, purpose, legality, who did it, or what will happen next
+  "level": the MOST SPECIFIC level the statement reaches:
+           "L4" if it gives a cause, purpose, legality, who did it, or what will happen next
+                ("indicating erosion", "due to mining", "suggesting land degradation");
+           else "L3" if it names a kind of change or a land cover
+                ("vegetation loss", "more bare soil", "the water body shrank", "it is forest");
+           else "L2" if it says how much changed (hectares, percent, size words) or where
+                ("about 50 % of the box", "in the east");
+           else "L1": it only says whether change happened ("significant change occurred").
+           A statement that names a kind of change is L3 even if it also says change happened.
   "type":  one of {types}
   "change_type": one of {change_types}, or null
   "class_before", "class_after": one of {classes}, or null (only for land-cover statements)
@@ -112,5 +117,5 @@ def run_ungated(writer, extractor, arm: str, key: str, before_window: list[str],
                              replay_key=f"{EXTRACT_PROMPT_VERSION}:{arm}:{key}")
     claims, parse_ok, dropped = parse_claims(ext["text"])
     return {"raw": out["text"], "model": out["model"], "claims": claims, "parse_ok": parse_ok, "dropped": dropped,
-            "extractor_model": ext["model"], "prompt_version": REPORT_PROMPT_VERSION,
+            "extractor_model": ext["model"], "extract_raw": ext["text"], "prompt_version": REPORT_PROMPT_VERSION,
             "extract_version": EXTRACT_PROMPT_VERSION, "chips": chip_set}
