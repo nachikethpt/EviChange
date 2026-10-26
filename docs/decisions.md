@@ -356,6 +356,45 @@ threshold is 2 Sentinel-2 pixels, so the 5 confirmed cases sit near the detectio
 Mar 2026 can't be confirmed optically until Planet's monsoon months are in (Phase 13c), and the
 Phase 14 reference shorelines will give the extraction error in metres.
 
+**As implemented (Phase 12, `agents/coastal.py`, `scripts/make_coastal.py`, `scripts/make_coastal_windows.py`).**
+Built area near the coast, never building counts. Outputs in `data/quangninh/coastal/`; QN totals are quoted
+in the PR (the code was written and unit-tested without an Earth Engine login; the QN run is the next step).
+- *Strips:* the Phase 11 baseline (Oct 2024 shoreline) gives each pixel's distance to the coast
+  (`FeatureCollection.distance`, 500 m reach); the sea is removed with the Phase 11 sea polygons (recomputed
+  by `shoreline.sea_polygons`, since Phase 11 doesn't save them, and cached in `coastal/sea.geojson`).
+  Distance ≤ 200 m is `0-200`, over 200 up to 500 m is `200-500`. Rasters at 10 m (Dynamic World's pixel;
+  Phase 10's 20 m is too coarse for a 200 m strip), areas are sums of pixel areas, not buffered polygons.
+  `strips.geojson` is drawn at 20 m for the map.
+- *Built:* Dynamic World `built` (class 6), the per-pixel mode of the label over the month (`monthly.class_image`).
+  Per strip and month: strip land, hectares Dynamic World saw, `cover` = seen / land, `built_ha`. A strip-month
+  under **50 % cover** is a gap (`built_ha` null, status `patchy` / `none`), never 0. One figure per dry season
+  (`monthly.dry_seasons`: 2024-25, 2025-26), and the change between the first and last season over the pixels
+  seen in both (`compared_ha`, `gained_ha`, `lost_ha`).
+- *New built patches:* built in the last dry season, not in the first, seen in both; connected (8-neighbour)
+  patches of **≥ 0.5 ha** (50 pixels; the same size as the verifier's `COASTAL_MIN_HA`), vectorised with
+  `area_ha`, `strip`, `location`, as the Phase 2 regions; a patch crossing the 200 m line is split in two.
+  Patches on a Phase 14 (c) coastal cell are withheld by the API until those labels exist
+  (`coastal.COASTAL_CELLS_UNLOCKED`).
+- *Open Buildings Temporal* (`building_presence`, yearly mosaic, 2016–2023, 4 m): built area per strip and year
+  where the confidence is ≥ 0.3 / 0.5 / 0.7 (headline 0.5). The dataset says the confidence is uncalibrated
+  (good for ranking and thresholds only), hence three cut-offs. It measures building footprints; Dynamic World
+  `built` also takes roads, ports and yards, so the two series are not comparable in level. Reference only.
+- *Box evidence (Phase 15):* the strips are tiled into ~100 m cells (0.001°); per window pair
+  `make_coastal_windows.py` saves, per cell, the strip land, the area seen in both windows and the built area
+  before / after over those pixels (`coastal/windows_<before>_<after>.json`). `coastal.evidence_strips(box, windows)`
+  clips the cells to a box (by the share of each cell inside it) and returns `coastal_strips[]` per strip **and**
+  3 × 3 location, so a claim about the north is checked against the north part. A (strip, location) with under
+  0.5 ha of land in the box, or with under half of it seen in both windows, gets no entry (the claim stays
+  *uncertain*). `coastal.box_strips(box, before, after)` returns `None` unless a run exists for exactly those
+  windows, like `site_evidence.box_transects`; P2 wires it into `site_evidence`.
+- *API:* `GET /api/coastal` (summary), `/api/coastal/strips` (GeoJSON), `/api/coastal/monthly?strip=`,
+  `/api/coastal/seasons`, `/api/coastal/patches?strip=&min_ha=`, `/api/coastal/open-buildings?strip=`.
+- *Caveats:* Dynamic World labels bare ground, coal yards and port apron as built in places, and the monthly
+  mode flickers between built and bare (Phase 10 found 12–38 % of the AOI "changing" against Oct 2024 every
+  month): trust the dry-season figures and the trend, not single months. The strips follow the 2024 coast, so for
+  the 2018–19 / 2022–23 windows a strip is where the coast is now (the same caveat as the window transects).
+  Narrow water the sea mask's opening leaves out (docks, channels) counts as strip land, with no built area.
+
 ## D12 — Planet-ready imagery source (2026-10-08, proposed)
 
 **Decision.** `ee_engine` gets an imagery `source` (`sentinel2` now, `planet` when the data arrives)
