@@ -134,3 +134,81 @@ def test_api_rejects_bad_input(api):
     assert client.get("/api/adjudicate/dev/chip/s1/..%2Fsecret.png").status_code in (400, 404)
     assert client.get("/api/adjudicate/dev/chip/s1/after_rgb.png").status_code == 404
     assert client.get("/adjudicate").status_code == 200
+
+
+# ---------- agreement between the two adjudicators ----------
+def _second_items():
+    return [it for site in adj.queue(REPORTS, role="second") for it in site["items"]]
+
+
+def _rows(who, items, truth, support, **flags):
+    rows = []
+    for it in items:
+        rows.append({"item_id": it["item_id"], "adjudicator": who, "truth": truth(it), "support": support(it),
+                     **{k: v(it) for k, v in flags.items()}})
+    return rows
+
+
+def test_agreement_only_counts_the_overlap_and_both_judged_items():
+    items = _second_items()
+    assert len(items) == 6                                             # one site, three conditions, two claims
+    outside = next(it for site in adj.queue(REPORTS) if site["site_id"] != adj.queue(REPORTS, role="second")[0]["site_id"]
+                   for it in site["items"])
+    first = _rows("p3", items, lambda it: "true", lambda it: "supported") + [{"item_id": outside["item_id"], "adjudicator": "p3", "truth": "true", "support": "supported"}]
+    second = _rows("p2", items, lambda it: "true", lambda it: "supported")
+    res = adj.agreement(REPORTS, first, second)
+    assert res["items_in_overlap"] == 6
+    assert res["axes"]["truth"]["n"] == 6 and res["axes"]["truth"]["agreement"][0] == 1.0
+    assert res["axes"]["truth"]["kappa"] is None                      # one answer throughout: kappa undefined
+    half = second[:3]                                                 # the second adjudicator only did half
+    assert adj.agreement(REPORTS, first, half)["axes"]["truth"]["n"] == 3
+
+
+def test_agreement_kappa_and_disagreements():
+    items = _second_items()
+    idx = {it["item_id"]: i for i, it in enumerate(items)}
+    first = _rows("p3", items, lambda it: "true" if idx[it["item_id"]] % 2 == 0 else "false", lambda it: "supported",
+                  about_detector=lambda it: idx[it["item_id"]] == 0)
+    # the second adjudicator flips two truth answers and one support answer
+    second = _rows("p2", items, lambda it: ("false" if idx[it["item_id"]] == 0 else "true" if idx[it["item_id"]] == 1
+                                            else "true" if idx[it["item_id"]] % 2 == 0 else "false"),
+                   lambda it: "unsupported" if idx[it["item_id"]] == 2 else "supported",
+                   about_detector=lambda it: idx[it["item_id"]] == 0)
+    res = adj.agreement(REPORTS, first, second)
+    t = res["axes"]["truth"]
+    assert t["n"] == 6 and t["agreement"][0] == pytest.approx(4 / 6)
+    assert t["kappa"] == pytest.approx(0.3333, abs=1e-3)
+    assert res["axes"]["support"]["agreement"][0] == pytest.approx(5 / 6)
+    assert res["axes"]["about_detector"]["agreement"][0] == 1.0
+    diff = adj.disagreements(REPORTS, first, second)
+    assert len(diff) == 3 and {tuple(d["differs"]) for d in diff} == {("truth",), ("support",)}
+    blob = json.dumps(diff)
+    for leak in ('"template"', '"gated"', '"ungated"', "verdict", "r1"):
+        assert leak not in blob                                       # the resolution is blind too
+
+
+def test_consensus_overrides_the_first_pass_and_keeps_it_for_kappa():
+    items = _second_items()
+    first = _rows("p3", items, lambda it: "false", lambda it: "supported")
+    consensus = [{"item_id": items[0]["item_id"], "adjudicator": "final", "truth": "true"}]
+    final = adj.final_judgements(first, consensus)
+    claims, _ = adj.to_metric_records(REPORTS, final, "p3")
+    by_item = {adj.item_id(c["site_id"], c["condition"], c["claim_id"]): c for c in claims}
+    assert by_item[items[0]["item_id"]]["truth"] == "true" and by_item[items[1]["item_id"]]["truth"] == "false"
+    assert adj.latest_judgements(first)[items[0]["item_id"]]["truth"] == "false"      # first pass untouched
+
+
+def test_cli_agreement_and_consensus(tmp_path, capsys):
+    items = _second_items()
+    paths = {n: tmp_path / n for n in ("reports.jsonl", "first.jsonl", "second.jsonl", "cons.jsonl", "claims.jsonl", "runs.jsonl", "diff.json")}
+    paths["reports.jsonl"].write_text("".join(json.dumps(r) + "\n" for r in REPORTS))
+    paths["first.jsonl"].write_text("".join(json.dumps(r) + "\n" for r in _rows("p3", items, lambda it: "true", lambda it: "supported")))
+    paths["second.jsonl"].write_text("".join(json.dumps(r) + "\n" for r in _rows("p2", items[:1], lambda it: "false", lambda it: "supported")))
+    adj.main(["agreement", *(str(paths[n]) for n in ("reports.jsonl", "first.jsonl", "second.jsonl", "diff.json"))])
+    out = capsys.readouterr().out
+    assert "6 items in the second adjudicator's sites" in out and "1 items differ" in out
+    diff = json.loads(paths["diff.json"].read_text())
+    paths["cons.jsonl"].write_text(json.dumps({"item_id": diff[0]["item_id"], "adjudicator": "final", "truth": "false"}) + "\n")
+    adj.main([str(paths["reports.jsonl"]), str(paths["first.jsonl"]), str(paths["claims.jsonl"]), str(paths["runs.jsonl"]), str(paths["cons.jsonl"])])
+    rows = [json.loads(l) for l in paths["claims.jsonl"].read_text().splitlines()]
+    assert len(rows) == 6 and sum(r["truth"] == "false" for r in rows) == 1

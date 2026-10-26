@@ -286,3 +286,31 @@ def test_geocode_parses_nominatim_and_validates(client, monkeypatch):
     out = client.get("/api/geocode", params={"q": "Cam Pha"}).json()
     assert out == [{"name": "Cẩm Phả, Quảng Ninh", "lon": 107.3, "lat": 21.0, "bbox": [107.2, 20.9, 107.4, 21.1]}]
     assert client.get("/api/geocode", params={"q": "a"}).status_code == 400
+
+
+def test_status_is_never_read_half_written(client):
+    """The app polls status.json while the worker rewrites it. Writes swap the file in, so a reader never
+    sees an empty or partial one (this failed on Windows with 'Expecting value: line 1 column 1')."""
+    import threading
+    data_store.create_run("cccccccccccc", AOI, BEFORE, AFTER, "gated", "test")
+    stop, errors = threading.Event(), []
+
+    def reader():
+        while not stop.is_set():
+            try:
+                assert data_store.get_status("cccccccccccc")["run_id"] == "cccccccccccc"
+                time.sleep(0.0005)                            # the app polls every 2 s; this is already far busier
+            except Exception as exc:                      # noqa: BLE001
+                errors.append(repr(exc))
+                return
+
+    threads = [threading.Thread(target=reader) for _ in range(3)]
+    for t in threads:
+        t.start()
+    for i in range(400):
+        data_store.update_status("cccccccccccc", progress=i / 400, padding="x" * 5000)
+    stop.set()
+    for t in threads:
+        t.join()
+    assert errors == []
+    assert not list((data_store.DATA_DIR / "runs" / "cccccccccccc").glob(".*.tmp"))     # no temp files left behind
