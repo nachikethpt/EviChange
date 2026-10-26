@@ -12,6 +12,7 @@ Falls back to demo_data.py when neither a run id nor the global files exist.
 """
 import hashlib
 import json
+import shutil
 import time
 from pathlib import Path
 from typing import Optional
@@ -57,6 +58,39 @@ def write_run_result(run_id: str, aoi_geojson: dict, change_regions_geojson: dic
     (d / "aoi.json").write_text(json.dumps(aoi_geojson, indent=2))
     (d / "change_regions.json").write_text(json.dumps(change_regions_geojson, indent=2))
     (d / "report.json").write_text(json.dumps(report, indent=2))
+
+
+def list_runs() -> list[dict]:
+    """Every stored run, newest first, as a light summary for the app's run list."""
+    runs_dir = DATA_DIR / "runs"
+    out = []
+    if runs_dir.exists():
+        for d in runs_dir.iterdir():
+            p = d / "status.json"
+            if not p.exists():
+                continue
+            try:
+                s = json.loads(p.read_text())
+            except ValueError:
+                continue                       # half-written status file: skip rather than fail the list
+            n_regions = None
+            if (d / "change_regions.json").exists():
+                try:
+                    n_regions = len(json.loads((d / "change_regions.json").read_text()).get("features", []))
+                except ValueError:
+                    pass
+            out.append({k: s.get(k) for k in ("run_id", "status", "progress", "created_at", "error", "condition",
+                                              "before_window", "after_window", "aoi")} | {"n_regions": n_regions})
+    return sorted(out, key=lambda r: r.get("created_at") or 0, reverse=True)
+
+
+def delete_run(run_id: str) -> bool:
+    """Remove a run's folder (status, AOI, regions, report); its cache entry goes with it."""
+    d = _run_dir(run_id)
+    if not d.is_dir():
+        return False
+    shutil.rmtree(d)
+    return True
 
 
 def cache_key(aoi_geojson: dict, before_window: list[str], after_window: list[str], condition: str, code_version: str) -> str:

@@ -39,6 +39,10 @@ const state = {
   condition: 'gated',
   threshold: 0.2,            // replaced by CONF_MIN from /api/change_types on start-up
   tableLayerId: null,
+  runAoi: null,             // GeoJSON Polygon for the run pipeline
+  currentRunId: null,       // active run_id from /api/runs
+  liveData: false,          // whether the current layers are from a live run
+  home: null,               // { bbox } of the open run's AOI; null = the default Quang Ninh view
 };
 const $ = sel => document.querySelector(sel);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -151,7 +155,8 @@ function setOpacity(layer, op) {
 
 function zoomTo(layer) {
   if (layer.kind === 'vector' && layer.data.features.length) map.fitBounds(turf.bbox(layer.data), { padding: 60, maxZoom: 15 });
-  else map.flyTo(HOME);
+  else if (state.home) map.fitBounds(state.home.bbox, { padding: 60, maxZoom: 15 });
+  else map.flyTo({ center: HOME.center, zoom: HOME.zoom });
 }
 
 function removeLayer(layer) {
@@ -356,6 +361,7 @@ map.on('dblclick', e => {
   map.doubleClickZoom.enable(); map.getCanvas().style.cursor = ''; showHint(null);
   updateSketch();
   if (s.purpose === 'draw') analyseDrawnArea();
+  else if (s.purpose === 'run') analyseRunAoi();
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && state.sketch) { stopSketch(); renderPanel(); } });
 
@@ -435,10 +441,10 @@ const condLabel = c => ({ ungated_gpt: 'Ungated GPT' })[c] ?? c[0].toUpperCase()
 let reportCache = {};
 async function fetchReport(condition) {
   const ids = [...state.selected].sort();
-  const key = `${condition}|${ids.join(',')}`;
+  const key = `${state.currentRunId || 'demo'}|${condition}|${ids.join(',')}`;
   if (reportCache[key]) return reportCache[key];
   const res = await fetch('/api/report', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                           body: JSON.stringify({ region_ids: ids, condition }) });
+                                           body: JSON.stringify({ region_ids: ids, condition, run_id: state.currentRunId }) });
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
   return (reportCache[key] = await res.json());
 }
@@ -529,7 +535,7 @@ function alertBox(msg) { showHint(msg); setTimeout(() => showHint(null), 6000); 
 
 // ---------- 10. Panels + toolbar ----------
 const PANEL_TITLES = { basemap: 'Basemap gallery', measure: 'Measure', draw: 'Draw area to analyse', swipe: 'Swipe compare',
-                       changes: 'Find changes', report: 'AI change report', symbology: 'Symbology',
+                       changes: 'Find changes', run: 'Run pipeline', report: 'AI change report', symbology: 'Symbology',
                        indices: 'Index layers (Earth Engine)', tools: 'Geoprocessing', charts: 'Charts', print: 'Export & print' };
 
 function openPanel(name) {
@@ -540,13 +546,392 @@ function openPanel(name) {
   if (name === 'measure') startSketch('line', 'measure');
   if (name === 'draw') startSketch('polygon', 'draw');
   if (name === 'swipe') swipeOn();
+  if (name === 'run') { $('#panelTitle').textContent = PANEL_TITLES.run; openRunPanel(); }
   syncToolbar();
   setTimeout(() => { map.resize(); state.swipe.map?.resize(); if (state.swipe.on) setSwipeX(state.swipe.x); }, 0);
-  if (name === 'report') generateReport(); else renderPanel();
+  if (name === 'report') generateReport(); else if (name !== 'run') renderPanel();
 }
+// ---------- Run Pipeline panel ----------
+let runPollTimer = null;
+const AOI_KM2 = { min: 1, max: 500 };      // same cap as agents/schema.validate_aoi
+const QN_BOUNDS = { w: 106.5, s: 20.5, e: 108.5, n: 21.5 };   // validated study area (approximate)
+const $id = id => document.getElementById(id);
+
+function openRunPanel() {
+  $('#panelBody').innerHTML = `
+    <h3>Run Change Detection Pipeline</h3>
+
+    <div class="form-group">
+      <label>Area of Interest</label>
+      <form id="placeForm" class="chat-form">
+        <input type="text" id="placeQ" placeholder="Search a place, e.g. Cam Pha" autocomplete="off">
+        <button class="btn" type="submit">Find</button>
+      </form>
+      <div id="placeResults" class="place-results"></div>
+      <div id="runAoiStatus" class="muted">No AOI yet. Search a place, use the map view, or draw one.</div>
+      <div class="export-row">
+        <button id="btnDrawAoi" class="btn">Draw AOI on map</button>
+        <button id="btnViewAoi" class="btn" title="Use the area currently shown on the map">Use map view</button>
+        <button id="btnClearAoi" class="btn secondary" hidden>Clear AOI</button>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Before window</label>
+        <input type="date" id="beforeStart" required>
+        <input type="date" id="beforeEnd" required>
+      </div>
+      <div class="form-group">
+        <label>After window</label>
+        <input type="date" id="afterStart" required>
+        <input type="date" id="afterEnd" required>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Condition</label>
+      <select id="runCondition">
+        <option value="template">Template (rule-based)</option>
+        <option value="ungated">Ungated VLM</option>
+        <option value="gated" selected>Gated VLM (evidence-cited)</option>
+      </select>
+    </div>
+
+    <button id="btnSubmitRun" class="btn primary" disabled>Submit run</button>
+    <div id="runWhy" class="muted small" style="margin-top:4px"></div>
+
+    <div id="runProgress" hidden style="margin-top:1rem;">
+      <div class="progress-bar"><div id="progressFill"></div></div>
+      <div id="progressText">Queued…</div>
+    </div>
+    <div id="runResult" hidden style="margin-top:1rem;"></div>
+
+    <div class="pane-subtitle" style="margin-top:16px">Earlier runs</div>
+    <div id="runList" class="muted">Loading…</div>
+  `;
+
+  // Default windows: dry season (Nov to Mar) one and two years back. Plain strings, because
+  // valueAsDate works in UTC and shifts dates by a day east of UTC.
+  const iso = (y, m, d) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  const y = new Date().getFullYear();
+  $id('beforeStart').value = iso(y - 3, 11, 1);
+  $id('beforeEnd').value = iso(y - 2, 3, 31);
+  $id('afterStart').value = iso(y - 1, 11, 1);
+  $id('afterEnd').value = iso(y, 3, 31);
+
+  $id('placeForm').onsubmit = e => { e.preventDefault(); searchPlace($id('placeQ').value); };
+  $id('btnDrawAoi').onclick = () => { startSketch('polygon', 'run'); };
+  $id('btnViewAoi').onclick = () => { const b = map.getBounds(); setRunAoi(bboxPolygon([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()])); };
+  $id('btnClearAoi').onclick = clearRunAoi;
+  $id('btnSubmitRun').onclick = submitRun;
+  ['beforeStart', 'beforeEnd', 'afterStart', 'afterEnd'].forEach(id => $id(id).addEventListener('change', validateRunForm));
+
+  if (state.runAoi) setRunAoi(state.runAoi, { quiet: true });   // keep an AOI chosen earlier
+  validateRunForm();
+  refreshRunList();
+  if (state.currentRunId) showRunResult(state.currentRunId);
+}
+
+// ---- AOI helpers ----
+function bboxPolygon([w, s, e, n]) { return turf.bboxPolygon([w, s, e, n]).geometry; }
+function aoiKm2(geom) { try { return turf.area(geom) / 1e6; } catch { return 0; } }
+function countVertices(geom) {
+  const ring = geom?.type === 'MultiPolygon' ? geom.coordinates?.[0]?.[0] : geom?.coordinates?.[0];
+  return Math.max((ring?.length ?? 0) - 1, 0);      // the ring repeats its first point
+}
+
+// Single entry point for "this is the AOI now": the drawn polygon, a place's box, the map view, or an old run.
+function setRunAoi(geom, { quiet = false } = {}) {
+  if (state.sketch) stopSketch(false);              // release the draw tool so map clicks work again
+  state.runAoi = geom;
+  ensureSketchLayers();
+  map.getSource('sketch').setData(turf.featureCollection([turf.feature(geom, { purpose: 'run' })]));
+  const km2 = aoiKm2(geom);
+  const st = $id('runAoiStatus');
+  if (st) { st.textContent = `AOI: ${countVertices(geom)} corners, ${km2.toFixed(1)} km²`; st.classList.remove('muted'); }
+  if ($id('btnDrawAoi')) $id('btnDrawAoi').hidden = false;
+  if ($id('btnClearAoi')) $id('btnClearAoi').hidden = false;
+  if (!quiet) { map.fitBounds(turf.bbox(geom), { padding: 60, maxZoom: 15 }); showHint(null); }
+  validateRunForm();
+}
+
+function analyseRunAoi() {                           // called by the sketch tool when the polygon is closed
+  const feature = sketchGeometry(false);
+  if (feature) setRunAoi(feature.geometry, { quiet: true });
+}
+
+function clearRunAoi() {
+  state.runAoi = null;
+  map.getSource('sketch')?.setData(turf.featureCollection([]));
+  const st = $id('runAoiStatus');
+  if (st) { st.textContent = 'No AOI yet. Search a place, use the map view, or draw one.'; st.classList.add('muted'); }
+  if ($id('btnClearAoi')) $id('btnClearAoi').hidden = true;
+  validateRunForm();
+}
+
+// ---- place search ----
+async function searchPlace(q) {
+  const box = $id('placeResults');
+  if (!box) return;
+  if (!q || q.trim().length < 2) { box.innerHTML = '<span class="muted">Type at least 2 characters.</span>'; return; }
+  box.innerHTML = '<span class="muted">Searching…</span>';
+  try {
+    const res = await fetch(`/api/geocode?q=${encodeURIComponent(q.trim())}`);
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.status);
+    const hits = await res.json();
+    if (!hits.length) { box.innerHTML = '<span class="muted">No place found.</span>'; return; }
+    box.innerHTML = hits.map((h, i) => `<div class="place-hit" data-i="${i}">
+        <div class="place-name">${esc(h.name)}</div>
+        <div class="export-row"><button class="btn" data-a="go">Go to</button><button class="btn" data-a="aoi">Use as AOI</button></div></div>`).join('');
+    box.querySelectorAll('.place-hit').forEach(el => {
+      const h = hits[+el.dataset.i];
+      el.querySelector('[data-a=go]').onclick = () => map.fitBounds(h.bbox, { padding: 40, maxZoom: 14 });
+      el.querySelector('[data-a=aoi]').onclick = () => {
+        const g = bboxPolygon(h.bbox), km2 = aoiKm2(g);
+        if (km2 > AOI_KM2.max) {    // a whole city or province is too big: centre a box of the allowed size instead
+          const half = Math.sqrt(AOI_KM2.max * 0.5) / 2 / 111;                   // ~250 km² box, in degrees of latitude
+          const dx = half / Math.cos(h.lat * Math.PI / 180);
+          setRunAoi(bboxPolygon([h.lon - dx, h.lat - half, h.lon + dx, h.lat + half]));
+          alertBox(`"${h.name.split(',')[0]}" covers ${km2.toFixed(0)} km², over the ${AOI_KM2.max} km² limit. Using a box around its centre instead; draw your own to change it.`);
+        } else setRunAoi(g);
+      };
+    });
+  } catch (err) { box.innerHTML = `<span class="chip unsupported">Search failed: ${esc(err.message)}</span>`; }
+}
+
+// ---- validation ----
+function runFormProblem() {
+  const v = id => $id(id)?.value;
+  if (!state.runAoi) return 'Choose an area first.';
+  const km2 = aoiKm2(state.runAoi);
+  if (km2 < AOI_KM2.min || km2 > AOI_KM2.max) return `The area is ${km2.toFixed(2)} km²; it must be between ${AOI_KM2.min} and ${AOI_KM2.max} km².`;
+  const [bs, be, as, ae] = ['beforeStart', 'beforeEnd', 'afterStart', 'afterEnd'].map(v);
+  if (!bs || !be || !as || !ae) return 'Fill in all four dates.';
+  if (bs >= be) return 'Before window: the start must be earlier than the end.';
+  if (as >= ae) return 'After window: the start must be earlier than the end.';
+  if (be >= as) return 'The before window must end before the after window starts.';
+  return null;
+}
+function validateRunForm() {
+  const btn = $id('btnSubmitRun'); if (!btn) return;
+  const problem = runFormProblem();
+  btn.disabled = !!problem || !!runPollTimer;
+  $id('runWhy').textContent = problem && state.runAoi ? problem : '';
+}
+
+// ---- submit + progress ----
+function setRunProgress(frac, text) {                // null-safe: the panel may have been closed while a run is going
+  if ($id('runProgress')) $id('runProgress').hidden = false;
+  if ($id('progressFill') && frac !== null) $id('progressFill').style.width = `${Math.round(frac * 100)}%`;
+  if ($id('progressText')) $id('progressText').textContent = text;
+}
+
+async function submitRun() {
+  const problem = runFormProblem();
+  if (problem) return alertBox(problem);
+  $id('btnSubmitRun').disabled = true;
+  await startRun({
+    aoi: state.runAoi,
+    before_window: [$id('beforeStart').value, $id('beforeEnd').value],
+    after_window: [$id('afterStart').value, $id('afterEnd').value],
+    condition: $id('runCondition').value,
+  });
+}
+
+/** POST /api/runs, then follow it to the end. Used by the Run pipeline panel and by the Find changes chat
+ *  (after the user confirms the proposed run). Optional callbacks: onProgress(status), onDone(runId), onError(message). */
+async function startRun(payload, cb = {}) {
+  if (runPollTimer) { alertBox('A run is already in progress.'); cb.onError?.('A run is already in progress.'); return; }
+  setRunProgress(0.1, 'Submitting…');
+  try {
+    const res = await fetch('/api/runs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(Array.isArray(data.detail) ? data.detail.map(d => d.msg).join('; ') : data.detail || 'Submit failed');
+    if (data.cached) {
+      setRunProgress(1, 'Loaded from cache');
+      await loadRunResults(data.run_id);
+      cb.onDone?.(data.run_id);
+    } else {
+      pollRunStatus(data.run_id, cb);
+    }
+    refreshRunList();
+  } catch (err) {
+    setRunProgress(null, `Error: ${err.message}`);
+    validateRunForm();
+    cb.onError?.(err.message);
+  }
+}
+
+function pollRunStatus(runId, cb = {}) {
+  if (runPollTimer) clearInterval(runPollTimer);
+  let failures = 0;
+  const stop = () => { clearInterval(runPollTimer); runPollTimer = null; validateRunForm(); refreshRunList(); };
+  runPollTimer = setInterval(async () => {
+    try {
+      const res = await fetch(`/api/runs/${runId}`);
+      if (res.status === 404) { stop(); setRunProgress(null, 'This run no longer exists.'); return cb.onError?.('This run no longer exists.'); }
+      const status = await res.json();
+      if (!res.ok) throw new Error(status.detail || 'Status check failed');
+      failures = 0;
+      const progress = status.progress || 0;
+      setRunProgress(progress, `${status.status} (${Math.round(progress * 100)}%)`);
+      cb.onProgress?.(status);
+      if (status.status === 'done') {
+        stop();
+        setRunProgress(1, 'Complete!');
+        await loadRunResults(runId);
+        cb.onDone?.(runId);
+      } else if (status.status === 'error') {
+        stop();
+        setRunProgress(null, `Error: ${status.error}`);
+        cb.onError?.(status.error);
+      }
+    } catch (err) {
+      console.error('Poll error:', err);
+      if (++failures >= 5) { stop(); setRunProgress(null, `Lost contact with the server: ${err.message}`); cb.onError?.(err.message); }
+    }
+  }, 2000);
+}
+
+// ---- results ----
+async function loadRunResults(runId) {
+  state.currentRunId = runId;
+  state.liveData = true;
+  await loadLayers(runId);
+  let aoi = null;
+  try { aoi = await (await fetch(`/api/data/aoi?run_id=${runId}`)).json(); } catch { /* banner falls back to "unvalidated" */ }
+  showValidationBanner(!(aoi && isInsideStudyArea(aoi)));
+  if (aoi) fitMapToAoi(aoi);
+  showRunResult(runId);
+  refreshRunList();
+  if (state.panel === 'report') generateReport();
+}
+
+function showRunResult(runId) {
+  const box = $id('runResult'); if (!box) return;
+  box.hidden = false;
+  box.innerHTML = `
+    <div class="success">Showing run ${esc(runId)}</div>
+    <div class="export-row">
+      <button id="btnExportRun" class="btn">Export run (JSON)</button>
+      <button id="btnDeleteRun" class="btn secondary">Delete run</button>
+    </div>`;
+  $id('btnExportRun').onclick = () => exportRun(runId);
+  $id('btnDeleteRun').onclick = () => deleteRun(runId);
+}
+
+// The run counts as validated only when its AOI sits inside the Quang Ninh study area.
+function isInsideStudyArea(aoiFc) {
+  const feats = aoiFc?.features;
+  if (!feats?.length) return false;
+  const [w, s, e, n] = turf.bbox(turf.featureCollection(feats));
+  return w >= QN_BOUNDS.w && e <= QN_BOUNDS.e && s >= QN_BOUNDS.s && n <= QN_BOUNDS.n;
+}
+
+function showValidationBanner(show) {
+  let banner = $id('validationBanner');
+  if (show && !banner) {
+    banner = document.createElement('div');
+    banner.id = 'validationBanner';
+    banner.className = 'validation-banner';
+    banner.textContent = '⚠️ This analysis is outside the validated Quang Ninh study area. Results are unvalidated and may be less reliable.';
+    $('#mapwrap').prepend(banner);
+  } else if (!show && banner) {
+    banner.remove();
+  }
+}
+
+function fitMapToAoi(aoiFc) {
+  if (!aoiFc?.features?.length) return;
+  const bbox = turf.bbox(aoiFc);
+  state.home = { bbox };                             // "zoom to layer" on a raster now returns here, not to Quang Ninh
+  map.fitBounds(bbox, { padding: 60, maxZoom: 15 });
+}
+
+async function exportRun(runId) {
+  try {
+    const get = u => fetch(u).then(r => { if (!r.ok) throw new Error(`${u}: ${r.status}`); return r.json(); });
+    const [aoi, regions, run] = await Promise.all([
+      get(`/api/data/aoi?run_id=${runId}`), get(`/api/data/change_regions?run_id=${runId}`), get(`/api/runs/${runId}`)]);
+    const blob = new Blob([JSON.stringify({ run, aoi, change_regions: regions, exported_at: new Date().toISOString() }, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `evichange-run-${runId}.json`; a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) { alertBox(`Export failed: ${err.message}`); }
+}
+
+// Back to the demo / global layers (the state before any run was opened).
+async function resetToDemo() {
+  state.currentRunId = null;
+  state.home = null;
+  showValidationBanner(false);
+  try { state.liveData = !!(await (await fetch('/api/health')).json()).live_data; } catch { state.liveData = false; }
+  await loadLayers();
+  map.flyTo({ center: HOME.center, zoom: HOME.zoom });
+}
+
+async function deleteRun(runId) {
+  if (!confirm('Delete this run and all its data? This cannot be undone.')) return;
+  try {
+    const res = await fetch(`/api/runs/${runId}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.status);
+  } catch (err) { return alertBox(`Could not delete: ${err.message}`); }
+  if (state.currentRunId === runId) {
+    await resetToDemo();
+    if ($id('runResult')) $id('runResult').hidden = true;
+  }
+  refreshRunList();
+}
+
+// ---- earlier runs ----
+async function refreshRunList() {
+  const box = $id('runList'); if (!box) return;
+  let runs;
+  try {
+    const res = await fetch('/api/runs');
+    if (!res.ok) throw new Error(res.status);
+    runs = await res.json();
+  } catch (err) { box.innerHTML = `<span class="chip unsupported">Could not load runs: ${esc(err.message)}</span>`; return; }
+  if (!runs.length) { box.innerHTML = '<span class="muted">No runs yet.</span>'; return; }
+  box.innerHTML = runs.map(r => {
+    const when = r.created_at ? new Date(r.created_at * 1000).toLocaleString() : '';
+    const km2 = r.aoi ? aoiKm2(r.aoi).toFixed(0) : '?';
+    const busy = r.status === 'queued' || r.status === 'running';
+    const cls = r.status === 'done' ? 'supported' : r.status === 'error' ? 'unsupported' : 'uncertain';
+    return `<div class="run-row ${r.run_id === state.currentRunId ? 'current' : ''}" data-id="${esc(r.run_id)}">
+        <div><span class="chip ${cls}">${esc(r.status)}</span> <b>${esc(r.condition)}</b> · ${km2} km²${r.n_regions != null ? ` · ${r.n_regions} regions` : ''}</div>
+        <div class="muted small">${esc(when)} · ${esc((r.before_window || []).join(' → '))} vs ${esc((r.after_window || []).join(' → '))}</div>
+        ${r.error ? `<div class="muted small">${esc(r.error)}</div>` : ''}
+        <div class="export-row">
+          ${r.status === 'done' ? '<button class="btn" data-a="open">Open</button>' : ''}
+          <button class="btn" data-a="reuse" title="Copy this run's area, dates and condition into the form">Reuse settings</button>
+          <button class="btn secondary" data-a="del" ${busy ? 'disabled title="Still in progress"' : ''}>Delete</button>
+        </div></div>`;
+  }).join('');
+  box.querySelectorAll('.run-row').forEach(row => {
+    const r = runs.find(x => x.run_id === row.dataset.id);
+    const on = (a, fn) => { const b = row.querySelector(`[data-a=${a}]`); if (b) b.onclick = fn; };
+    on('open', () => loadRunResults(r.run_id));
+    on('reuse', () => {
+      setRunAoi(r.aoi);
+      $id('beforeStart').value = r.before_window[0]; $id('beforeEnd').value = r.before_window[1];
+      $id('afterStart').value = r.after_window[0]; $id('afterEnd').value = r.after_window[1];
+      $id('runCondition').value = r.condition;
+      validateRunForm();
+    });
+    on('del', () => deleteRun(r.run_id));
+  });
+}
+
 function closePanel(resize = true) {
   // keep a finished drawn area visible when moving on to the change panel or report; clear everything else
-  if (state.sketch) stopSketch(!(state.panel === 'draw' && state.sketch.done));
+  if (state.sketch) {
+    stopSketch(!(state.panel === 'draw' && state.sketch.done) && state.panel !== 'run');
+    // closing the run panel mid-draw drops the half-drawn shape but keeps a chosen AOI on the map
+    if (state.panel === 'run') map.getSource('sketch')?.setData(turf.featureCollection(state.runAoi ? [turf.feature(state.runAoi)] : []));
+  }
   else if (state.panel === 'measure' || (resize && ['report', 'changes'].includes(state.panel))) map.getSource('sketch')?.setData(turf.featureCollection([]));
   if (state.panel === 'changes') {
     destroyCardMaps(); highlightRegion(null);
@@ -645,6 +1030,25 @@ document.querySelectorAll('#toolbar button').forEach(b => b.onclick = () => {
 });
 
 // ---------- 11. Start-up ----------
+async function loadLayers(runId = null) {
+  const suffix = runId ? `?run_id=${runId}` : '';
+  const layersRes = await fetch(`/api/layers${suffix}`);
+  const layers = await layersRes.json();
+
+  // Replace only the server's layers (study area + change regions). Layers the user added stay.
+  state.layers.filter(l => l.id === CHANGE_ID || l.id === 'aoi').forEach(removeLayer);
+  state.selected.clear();                          // region ids belong to the previous run
+  explore.meta.clear(); explore.drawnIds = null; explore.regionId = null; explore.scope = 'all'; explore.filter = emptyFilter();
+  gv.results.clear();                              // Geo-VLM answers are per region id, and ids repeat between runs
+
+  for (const d of layers) {
+    const data = await (await fetch(d.url)).json();
+    if (d.id === CHANGE_ID) annotateRegions(data);
+    addVectorLayer({ id: d.id, name: d.name, data, style: d.id === CHANGE_ID ? 'change_type' : d.style });
+  }
+  initExplorer();
+}
+
 map.on('load', async () => {
   setBasemap(state.basemap);
   addRasterLayer({ id: 'img-2018', name: 'Sentinel-2 2018 (before)', tileKey: 's2_2018', visible: false });
@@ -655,13 +1059,7 @@ map.on('load', async () => {
   } catch (err) { state.liveData = false; }
   try {
     await loadChangeTypes();
-    const defs = await (await fetch('/api/layers')).json();
-    for (const d of defs) {
-      const data = await (await fetch(d.url)).json();
-      if (d.id === CHANGE_ID) annotateRegions(data);   // colour + icon by change type instead of confidence
-      addVectorLayer({ id: d.id, name: d.name, data, style: d.id === CHANGE_ID ? 'change_type' : d.style });
-    }
-    initExplorer();
+    await loadLayers();
   } catch (err) { alertBox(`Could not load layers from the backend: ${err.message}`); }
   window.eviReady = true;
 });
