@@ -452,6 +452,24 @@ stated direction (provisional), and stated hectares are read as the change, or t
 after "from" / "to". No evidence for the claim gives *uncertain* (`shoreline_not_in_evidence`,
 `coastal_not_in_evidence`). Tests: `tests/test_verifier_coastal.py`.
 
+**Coast evidence in the box frame (Phase 15, 2026-10-26).** The box reports compare the detector's two
+windows (QN: Nov 2018 – Mar 2019 vs Nov 2022 – Mar 2023), but the Phase 11 statistics cover Oct 2024 –
+Sep 2026. Using those would check claims about the images against other years, so the box evidence
+gets shoreline statistics **between its own two windows** (user decision, option B):
+`scripts/make_shoreline_windows.py` → `shoreline.build_windows()` measures, on the same Phase 11
+transects, one tide-averaged radar shoreline per window (Sentinel-1 water in at least half of the
+window's looks) and the optical (MNDWI) shoreline of each window. `nsm` = after − before; a radar move of
+≥ 30 m (3 samples) is a direction, confirmed when the optical line moves ≥ 20 m the same way, else
+`unconfirmed`; below 30 m `stable`. `lrr` = nsm / years between the window middles, with no CI (two
+points). `site_evidence` adds the transects crossing the box (location in the box's 3 × 3 grid) only
+when a run exists for exactly the box's windows; otherwise the evidence has no `transects` and shoreline
+claims stay *uncertain*. Coastal strips need the same per-window treatment when Phase 12 builds them.
+Gated prompt `gated_report_v1` offers the `shoreline` / `coastal_built` claim types and fields only for
+a box whose evidence has transects / strips, and asks it to abstain on `unconfirmed` and `too_few`
+transects. Caveat for the transects: they were laid out on the 2024–26 coast, so where the coast moved
+more than their 300 m landward / 500 m seaward reach since 2018, the window positions are missing
+(`too_few`).
+
 ## D14 — Time series analysis with CCDC (2026-10-11, proposed)
 
 **Why.** The teacher asked for time series analysis. Two-date comparison (D6) says *what* changed
