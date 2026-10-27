@@ -125,9 +125,14 @@ The adjudication page (`/adjudicate`, `eval/adjudication.py`) blinds the conditi
 - the condition, the verifier's verdict and the cited evidence fields are never shown;
 - truth is judged first, without the evidence; support is judged in a second pass.
 
-A second adjudicator judges a seeded 20 % of sites, and κ is reported on both axes. The adjudication rules, including
-how claims that only restate the detector ("no change was detected") are treated and how numbers are judged, are
-**[TBD: D18, `docs/adjudication_rules.md`, to be frozen with the prompts]**.
+A second adjudicator judges a seeded 20 % of sites, and κ is reported on both axes. The adjudication rules (D18,
+`docs/adjudication_rules.md`) are frozen with the prompts:
+- Claims whose subject is the detector or the evidence ("no change was detected in the box") are judged as statements
+  about the detector, tagged `about_detector`, and left out of the hallucination denominator. They are reported as a
+  count per condition and stratum.
+- `unverifiable` is kept for what no imagery can show: cause, intent, legality, ownership and the future.
+- Numbers are judged within set tolerances: area within a factor of 2, share of the box within ±15 points, index values
+  by the direction they imply.
 
 ## 7. Metrics
 
@@ -140,8 +145,8 @@ Per condition (PLAN, Evaluation):
    generation errors.
 5. **Verifier performance:** catch rate (recall on hallucinated claims), precision of what it rejects, and κ against
    the human support axis.
-6. **Informativeness:** true claims per site, recall of the labelled change types, abstention rate **[TBD: plus missed
-   change at background sites, D18]**.
+6. **Informativeness:** true claims per site, recall of the labelled change types, abstention rate, and missed
+   change at background sites (random sites labelled "change" where the condition made no true change claim, D18).
 7. **Detector:** precision (detected sites labelled as change) and background change rate (random sites labelled as
    change).
 8. **Parse-failure rate.**
@@ -161,14 +166,15 @@ hallucination rate between gated and ungated, with a 95 % CI from a **paired sit
 resampled with replacement, both conditions are recomputed on the same resampled sites, and there are 10 000
 repetitions with seed 20261023. Its p-value is the exact Wilcoxon signed-rank test on per-site rates, using sites where
 both conditions passed at least one claim. The number of excluded sites is reported. The exact sign test and a
-comparison of per-site counts on all 30 sites are secondary. **[TBD: confirm count vs rate as primary, audit finding 3.]**
+comparison of per-site counts on all 30 sites are secondary. The rate, not the count, is primary, because an arm
+that says less has fewer hallucinations by construction. The full pre-specified plan, including the sensitivity
+analyses, is `docs/analysis_plan.md`.
 
 - Claim-level rates are clustered within sites, so their CIs also come from the site-level cluster bootstrap.
 - Wilson intervals are used only for site-level proportions (metric 7, abstention).
 - Zero differences are dropped (Wilcoxon's rule), and ties get mid-ranks in the exact null distribution.
 - The secondary comparison, gated vs ungated GPT (D16), and gated vs fine-tuned gated (D17) are Holm-adjusted as one
-  family. Strata and claim types are descriptive (CIs, no p-values). **[TBD: confirm the multiplicity plan, audit
-  finding 9.]**
+  family. Strata and claim types are descriptive (CIs, no p-values).
 
 At n = 30 the study has about 0.8 power for a post-gate difference of 20 percentage points (40 % vs 20 %), but only
 about 0.3 for 10 points (`docs/eval_audit.md`, finding 5). The effect size is reported with its CI, so a
