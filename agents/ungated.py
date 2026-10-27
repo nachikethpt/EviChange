@@ -19,7 +19,7 @@ from . import vlm_check
 from .schema import CHANGE_TYPES, CLAIM_TYPES, LANDCOVER_CLASSES, validate_claim
 
 REPORT_PROMPT_VERSION = "ungated_report_v1"   # v1: asks about the shoreline and buildings near it (D13)
-EXTRACT_PROMPT_VERSION = "claim_extract_v4"  # v4: classes only when named (v3 read "vegetation" as trees); v3: most specific level; v2: JSON null; v1: coast
+EXTRACT_PROMPT_VERSION = "claim_extract_v5"  # v5: "no shoreline movement" is an L1 no-change claim (v4: L3); v4: classes only when named (v3 read "vegetation" as trees); v3: most specific level; v2: JSON null; v1: coast
 
 REPORT_PROMPT = """You are a remote-sensing analyst. You get {count} Sentinel-2 images of the same place:
 {images}
@@ -44,6 +44,7 @@ For each claim give:
                 ("about 50 % of the box", "in the east");
            else "L1": it only says whether change happened ("significant change occurred").
            A statement that names a kind of change is L3 even if it also says change happened.
+           A statement that something did NOT change is L1, whatever it is about.
   "type":  one of {types}
   "change_type": one of {change_types}, or null
   "class_before", "class_after": one of {classes}, or null (only for land-cover statements)
@@ -57,6 +58,11 @@ statement names that land cover itself (forest or trees, grass, crops or fields,
 or buildings, bare soil or rock, water, flooded vegetation). Generic "vegetation" or "green" is not a
 class: for "more / less vegetation" use type "change_type" with change_type vegetation_gain / vegetation_loss
 and no classes.
+
+No-change statements about the coast: split "no shoreline movement or new buildings near the shore"
+into two claims, both L1: the shoreline one with type "shoreline" and shoreline_change "stable", the
+buildings one with type "coastal_built" and strip "0-500". A statement that the box has no visible
+coast, or that the shoreline can't be judged, is type "shoreline", level L1, shoreline_change null.
 
 Fill only the fields that apply to the statement. For every other field write null, the JSON value
 without quotes, never the text "null". class_before and class_after are ONE class name each, never a

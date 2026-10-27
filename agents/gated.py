@@ -19,7 +19,7 @@ import re
 from . import vlm_check
 from .schema import CHANGE_TYPES, LOCATIONS, T_IDX, validate_claim
 
-PROMPT_VERSION = "gated_report_v5"    # v5: 1-6 claims, region_ref only region ids (v4: 2 cut off, a transect as region); v4: no null fields; v3: never "unchanged"; v2: "presence"
+PROMPT_VERSION = "gated_report_v6"    # v6: 1-4 claims (v5 padded to 6 with weak L1 claims); v5: 1-6 claims, region_ref only region ids (v4: 2 cut off, a transect as region); v4: no null fields; v3: never "unchanged"; v2: "presence"
 EVIDENCE_FIELDS = ("id", "area_ha", "location", "mean_conf", "dNDVI", "dNDBI", "dMNDWI", "class_before", "class_after")
 TRANSECT_PROMPT_FIELDS = ("id", "location", "change", "nsm", "lrr")
 STRIP_PROMPT_FIELDS = ("strip", "built_ha_before", "built_ha_after")
@@ -51,7 +51,7 @@ What the fields mean:
   class_before, class_after: Dynamic World land cover, or null when unknown.
 {coast_fields}
 Rules:
-1. Write 1 to 6 claims, no two saying the same thing. Each claim is one statement with:
+1. Write 1 to 4 claims, the most informative first, no two saying the same thing. Each claim is one statement with:
    "level": "L1" whether change happened, "L2" how much or where, "L3" what kind of change or land cover;
    "type": one of {types};
    "region_ref": the id of the REGION the claim is about (from "regions"), or null for the whole box

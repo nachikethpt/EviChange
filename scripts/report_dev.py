@@ -187,12 +187,15 @@ def _pct(n: int, d: int) -> str:
     return f"{n} ({100 * n / d:.0f}%)" if d else "–"
 
 
-_NO_CHANGE_RE = re.compile(r"\bno\b(?:\s+[\w-]+){0,2}\s+change|\bnot\s+detected|\bno\s+detected", re.I)
+_NO_CHANGE_RE = re.compile(r"\bno\b(?:\s+[\w-]+){0,3}\s+(?:change|movement|increase)|\bnot\s+detected|\bno\s+detected"
+                           r"|\bno\s+(?:visible\s+)?(?:coast|coastline|shoreline)\b", re.I)
 
 
 def claims_change(rec: dict) -> bool:
     """The report claims change happened (any L2/L3 claim, or an L1 claim not saying 'no change')."""
     for c in rec.get("claims") or []:
+        if c.get("shoreline_change") == "stable" and c["level"] == "L1":
+            continue
         if c["level"] in ("L2", "L3") or (c["level"] == "L1" and not _NO_CHANGE_RE.search(c["text"])):
             return True
     return False
