@@ -19,7 +19,7 @@ import re
 from . import vlm_check
 from .schema import CHANGE_TYPES, LOCATIONS, T_IDX, validate_claim
 
-PROMPT_VERSION = "gated_report_v4"    # v4: leave unused fields out, 1500 tokens (v3: 4 of 80 cut off); v3: never "unchanged"; v2: type "presence"; v1: coast
+PROMPT_VERSION = "gated_report_v5"    # v5: 1-6 claims, region_ref only region ids (v4: 2 cut off, a transect as region); v4: no null fields; v3: never "unchanged"; v2: "presence"
 EVIDENCE_FIELDS = ("id", "area_ha", "location", "mean_conf", "dNDVI", "dNDBI", "dMNDWI", "class_before", "class_after")
 TRANSECT_PROMPT_FIELDS = ("id", "location", "change", "nsm", "lrr")
 STRIP_PROMPT_FIELDS = ("strip", "built_ha_before", "built_ha_after")
@@ -51,10 +51,11 @@ What the fields mean:
   class_before, class_after: Dynamic World land cover, or null when unknown.
 {coast_fields}
 Rules:
-1. Write 1 to 8 claims. Each claim is one statement with:
+1. Write 1 to 6 claims, no two saying the same thing. Each claim is one statement with:
    "level": "L1" whether change happened, "L2" how much or where, "L3" what kind of change or land cover;
    "type": one of {types};
-   "region_ref": the region id the claim is about, or null for the whole box;
+   "region_ref": the id of the REGION the claim is about (from "regions"), or null for the whole box
+     or a transect / coastal strip;
    "evidence_ref": the evidence fields the claim rests on, from: {fields};
    "change_type": one of {change_types}, only for type "change_type", else null;
    "class_before", "class_after": only for type "land_cover", copied from the evidence, else null.
