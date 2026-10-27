@@ -66,7 +66,7 @@ def box_evidence(fc: dict, box: dict) -> dict:
 # ---------- log ----------
 def versions(arm: str) -> list[str]:
     return {"template": ["template"], "gated": [gated.PROMPT_VERSION],
-            "ungated": [ungated.REPORT_PROMPT_VERSION, ungated.EXTRACT_PROMPT_VERSION]}[arm]
+            "ungated": [ungated.REPORT_PROMPT_VERSION, ungated.EXTRACT_PROMPT_VERSION, ungated.PARSE_VERSION]}[arm]
 
 
 def evidence_tag(ev: dict) -> str:
@@ -162,7 +162,7 @@ def run(vlm, arms: list[str], limit: int | None = None, log_path: Path | None = 
             rec = {"key": key, "time": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "arm": arm, "box_id": box["id"],
                    "stratum": box["stratum"], "box": [round(v, 6) for v in box["box"]], "chips": CHIP_SET if arm != "template" else None,
                    "versions": versions(arm), "seconds": round(time.time() - t0, 1),
-                   **{k: rep.get(k) for k in ("model", "raw_output", "claims", "abstain", "counts", "parse_ok", "dropped",
+                   **{k: rep.get(k) for k in ("model", "raw_output", "claims", "abstain", "counts", "parse_ok", "dropped", "cleared",
                                                "extractor_model", "extract_raw", "evidence")}}
             if arm == "template":
                 rec["model"] = "rules"
@@ -172,6 +172,30 @@ def run(vlm, arms: list[str], limit: int | None = None, log_path: Path | None = 
             log(f"[{n}/{total}] {arm} {box['id']} ({box['stratum']}): {len(rep['claims'])} claims "
                 f"{c['supported']}/{c['unsupported']}/{c['uncertain']} s/u/?, {len(rep['abstain'])} abstain, {rec['seconds']} s")
     return counts
+
+
+def rescore(log_path: Path | None = None, log=print) -> int:
+    """Re-parse and re-verify logged ungated answers under the current parser (no model calls):
+    the latest record of each box made with the current report and extract prompts but an older
+    parser gets a new record. Returns how many were added."""
+    have = {r["key"] for r in read_log(log_path)}
+    current = versions("ungated")
+    n = 0
+    for (arm, model, vers, box_id), r in latest(read_log(log_path)).items():
+        if arm != "ungated" or list(vers) != current[:2] or r.get("extract_raw") is None:
+            continue
+        ev = r["evidence"]
+        key = report_key(arm, box_id, model, r["chips"], evidence_tag(ev))
+        if key in have:
+            continue
+        out = ungated.ungated_result(r["raw_output"], model, r["extract_raw"], r["extractor_model"], r["chips"])
+        rep = build_report(ev, "ungated", ungated=out)
+        rec = {**r, "key": key, "time": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "versions": current,
+               **{k: rep.get(k) for k in ("claims", "abstain", "counts", "parse_ok", "dropped", "cleared")}}
+        append_log(rec, log_path)
+        n += 1
+    log(f"re-scored {n} ungated reports under {ungated.PARSE_VERSION}")
+    return n
 
 
 # ---------- summary ----------
@@ -206,8 +230,8 @@ def summary(records: list[dict]) -> str:
     for (arm, model, vers, _), r in latest(records).items():
         groups.setdefault((arm, (model or "rules").split("/")[-1], "+".join(vers), r["stratum"]), []).append(r)
     lines = ["| Arm | model | prompt | stratum | boxes | claims/box | supported | unsupported | uncertain | L4 claims "
-             "| claims change | abstain/box | parse fails | dropped items | median s |",
-             "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+             "| claims change | abstain/box | parse fails | dropped items | cleared classes | median s |",
+             "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for (arm, model, vers, stratum), recs in sorted(groups.items()):
         claims = [c for r in recs for c in r.get("claims") or []]
         v = Counter(c.get("verdict") for c in claims)
@@ -216,7 +240,7 @@ def summary(records: list[dict]) -> str:
                      f"{_pct(v['supported'], len(claims))} | {_pct(v['unsupported'], len(claims))} | {_pct(v['uncertain'], len(claims))} | "
                      f"{_pct(sum(c['level'] == 'L4' for c in claims), len(claims))} | {_pct(sum(claims_change(r) for r in recs), len(recs))} | "
                      f"{sum(len(r.get('abstain') or []) for r in recs) / len(recs):.1f} | {sum(r.get('parse_ok') is False for r in recs)} | "
-                     f"{sum(r.get('dropped') or 0 for r in recs)} | {round(statistics.median(secs), 1) if secs else '–'} |")
+                     f"{sum(r.get('dropped') or 0 for r in recs)} | {sum(r.get('cleared') or 0 for r in recs)} | {round(statistics.median(secs), 1) if secs else '–'} |")
     reasons = Counter((arm, c.get("verdict_reason")) for (arm, *_), r in latest(records).items() for c in r.get("claims") or []
                       if c.get("verdict") != "supported")
     parts = ["# Report prompts on development boxes", "Detected = 60 development regions, control = 20 boxes with no detection "
@@ -254,6 +278,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--limit", type=int, help="first N detected boxes and first N controls")
     ap.add_argument("--summary", action="store_true")
     ap.add_argument("--out", type=Path, help="with --summary: write Markdown here")
+    ap.add_argument("--rescore", action="store_true", help="re-parse logged ungated answers under the current parser")
     ap.add_argument("--show", help="one box id: evidence, raw outputs, claims with verdicts")
     args = ap.parse_args(argv)
     sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
@@ -264,6 +289,9 @@ def main(argv: list[str] | None = None) -> None:
             print(f"-> {args.out}")
         else:
             print(text)
+        return
+    if args.rescore:
+        rescore()
         return
     arms = [a.strip() for a in args.arms.split(",") if a.strip()]
     bad = [a for a in arms if a not in ARMS]

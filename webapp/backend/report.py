@@ -132,7 +132,7 @@ def build_report(ev, condition, ungated=None, gated=None):
         extra = {k: gated[k] for k in ("parse_ok", "dropped", "prompt_version")}
     elif condition in ("ungated", "ungated_gpt") and ungated is not None:
         raw, claims, model = ungated["raw"], [dict(c) for c in ungated["claims"]], ungated["model"]
-        extra = {k: ungated.get(k) for k in ("parse_ok", "dropped", "extractor_model", "extract_raw", "prompt_version", "extract_version")}
+        extra = {k: ungated.get(k) for k in ("parse_ok", "dropped", "cleared", "extractor_model", "extract_raw", "prompt_version", "extract_version", "parse_version")}
     elif condition == "ungated_gpt":
         return {"condition": condition, "status": "not_run", "detail": "No ungated GPT output for this selection.",
                 "model": None, "evidence": ev, "raw_output": None, "claims": [], "abstain": [],
