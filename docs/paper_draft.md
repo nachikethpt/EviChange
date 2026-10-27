@@ -90,10 +90,14 @@ See `docs/methods_draft.md`.
 - Table 1 and Figure 1: hallucination and post-gate hallucination per condition.
 - **Primary result:** gated − ungated post-gate rate, **[R3] [R4]**, paired site bootstrap. Exact Wilcoxon p
   **[Table 6]**, on **[n]** sites with a rate in both conditions.
-- Per stratum (Table 2). The background stratum is read through the D18 rule for claims about the detector **[TBD]**.
+- Per stratum (Table 2). Claims about the detector ("no change was detected in the box") are left out of the
+  rates and counted separately (D18), so the background stratum's rates cover claims about the ground only.
+- Sensitivity: the primary result with those claims judged as statements about the ground (`docs/analysis_plan.md`
+  § 7).
 
 ### 4.3 What gating costs
-- Table 4: true claims per site, change-type recall, abstention, and missed change at background sites **[TBD: D18]**.
+- Table 4: true claims per site, change-type recall, abstention, missed change at background sites, and claims
+  about the detector per condition (D18).
 - Retention: claims kept by the gate, against all claims emitted (Table 1, *Passed* / *Claims*).
 
 ### 4.4 Where the remaining errors come from

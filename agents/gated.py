@@ -19,7 +19,7 @@ import re
 from . import vlm_check
 from .schema import CHANGE_TYPES, LOCATIONS, T_IDX, validate_claim
 
-PROMPT_VERSION = "gated_report_v2"    # v2: rule 4 names type "presence" (v1 answered "no_change", dropped); v1: coast claim types (D13)
+PROMPT_VERSION = "gated_report_v6"    # v6: 1-4 claims (v5 padded to 6 with weak L1 claims); v5: 1-6 claims, region_ref only region ids (v4: 2 cut off, a transect as region); v4: no null fields; v3: never "unchanged"; v2: "presence"
 EVIDENCE_FIELDS = ("id", "area_ha", "location", "mean_conf", "dNDVI", "dNDBI", "dMNDWI", "class_before", "class_after")
 TRANSECT_PROMPT_FIELDS = ("id", "location", "change", "nsm", "lrr")
 STRIP_PROMPT_FIELDS = ("strip", "built_ha_before", "built_ha_after")
@@ -51,21 +51,25 @@ What the fields mean:
   class_before, class_after: Dynamic World land cover, or null when unknown.
 {coast_fields}
 Rules:
-1. Write 1 to 8 claims. Each claim is one statement with:
+1. Write 1 to 4 claims, the most informative first, no two saying the same thing. Each claim is one statement with:
    "level": "L1" whether change happened, "L2" how much or where, "L3" what kind of change or land cover;
    "type": one of {types};
-   "region_ref": the region id the claim is about, or null for the whole box;
+   "region_ref": the id of the REGION the claim is about (from "regions"), or null for the whole box
+     or a transect / coastal strip;
    "evidence_ref": the evidence fields the claim rests on, from: {fields};
    "change_type": one of {change_types}, only for type "change_type", else null;
    "class_before", "class_after": only for type "land_cover", copied from the evidence, else null.
 {coast_keys}2. Copy numbers from the evidence. Do not invent numbers or regions.
-3. Name a change type only where its index moved beyond +/-{t} in that direction.
+3. Name a change type only where its index moved beyond +/-{t} in that direction. Every region in the
+   evidence is a detected change: never say a region, or anything in it, did not change. If its
+   class_before equals class_after, say the land cover stayed that class and state what its indices
+   show instead (e.g. "stayed water, but the water index fell by 0.24").
 4. If "regions" is empty, make one L1 claim of type "presence" that no land-cover change was detected
    in the box (evidence_ref ["change_frac"]) and no other claim about land-cover change.
 5. Never say what caused the change, what it is for, whether it is legal, who did it, or what will
    happen next. Put each such topic, and anything else the evidence can't support, under "abstain".
 {coast_rules}
-Answer with JSON only, no other text:
+Answer with JSON only, no other text. Leave out every field that does not apply to a claim (no null fields):
 {{"claims": [{{"level": ..., "type": ..., "text": ..., "region_ref": ..., "evidence_ref": [...],
               "change_type": ..., "class_before": ..., "class_after": ...{coast_json}}}],
  "abstain": [{{"topic": ..., "reason": ...}}]}}"""
@@ -173,7 +177,7 @@ def parse_report(text: str) -> tuple[list[dict], list[dict], bool, int]:
 def run_gated(vlm, key: str, ev: dict, before_window: list[str], after_window: list[str], images: list[bytes],
               chip_set: str = "rgb_swir") -> dict:
     """One gated report for one box. `key` names the box for replay files. Raises VLMUnavailable."""
-    out = vlm.generate(build_prompt(ev, before_window, after_window, chip_set), images, max_new_tokens=900,
+    out = vlm.generate(build_prompt(ev, before_window, after_window, chip_set), images, max_new_tokens=1500,
                        replay_key=f"{PROMPT_VERSION}:{key}")
     claims, abstain, parse_ok, dropped = parse_report(out["text"])
     return {"raw": out["text"], "model": out["model"], "claims": claims, "abstain": abstain, "parse_ok": parse_ok,

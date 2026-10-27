@@ -802,7 +802,7 @@ weights stay frozen):
   2022/23, not change in general.
 - 10 m chips.
 
-## D18 — Claim adjudication rules (2026-10-25, proposed)
+## D18 — Claim adjudication rules (2026-10-25; decided 2026-10-26)
 
 **Problem.** Two gaps in the Phase 5 truth axis would decide the comparison by wording alone
 (`docs/eval_audit.md`, findings 1–2):
@@ -823,3 +823,44 @@ weights stay frozen):
 sentence to "The detector found no change in the box" before the freeze.
 
 **Decide before the Phase 4 freeze**; the rules are then pinned by commit with the prompts.
+
+**Decided 2026-10-26 (P2): the proposal.** The alternative is not taken, so gated's rule-4 sentence keeps its
+wording.
+- `about_detector` claims are left out of the hallucination denominator (metrics 1 and 2). They are reported as a
+  count per condition and stratum, and "missed change at random sites" joins metric 6.
+- `unverifiable` is only for cause, intent, legality, ownership and the future. Numbers are judged with the
+  tolerances in `docs/adjudication_rules.md` § 3.
+- A second adjudicator does a seeded 20 % of sites (`eval/adjudication.py`, `SECOND_SHARE`), with κ on both axes.
+
+The analysis plan that uses these rules is `docs/analysis_plan.md`.
+
+## D19 — Phase 4 report prompts frozen (2026-10-27)
+
+**Decided 2026-10-27 (P2).** The report prompts and the claim parser are frozen for the evaluation on the
+30 labelled sites. They are pinned by the commit that adds this entry, together with the D18 adjudication
+rules and `docs/analysis_plan.md`:
+
+| Part | Version | File |
+|---|---|---|
+| Gated report | `gated_report_v6` (1-4 claims, most informative first) | `agents/gated.py` |
+| Ungated report | `ungated_report_v1` | `agents/ungated.py` |
+| Claim extractor (both ungated arms) | `claim_extract_v5` (no-change statements are L1) | `agents/ungated.py` |
+| Claim parser | `claim_parse_v2` (a class that is not a Dynamic World class is cleared, the claim kept and counted) | `agents/ungated.py` |
+| Template | rules | `webapp/backend/report.py` |
+
+Model and image set as D15: Qwen2.5-VL-7B-Instruct, `rgb_swir` chips.
+
+**Why now.** Five development rounds on the 80 D15 boxes (60 detected, 20 controls; log
+`data/reports_dev.jsonl`, summary `docs/report_dev.md`). Gated was stable from round 3: detected
+claims 72-80 % supported and 7-9 % unsupported, every control correctly "no change". Round 5 (gated v6):
+detected 72 % supported / 7 % unsupported / 21 % uncertain, 3.5 claims per box, no parse failures;
+controls 20/20 supported. Ungated (round 5, parser v2): detected 29 % / 25 % / 46 %, claims change in
+20/20 controls (0 % supported), 19 L4 claims. The last two rounds fixed the measurement (extractor and
+parser), not the gated prompt.
+
+**Known limits.**
+- The extractor is the same 7B model; it still attaches land-cover classes where the report names none.
+  Parser v2 clears them (246 claims in round 5). It runs on both ungated arms, so the comparison stays
+  fair, but extraction errors are a limitation of the ungated numbers.
+- About a fifth of gated claims are uncertain, mostly from low detection confidence (a detector property).
+- Any change after this point is a deviation: it is reported and all conditions are rerun.

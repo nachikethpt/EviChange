@@ -1,9 +1,9 @@
-# Claim adjudication rules (PROPOSED, D18)
+# Claim adjudication rules (D18)
 
-**Status: proposal for the team to decide before the Phase 4 freeze.** It answers findings 1 and 2 of
-`docs/eval_audit.md`. Once the team agrees, these rules are frozen with the prompts (pinned by commit), and
-the adjudication page (`/adjudicate`) shows them beside every claim. Where an option is still open, the
-default is marked **(proposed)** and the alternative is given.
+**Status: decided 2026-10-26** (`docs/decisions.md`, D18): the **(proposed)** options below are the rules,
+and the alternatives are not taken. They answer findings 1 and 2 of `docs/eval_audit.md`. The rules are
+frozen with the prompts (pinned by commit), and the adjudication page (`/adjudicate`) shows them beside
+every claim.
 
 Each claim gets two independent judgements (PLAN, "Claim adjudication"):
 - **truth**: `true` / `false` / `unverifiable`, judged against the site's ground-truth label and the chips;
@@ -98,5 +98,5 @@ place is `false`.
 
 `{site_id, condition, claim_id, type, level, text, [change_type], verdict, truth, support, about_detector,
 compound, adjudicator, note}`. This is the `eval/metrics.py` record plus `about_detector`, `compound`,
-`adjudicator` and `note`. The metrics drop `about_detector` claims from the hallucination denominator when
-rule 2 is adopted.
+`adjudicator` and `note`. The metrics drop `about_detector` claims from the hallucination denominator
+(rule 2).

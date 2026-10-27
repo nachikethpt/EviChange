@@ -92,6 +92,17 @@ def test_parse_claims(text, n, ok, dropped):
     assert all(validate_claim(c) == [] and c["evidence_ref"] == [] and c["stated_conf"] is None for c in claims)
 
 
+def test_parse_claims_clears_a_class_that_is_not_dynamic_world():
+    """'vegetation' is not a Dynamic World class: the extractor's slip clears the class, the claim stays."""
+    text = json.dumps([{"text": "in the east", "level": "L2", "type": "location", "class_before": "vegetation", "class_after": "bare"},
+                       {"text": "trees became bare", "level": "L3", "type": "land_cover", "class_before": "trees", "class_after": "bare"}])
+    stats = {}
+    claims, ok, dropped = ungated.parse_claims(text, stats)
+    assert ok and dropped == 0 and stats["cleared"] == 1
+    assert "class_before" not in claims[0] and claims[0]["class_after"] == "bare"
+    assert claims[1]["class_before"] == "trees"
+
+
 def test_ungated_gpt_report_end_to_end(tmp_path):
     """GPT text -> Geo-VLM extractor -> verifier, all from replay files."""
     gpt = GPTClient(mode="replay", replay_file=replay(tmp_path, "gpt.json", {f"{ungated.REPORT_PROMPT_VERSION}:ungated_gpt:s1": GPT_TEXT}))
