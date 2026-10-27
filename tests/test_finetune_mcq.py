@@ -72,3 +72,33 @@ def test_calibration_set_is_fixed_and_separate():
     calib, train = {b["id"] for b in sets["calib"]}, {b["id"] for b in sets["train"]}
     assert len(calib) == fm.CALIB_N and not calib & train and len(sets["holdout"]) == 80
     assert calib == {b["id"] for b in fm.box_sets(fc)["calib"]}
+
+
+def test_second_calibration_set_is_fixed_fresh_and_separate():
+    fc = json.loads(vb.REGIONS.read_text(encoding="utf-8"))
+    sets = fm.box_sets(fc)
+    calib, calib2, train = ({b["id"] for b in sets[k]} for k in ("calib", "calib2", "train"))
+    assert len(calib2) == fm.CALIB_N and not calib2 & calib and not calib2 & train
+    assert calib2 == {b["id"] for b in fm.box_sets(fc)["calib2"]}
+
+
+def test_agreement_is_per_set():
+    a = {"x": lab(["water"], ["bare"]), "y": lab(["built"], ["built"]), "z": lab(["bare"], ["bare"])}
+    b = {"x": lab(["water"], ["bare"]), "y": lab(["built"], ["built"]), "z": lab(["bare"], ["water"])}
+    assert fm.agreement(a, b, {"x", "y"})["change"]["agreement"] == 1.0
+    assert fm.agreement(a, b, {"x", "y", "z"})["n"] == 3
+
+
+def test_kml_draws_the_cell_grid_and_review_shows_both(tmp_path, monkeypatch):
+    items = [{"id": "r200", "kind": "detected", "box": [107.30, 21.00, 107.31, 21.01]}]
+    kml = fm.kml(items, "t")
+    assert kml.count("<LineString>") == 2 * (fm.GRID - 1) and "r200" not in kml
+    monkeypatch.setattr(vb, "CHIP_DIR", tmp_path)
+    params = {"aoi": {}, "before_window": ["2018-11-01", "2019-03-31"], "after_window": ["2022-11-01", "2023-03-31"], "max_cloud_pct": 30.0}
+    folder = vb.chip_dir(params, tuple(items[0]["box"]))
+    folder.mkdir(parents=True)
+    for k in ("rgb", "swir", "cir"):
+        for w in ("before", "after"):
+            (folder / f"{w}_{k}.png").write_bytes(b"png")
+    page = fm.review(items, params, {"r200": {"P2": lab(["water"], ["bare"]), "P3": lab(["water"], ["water"])}}, "review")
+    assert "P2" in page and "P3" in page and "no change" in page and "Cell rule" in page

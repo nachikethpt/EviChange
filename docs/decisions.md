@@ -795,6 +795,21 @@ weights stay frozen):
 - *The first-scheme labels* (329 boxes) are kept, as a comparison of what 10 m labelling got right.
 - *Outside yardstick:* both Qwen models are scored on GEOBench-VLM's temporal multiple-choice tasks
   (`scripts/geobench_eval.py`, evaluation only).
+- *Calibration round 1 (2026-10-27): not passed.* P2 and P3 on the 40 calibration boxes: main cover
+  per date κ 0.72 (79 % agree), derived change κ 0.40 (70 %), below 0.5. Of the 12 boxes derived
+  differently, 7 have the same main covers and differ only in the smaller covers ticked, and in 9 P2
+  ticks more than P3: "about a fifth" was read differently. Deriving change from the main cover alone
+  does not help (κ 0.31).
+- *Calibration round 2 (decided 2026-10-27, P2):*
+  1. **Cell rule** on the labelling page: the box is a 5 × 5 grid (the page's KML draws it in Google
+     Earth Pro); each cell goes to the cover that fills most of it; a cover is ticked at 5 cells or more,
+     the main cover has the most cells; when unsure whether a cover reaches 5 cells, it is not ticked;
+     a cover that looks the same at both dates is ticked at both or neither.
+  2. P2 and P3 go through the 12 round-1 disagreements together under the cell rule
+     (`finetune_mcq.py --review`). This only settles the rule; round-1 labels are not changed.
+  3. Both label 40 **fresh** calibration boxes (`calib2`, seeded, taken out of the training boxes).
+     κ on calib2 decides: training needs κ ≥ 0.5 on both the derived change and the main cover.
+     Round-1 boxes are not relabelled, because discussing them would inflate κ.
 
 **Limits.**
 - Two labellers, one of whom (P2) built the system; P2 labelled most of the boxes.
