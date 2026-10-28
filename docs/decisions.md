@@ -522,6 +522,21 @@ transects. Caveat for the transects: they were laid out on the 2024–26 coast, 
 more than their 300 m landward / 500 m seaward reach since 2018, the window positions are missing
 (`too_few`).
 
+**(b) on Google Earth over ten years (decided 2026-10-28, P2).** With the paper now centred on the
+shoreline (the professor, 2026-10-28) and the yearly shorelines covering 2015-16 to 2025-26 (D11), the
+reference shorelines are traced on **Google Earth Pro's historical imagery** for **4 dry seasons**
+(2016-17, 2019-20, 2022-23, 2025-26) on the same 30 reference transects, instead of waiting for Planet.
+`scripts/shoreline_reference_ge.py` makes the page and KML (transects numbered, extended at random, ticks
+every 25 m; no ids, no baseline), imports the answers into `labels14` shoreline records
+(`source: google_earth`, `season`, the image `month`) and scores the yearly shorelines: bias, RMSE, MAE and
+the share within 20 / 30 m, overall and per season. Google Earth imagery is only looked at to make labels.
+- *Limits:* the images are at an unknown tide, while the yearly lines are tide-averaged, so wide mud
+  flats add error (marked low confidence); image dates and sources vary; the labeller (P2) built the
+  shorelines, which the blind layout guards against. A second labeller (P1) can trace the same page for
+  inter-rater agreement.
+- *Planet (b)* stays for the recent dates when its months arrive: a 3 m check on 2024–26 and a
+  cross-check of the Google Earth tracing.
+
 ## D14 — Time series analysis with CCDC (2026-10-11, proposed)
 
 **Why.** The teacher asked for time series analysis. Two-date comparison (D6) says *what* changed
