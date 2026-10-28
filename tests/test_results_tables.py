@@ -37,9 +37,10 @@ def test_all_outputs(tmp_path):
     out = tmp_path / "results"
     rep = rt.write_all(cp, rp, out, reps=200)
     md = (out / "results.md").read_text(encoding="utf-8")
-    for n in range(1, 8):
+    for n in range(1, 9):
         assert f"## Table {n}." in md
-    assert md.count("| Gated (Qwen) |") >= 5 and "Gated (Qwen) − Ungated (Qwen)" in md and "secondary (D16)" in md
+    assert md.count("| Gated (Qwen) |") >= 5 and "Gated (Qwen) − Ungated (Qwen)" in md and "secondary (D16, Holm)" in md
+    assert "sensitivity: detected stratum only" in md and "Pratt p" in md and "wrongly rejected" in md
     tex = (out / "table_main.tex").read_text(encoding="utf-8")
     assert tex.startswith(r"\begin{tabular}{lrrrrrr}") and r"\%" in tex and "%" not in tex.replace(r"\%", "")
     assert len([ln for ln in tex.splitlines() if ln.endswith(r"\\")]) == 5        # head + 4 conditions

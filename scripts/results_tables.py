@@ -11,8 +11,9 @@ writes into --out:
   report.json      the full eval.metrics.report() output the tables come from
 
 Tables: 1 per-condition rates (pooled), 2 by stratum, 3 verifier, 4 informativeness and parse failures,
-5 by claim type, 6 the pre-specified comparisons, 7 detector. Everything comes from eval/metrics.py;
-this script only formats.
+5 by claim type, 6 the pre-specified comparisons and their sensitivity analyses, 7 detector, 8 claims about the
+detector (left out of metrics 1-5), 9 reliability (labellers; with --reports / --first / --second, the two
+adjudicators). Everything comes from eval/metrics.py and eval/adjudication.py; this script only formats.
 """
 from __future__ import annotations
 
@@ -43,6 +44,16 @@ def num(v, digits: int = 2) -> str:
 
 def p(v) -> str:
     return "n/a" if v is None else ("< 0.001" if v < 0.001 else f"{v:.3f}")
+
+
+def pct_kappa(kappa, ci=None) -> str:
+    """'0.63 [0.12, 0.98]'; the CI comes either from a (kappa, lo, hi) tuple or from a separate (lo, hi)."""
+    if isinstance(kappa, (tuple, list)):
+        kappa, *ci = kappa
+        ci = tuple(ci)
+    if kappa is None:
+        return "n/a"
+    return f"{kappa:.2f}" if not ci or ci[0] is None else f"{kappa:.2f} [{ci[0]:.2f}, {ci[1]:.2f}]"
 
 
 def md_table(head: list[str], rows: list[list[str]]) -> str:
@@ -82,17 +93,21 @@ def tables(rep: dict) -> str:
     rows = []
     for c in conditions(rep):
         v = rep["conditions"][c]["verifier"]
-        rows.append([NAMES[c], pct(v["catch_rate"]), pct(v["precision"]), num(v["kappa_vs_support"])])
+        rows.append([NAMES[c], pct(v["catch_rate"]), pct(v["precision"]), num(v["kappa_vs_support"]),
+                     f"{v['n_wrong_rejections']} ({pct(v['wrong_rejections'])})"])
     parts += ["## Table 3. Verifier against the human labels", "",
-              md_table(["Condition", "Catch rate", "Precision of rejections", "κ vs human support"], rows), ""]
+              md_table(["Condition", "Catch rate", "Precision of rejections", "κ vs human support", "True claims wrongly rejected"], rows), ""]
 
     rows = []
     for c in conditions(rep):
         i = rep["conditions"][c]["informativeness"]
+        mc = rep["conditions"][c]["missed_change_random"]
         rows.append([NAMES[c], num(i["true_claims_per_site"]), num(i["change_type_recall"]), pct(i["abstention"]),
+                     f"{mc['missed']} of {mc['random_sites_labelled_change']} ({pct(mc['rate'])})",
                      pct(rep["conditions"][c]["parse_failures"])])
     parts += ["## Table 4. Informativeness and parse failures", "",
-              md_table(["Condition", "True claims / site", "Change-type recall", "Abstention (no claim)", "Parse failures"], rows), ""]
+              md_table(["Condition", "True claims / site", "Change-type recall", "Abstention (no claim)",
+                        "Missed change at random sites", "Parse failures"], rows), ""]
 
     rows = []
     for c in conditions(rep):
@@ -100,21 +115,56 @@ def tables(rep: dict) -> str:
             rows.append([NAMES[c], t, str(r["n"]), pct(r["hallucination"]), pct(r["post_gate_hallucination"])])
     parts += ["## Table 5. By claim type", "", md_table(["Condition", "Type", "Claims", "Hallucination", "Post-gate"], rows), ""]
 
+    labels6 = {"primary": "primary", "secondary_d16": "secondary (D16, Holm)",
+               "primary_pre_gate": "before the gate (metric 1)", "primary_detected_only": "sensitivity: detected stratum only",
+               "primary_with_about_detector": "sensitivity: about-detector claims included"}
     rows = []
     for name, cmp in rep["comparisons"].items():
-        label = "primary" if name == "primary" else "secondary (D16)"
-        rows.append([f"{NAMES[cmp['a']]} − {NAMES[cmp['b']]}", label, pct(cmp["pooled_rate_diff"]),
+        holm = cmp.get("rate_wilcoxon_p_holm")
+        rows.append([f"{NAMES[cmp['a']]} − {NAMES[cmp['b']]}", labels6.get(name, name), pct(cmp["pooled_rate_diff"]),
                      f"{cmp['a_fewer_on']} / {cmp['b_fewer_on']} / {cmp['sites'] - cmp['a_fewer_on'] - cmp['b_fewer_on']}",
-                     p((cmp["rate_wilcoxon"] or (None, None))[1]), p(cmp["rate_sign"][2]),
-                     f"{cmp['sites_with_rates']} ({cmp['sites_without_rates']} without a rate)"])
-    parts += ["## Table 6. Pre-specified comparisons (post-gate hallucination)", "",
+                     p((cmp["rate_wilcoxon"] or (None, None))[1]), p((cmp["rate_wilcoxon_pratt"] or (None, None))[1]),
+                     p(cmp["rate_sign"][2]) if holm is None else f"{p(cmp['rate_sign'][2])}; Holm {p(holm)}",
+                     f"{cmp['sites_with_rates']} ({cmp['sites_without_rates']} without a rate)", str(cmp["bootstrap_skipped"])])
+    parts += ["## Table 6. Pre-specified comparisons (post-gate hallucination unless stated)", "",
               md_table(["Comparison", "", "Pooled rate difference [95 % CI]", "Sites a better / b better / tied (counts)",
-                        "Wilcoxon p (rates)", "Sign p (rates)", "Sites with rates"], rows), ""]
+                        "Wilcoxon p (rates)", "Pratt p (rates)", "Sign p (rates)", "Sites with rates", "Bootstrap resamples skipped"], rows), ""]
+    prim = rep["comparisons"].get("primary")
+    if prim:
+        parts += ["Sites without a rate in the primary comparison, per stratum: " + "; ".join(
+            f"{o} {v['sites_without_rates']} of {v['sites']}" for o, v in prim["by_stratum"].items()) + ".", ""]
 
     d = rep["detector"]
     parts += ["## Table 7. Detector", "", md_table(["Measure", "Value", "Unsure (left out)"], [
         ["Precision (detected sites labelled change)", pct(d["precision"]), str(d["detected_unsure"])],
         ["Background change rate (random sites labelled change)", pct(d["background_change_rate"]), str(d["random_unsure"])]]), ""]
+
+    rows = []
+    for c in conditions(rep):
+        cond = rep["conditions"][c]
+        a = cond["about_detector"]
+        rows.append([NAMES[c], str(a["n"]), str(a["detected"]), str(a["random"]),
+                     pct(cond["pooled"]["post_gate_hallucination"]), pct(cond["with_about_detector"]["post_gate_hallucination"])])
+    parts += ["## Table 8. Claims about the detector (D18 rule 2)", "",
+              "These claims are left out of the rates in Tables 1–6 and counted here. The last column shows the "
+              "post-gate rate with them included, judged as statements about the ground (sensitivity analysis).", "",
+              md_table(["Condition", "About-detector claims", "At detected sites", "At random sites",
+                        "Post-gate hallucination (left out)", "Post-gate hallucination (included)"], rows), ""]
+
+    rel, adj = rep.get("label_reliability"), rep.get("adjudication_reliability")
+    if rel or adj:
+        parts += ["## Table 9. Reliability", ""]
+    if rel:
+        co = rel["change_occurred"]
+        parts += [f"Labellers, `change_occurred` on {rel['sites']} sites: κ {pct_kappa(co['kappa'])}; Gwet's AC1 {num(co['ac1'])}; "
+                  f"raw agreement {pct(co['agreement'])}. Same set of change types on {rel['change_types']['same_set_on']} of {rel['sites']} sites.", "",
+                  md_table(["Change type", "Agreement on present / absent", "Sites where either labelled it"],
+                           [[t, pct(v["agreement"]), str(v["present_in_either"])] for t, v in rel["change_types"]["per_type"].items()]), ""]
+    if adj:
+        parts += [f"Adjudicators, on the second adjudicator's sites ({adj['items_in_overlap']} claims):", "",
+                  md_table(["Axis", "Items", "κ [95 % CI]", "Gwet's AC1", "Raw agreement"],
+                           [[axis, str(v["n"]), pct_kappa(v["kappa"], v["kappa_ci"]), num(v["ac1"]), pct(v["agreement"])]
+                            for axis, v in adj["axes"].items()]), ""]
     return "\n".join(parts)
 
 
@@ -195,9 +245,17 @@ def figure(rep: dict) -> str:
     return "\n".join(out)
 
 
-def write_all(claims_path: Path, runs_path: Path, out: Path, reps: int = metrics.BOOT_REPS) -> dict:
+def write_all(claims_path: Path, runs_path: Path, out: Path, reps: int = metrics.BOOT_REPS,
+              adjudication: tuple[Path, Path, Path] | None = None) -> dict:
+    """adjudication = (reports, first adjudicator's judgements, second's) adds the adjudicator reliability to Table 9."""
     labels, key = metrics.load_phase3()
-    rep = metrics.report(metrics.load_claims(claims_path), metrics.read_jsonl(runs_path), labels, key, reps)
+    second = metrics.LABELS_DIR / "labels_v1_labeler2.jsonl"
+    labels2 = {r["site_id"]: r for r in metrics.read_jsonl(second)} if second.exists() else None
+    rep = metrics.report(metrics.load_claims(claims_path), metrics.read_jsonl(runs_path), labels, key, reps, labels2=labels2)
+    if adjudication:
+        from eval import adjudication as adj
+        reports, first, second_rows = (metrics.read_jsonl(p) for p in adjudication)
+        rep["adjudication_reliability"] = adj.agreement(reports, first, second_rows, reps)
     out.mkdir(parents=True, exist_ok=True)
     (out / "results.md").write_text(tables(rep), encoding="utf-8")
     (out / "table_main.tex").write_text(latex_main(rep), encoding="utf-8")
@@ -212,8 +270,13 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("runs", type=Path)
     ap.add_argument("--out", type=Path, default=ROOT / "docs" / "results")
     ap.add_argument("--reps", type=int, default=metrics.BOOT_REPS)
+    ap.add_argument("--reports", type=Path, help="reports_sites.jsonl (with --first and --second: adjudicator reliability)")
+    ap.add_argument("--first", type=Path, help="first adjudicator's judgements")
+    ap.add_argument("--second", type=Path, help="second adjudicator's judgements")
     args = ap.parse_args(argv)
-    write_all(args.claims, args.runs, args.out, args.reps)
+    if bool(args.reports) != bool(args.first) or bool(args.first) != bool(args.second):
+        ap.error("--reports, --first and --second go together")
+    write_all(args.claims, args.runs, args.out, args.reps, (args.reports, args.first, args.second) if args.reports else None)
     print(f"wrote {args.out}/results.md, table_main.tex, figure_rates.svg, report.json")
 
 

@@ -11,8 +11,13 @@ Rules: docs/adjudication_rules.md (D18, proposed). What this module enforces:
 Input: report records as scripts/report_dev.py writes them ({arm, box_id, stratum, box, claims,
 evidence, parse_ok, dropped, ...}); the 30-site run writes the same shape.
 
-    python -m eval.adjudication reports.jsonl judgements.jsonl claims.jsonl runs.jsonl
-        joins one adjudicator's judgements with the reports and writes metrics' claims / runs files
+    python -m eval.adjudication reports.jsonl judgements.jsonl claims.jsonl runs.jsonl [consensus.jsonl]
+        joins one adjudicator's judgements with the reports and writes metrics' claims / runs files;
+        an optional consensus file overrides the first adjudicator's judgements of the items the two
+        adjudicators disagreed on (rules, section 7)
+    python -m eval.adjudication agreement reports.jsonl first.jsonl second.jsonl [disagreements.json]
+        kappa and percent agreement on both axes over the items both judged, and the list of items
+        they disagree on, to be re-judged together (page: adjudicator "final", role second)
 """
 from __future__ import annotations
 
@@ -25,7 +30,7 @@ from pathlib import Path
 
 from agents.schema import LOCATIONS, REPORT_CONDITIONS
 
-from .metrics import SEED, SUPPORTS, TRUTHS, read_jsonl
+from .metrics import BOOT_REPS, SEED, SUPPORTS, TRUTHS, agreement_bootstrap, cohen_kappa, gwet_ac1, read_jsonl, wilson
 
 SECOND_SHARE = 0.20
 LABELS_FILE = Path(__file__).resolve().parent.parent / "data" / "quangninh" / "labels" / "labels_v1.jsonl"
@@ -138,10 +143,12 @@ def latest_judgements(rows: list[dict]) -> dict[str, dict]:
 
 
 def to_metric_records(records: list[dict], judgements: list[dict], adjudicator: str,
-                      drop_about_detector: bool = True) -> tuple[list[dict], list[dict]]:
+                      drop_about_detector: bool = False) -> tuple[list[dict], list[dict]]:
     """(claims, runs) for eval/metrics.py: every fully judged claim, joined back to its condition and
-    the verifier's verdict, and one run per site and condition. Claims tagged about_detector are left
-    out of the claims (rule 2 of the proposed rules) unless drop_about_detector is False."""
+    the verifier's verdict, and one run per site and condition. Claims tagged about_detector stay in,
+    flagged: metrics.report() leaves them out of metrics 1-5 (D18 rule 2), counts them per condition and
+    stratum, and reruns the primary result with them included (sensitivity analysis). Pass
+    drop_about_detector=True to remove them here instead."""
     items = build_items(records)
     judged = latest_judgements(judgements)
     claims = []
@@ -164,6 +171,62 @@ def to_metric_records(records: list[dict], judgements: list[dict], adjudicator: 
     return claims, runs
 
 
+# ---------- agreement between the two adjudicators (rules, section 7) ----------
+AGREEMENT_AXES = ("truth", "support", "about_detector", "compound")
+
+
+def _axis_value(judged: dict, axis: str):
+    """The judgement on one axis. The two flags are booleans that are simply absent when not ticked."""
+    if axis in ("about_detector", "compound"):
+        return bool(judged.get(axis))
+    return judged.get(axis)
+
+
+AXIS_DOMAINS = {"truth": TRUTHS, "support": SUPPORTS, "about_detector": (False, True), "compound": (False, True)}
+
+
+def agreement(records: list[dict], first_rows: list[dict], second_rows: list[dict], reps: int = BOOT_REPS) -> dict:
+    """Agreement of the second adjudicator with the first, on the second adjudicator's seeded share of
+    sites, per axis: {n, kappa, kappa_ci (lo, hi from a site bootstrap), ac1 (Gwet's, the sensitivity
+    check), agreement (rate, lo, hi)}. Only items both judged on that axis count (the flags count only
+    where both judged truth, since they are ticked on that pass). The first-pass records are never
+    changed by resolving disagreements, so kappa stays what the two did independently."""
+    first, second = latest_judgements(first_rows), latest_judgements(second_rows)
+    site_of = {it["item_id"]: site["site_id"] for site in queue(records, "second") for it in site["items"]}
+    out = {"items_in_overlap": len(site_of), "axes": {}}
+    for axis in AGREEMENT_AXES:
+        gate = "truth" if axis in ("about_detector", "compound") else axis
+        ids = sorted(i for i in site_of if first.get(i, {}).get(gate) and second.get(i, {}).get(gate))
+        a = [_axis_value(first[i], axis) for i in ids]
+        b = [_axis_value(second[i], axis) for i in ids]
+        kappa, lo, hi = agreement_bootstrap([(site_of[i], x, y) for i, x, y in zip(ids, a, b)], cohen_kappa, reps)
+        out["axes"][axis] = {"n": len(ids), "kappa": kappa, "kappa_ci": (lo, hi),
+                             "ac1": gwet_ac1(a, b, AXIS_DOMAINS[axis]),
+                             "agreement": wilson(sum(x == y for x, y in zip(a, b)), len(ids))}
+    return out
+
+
+def disagreements(records: list[dict], first_rows: list[dict], second_rows: list[dict]) -> list[dict]:
+    """Items where the two adjudicators differ on truth or support, as the blinded text and both answers,
+    for the discussion. The condition is not included: the resolution is blind too."""
+    first, second = latest_judgements(first_rows), latest_judgements(second_rows)
+    out = []
+    for site in queue(records, "second"):
+        for it in site["items"]:
+            f, s = first.get(it["item_id"], {}), second.get(it["item_id"], {})
+            diff = {axis: {"first": f[axis], "second": s[axis]} for axis in ("truth", "support")
+                    if f.get(axis) and s.get(axis) and f[axis] != s[axis]}
+            if diff:
+                out.append({"site_id": site["site_id"], "item_id": it["item_id"], "text": it["text"], "differs": diff})
+    return out
+
+
+def final_judgements(first_rows: list[dict], consensus_rows: list[dict]) -> list[dict]:
+    """The first adjudicator's judgements with the agreed ones from the consensus pass on top (field by
+    field, the consensus later so it wins). Feed the result to to_metric_records."""
+    return [*first_rows, *consensus_rows]
+
+
 def progress(records: list[dict], judgements: list[dict], role: str = "first") -> dict:
     ids = {it["item_id"] for site in queue(records, role) for it in site["items"]}
     judged = latest_judgements(judgements)
@@ -172,11 +235,36 @@ def progress(records: list[dict], judgements: list[dict], role: str = "first") -
             "support_done": sum(1 for i in ids if judged.get(i, {}).get("support"))}
 
 
+def _fmt_ci(ci) -> str:
+    return "n/a" if not ci or ci[0] is None else f"{100 * ci[0]:.0f} % [{100 * ci[1]:.0f}, {100 * ci[2]:.0f}]"
+
+
 def main(argv: list[str]) -> None:
-    if len(argv) != 4:
-        sys.exit("usage: python -m eval.adjudication reports.jsonl judgements.jsonl claims.jsonl runs.jsonl")
+    if argv and argv[0] == "agreement":
+        if len(argv) not in (4, 5):
+            sys.exit("usage: python -m eval.adjudication agreement reports.jsonl first.jsonl second.jsonl [disagreements.json]")
+        reports, first, second = (read_jsonl(Path(p)) for p in argv[1:4])
+        res = agreement(reports, first, second)
+        print(f"{res['items_in_overlap']} items in the second adjudicator's sites")
+        for axis, v in res["axes"].items():
+            k = "n/a" if v["kappa"] is None else f"{v['kappa']:.2f}"
+            lo, hi = v["kappa_ci"]
+            ci = "" if lo is None else f" [{lo:.2f}, {hi:.2f}]"
+            ac1 = "n/a" if v["ac1"] is None else f"{v['ac1']:.2f}"
+            print(f"  {axis:15s} n={v['n']:3d}  kappa {k}{ci}  AC1 {ac1}  agreement {_fmt_ci(v['agreement'])}")
+        diff = disagreements(reports, first, second)
+        print(f"{len(diff)} items differ on truth or support")
+        if len(argv) == 5:
+            Path(argv[4]).write_text(json.dumps(diff, indent=1, ensure_ascii=False), encoding="utf-8")
+            print(f"wrote {argv[4]}")
+        return
+    if len(argv) not in (4, 5):
+        sys.exit("usage: python -m eval.adjudication reports.jsonl judgements.jsonl claims.jsonl runs.jsonl [consensus.jsonl]\n"
+                 "       python -m eval.adjudication agreement reports.jsonl first.jsonl second.jsonl [disagreements.json]")
     reports, judgements = read_jsonl(Path(argv[0])), read_jsonl(Path(argv[1]))
     adjudicator = judgements[0]["adjudicator"] if judgements else "unknown"
+    if len(argv) == 5:
+        judgements = final_judgements(judgements, read_jsonl(Path(argv[4])))
     claims, runs = to_metric_records(reports, judgements, adjudicator)
     for path, rows in ((argv[2], claims), (argv[3], runs)):
         Path(path).write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")

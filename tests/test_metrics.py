@@ -189,3 +189,79 @@ def test_built_and_change_month():
     cm = m.change_month_agreement([(["2025-03", "2025-06"], ["2025-04", "2025-07"]),
                                    (["2025-01", "2025-02"], ["2025-09", "2025-10"])])
     assert cm["within_1_month"][0] == 0.5 and cm["windows_overlap"][0] == 0.5
+
+
+# ---- Phase 5 additions: Pratt zeros, AC1, agreement bootstrap, Holm, missed change, label agreement ----
+
+def _brute_pratt_p(d):
+    """Pratt: rank |d| over all differences including zeros, then drop the zeros; exact sign-flip p."""
+    allabs = sorted(abs(x) for x in d)
+    ranks = {}
+    for v in set(allabs):
+        idx = [i + 1 for i, x in enumerate(allabs) if x == v]
+        ranks[v] = sum(idx) / len(idx)
+    nz = [x for x in d if x]
+    r = [ranks[abs(x)] for x in nz]
+    w = sum(ri for ri, x in zip(r, nz) if x > 0)
+    total = sum(r)
+    lo = min(w, total - w)
+    hits = sum(sum(ri for ri, s in zip(r, signs) if s) <= lo + 1e-9 for signs in itertools.product([0, 1], repeat=len(nz)))
+    return w, min(1.0, 2 * hits / 2 ** len(nz))
+
+
+@pytest.mark.parametrize("diffs", [[1, 2, 3, 0, 0], [1, 1, -1, 2, 0, 3, -2], [-0.5, 0, 0.25, 0.25, 1.0, 0, -1.0]])
+def test_wilcoxon_pratt_matches_brute_force(diffs):
+    assert m.wilcoxon_signed_rank(diffs, zeros="pratt") == pytest.approx(_brute_pratt_p(diffs))
+
+
+def test_gwet_ac1():
+    assert m.gwet_ac1(["a", "a", "b", "b"], ["a", "a", "b", "b"]) == pytest.approx(1.0)
+    # rare second answer: kappa collapses, AC1 stays high (the reason for reporting it)
+    a = ["x"] * 9 + ["y"]
+    b = ["x"] * 9 + ["x"]
+    assert m.gwet_ac1(a, b, categories=["x", "y"]) > 0.8 > (m.cohen_kappa(a, b) or 0) + 0.7
+    with pytest.raises(ValueError):
+        m.gwet_ac1(["a"], ["a", "b"])
+
+
+def test_agreement_bootstrap_and_holm():
+    items = [(f"s{i}", "a" if i % 2 else "b", "a" if i % 2 else "b") for i in range(10)]
+    est, lo, hi = m.agreement_bootstrap(items, m.cohen_kappa, reps=100)
+    assert est == pytest.approx(1.0) and lo <= est <= hi
+    assert m.agreement_bootstrap([], m.cohen_kappa, reps=10)[0] is None
+    adj = m.holm_adjust({"a": 0.01, "b": 0.04, "c": None})
+    assert adj == {"a": pytest.approx(0.02), "b": pytest.approx(0.04), "c": None}
+
+
+def test_asserts_change_and_missed_change():
+    assert m.asserts_change({"level": "L3", "text": "Vegetation loss."})
+    assert not m.asserts_change({"level": "L1", "text": "No change is visible."})
+    assert m.asserts_change({"level": "L1", "text": "The area changed."})
+    run = [{"site_id": "s3", "condition": "x", "n_claims": 1, "n_parse_failures": 0}]
+    hit = m.missed_change([c("s3", "x", "true", "supported", "supported")], run, LABELS, KEY)
+    miss = m.missed_change([c("s3", "x", "false", "unsupported", "supported")], run, LABELS, KEY)
+    assert (hit["random_sites_labelled_change"], hit["missed"]) == (1, 0)
+    assert (miss["random_sites_labelled_change"], miss["missed"]) == (1, 1)
+
+
+def test_report_has_the_new_blocks_and_counts_about_detector_apart():
+    claims = CLAIMS + [dict(c("s1", "gated", "false", "supported", "supported", text="The detector found it."), about_detector=True)]
+    runs = [dict(r) for r in RUNS]
+    rep = m.report(claims, runs, LABELS, KEY, reps=100)
+    assert rep["conditions"]["gated"]["about_detector"]["n"] == 1
+    assert rep["conditions"]["gated"]["pooled"]["n_claims"] == m.report(CLAIMS, RUNS, LABELS, KEY, reps=100)["conditions"]["gated"]["pooled"]["n_claims"]
+    assert "with_about_detector" in rep["conditions"]["gated"] and "missed_change_random" in rep["conditions"]["gated"]
+    for k in ("primary", "primary_pre_gate", "primary_detected_only", "primary_with_about_detector"):
+        assert k in rep["comparisons"]
+    assert "rate_wilcoxon_pratt" in rep["comparisons"]["primary"] and "bootstrap_skipped" in rep["comparisons"]["primary"]
+    assert "label_reliability" not in rep
+
+
+def test_label_agreement():
+    b = {s: dict(v) for s, v in LABELS.items()}
+    b["s4"] = {"change_occurred": "no", "change_types": []}
+    got = m.label_agreement(LABELS, b, reps=100)
+    assert got["sites"] == 4 and got["change_types"]["same_set_on"] == 4
+    assert got["change_occurred"]["agreement"][0] == pytest.approx(3 / 4)
+    rep = m.report(CLAIMS, RUNS, LABELS, KEY, reps=100, labels2=b)
+    assert rep["label_reliability"]["sites"] == 4

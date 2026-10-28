@@ -12,7 +12,9 @@ Falls back to demo_data.py when neither a run id nor the global files exist.
 """
 import hashlib
 import json
+import os
 import shutil
+import threading
 import time
 from pathlib import Path
 from typing import Optional
@@ -30,34 +32,71 @@ def _run_dir(run_id: str) -> Path:
     return DATA_DIR / "runs" / run_id
 
 
+# One lock for the per-run files. The server is one process: request threads read status.json while the
+# background worker rewrites it, and on Windows a file cannot be replaced while another thread has it open.
+# Holding the lock around every read and write makes those two never overlap. The temporary-file swap and the
+# retries below only cover a reader in another process (a script run next to the server).
+_IO_LOCK = threading.RLock()
+
+
+def _write_json(path: Path, obj) -> None:
+    """Write to a temporary file and swap it in, so a reader never sees a half-written empty file (the app
+    polls status.json every 2 s while the worker updates it)."""
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    with _IO_LOCK:
+        tmp.write_text(json.dumps(obj, indent=2))
+        for attempt in range(50):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:       # another process has the file open: wait for it
+                if attempt == 49:
+                    raise
+                time.sleep(0.02)
+
+
+def _read_json(path: Path):
+    """Read a per-run JSON file; a few retries cover another process swapping it at that instant.
+    A genuinely corrupt file still raises."""
+    for attempt in range(10):
+        try:
+            with _IO_LOCK:
+                return json.loads(path.read_text())
+        except (ValueError, PermissionError):
+            if attempt == 9:
+                raise
+            time.sleep(0.02)
+
+
 def create_run(run_id: str, aoi_geojson: dict, before_window: list[str], after_window: list[str], condition: str, code_version: str) -> None:
     d = _run_dir(run_id)
     d.mkdir(parents=True, exist_ok=True)
-    (d / "status.json").write_text(json.dumps({
+    _write_json(d / "status.json", {
         "run_id": run_id, "status": "queued", "progress": 0.0,
         "created_at": time.time(), "error": None, "cache_key": None,
         "aoi": aoi_geojson, "before_window": before_window, "after_window": after_window,
         "condition": condition, "code_version": code_version,
-    }, indent=2))
+    })
 
 
 def get_status(run_id: str) -> Optional[dict]:
     p = _run_dir(run_id) / "status.json"
-    return json.loads(p.read_text()) if p.exists() else None
+    return _read_json(p) if p.exists() else None
 
 
 def update_status(run_id: str, **fields) -> None:
     p = _run_dir(run_id) / "status.json"
-    current = json.loads(p.read_text())
-    current.update(fields)
-    p.write_text(json.dumps(current, indent=2))
+    with _IO_LOCK:                       # read-modify-write as one step
+        current = _read_json(p)
+        current.update(fields)
+        _write_json(p, current)
 
 
 def write_run_result(run_id: str, aoi_geojson: dict, change_regions_geojson: dict, report: dict) -> None:
     d = _run_dir(run_id)
-    (d / "aoi.json").write_text(json.dumps(aoi_geojson, indent=2))
-    (d / "change_regions.json").write_text(json.dumps(change_regions_geojson, indent=2))
-    (d / "report.json").write_text(json.dumps(report, indent=2))
+    _write_json(d / "aoi.json", aoi_geojson)
+    _write_json(d / "change_regions.json", change_regions_geojson)
+    _write_json(d / "report.json", report)
 
 
 def list_runs() -> list[dict]:
@@ -70,13 +109,13 @@ def list_runs() -> list[dict]:
             if not p.exists():
                 continue
             try:
-                s = json.loads(p.read_text())
+                s = _read_json(p)
             except ValueError:
                 continue                       # half-written status file: skip rather than fail the list
             n_regions = None
             if (d / "change_regions.json").exists():
                 try:
-                    n_regions = len(json.loads((d / "change_regions.json").read_text()).get("features", []))
+                    n_regions = len(_read_json(d / "change_regions.json").get("features", []))
                 except ValueError:
                     pass
             out.append({k: s.get(k) for k in ("run_id", "status", "progress", "created_at", "error", "condition",
@@ -110,7 +149,7 @@ def find_cached_run(key: str) -> Optional[str]:
         status_path = run_dir / "status.json"
         if not status_path.exists():
             continue
-        status = json.loads(status_path.read_text())
+        status = _read_json(status_path)
         if status.get("cache_key") == key and status.get("status") == "done":
             return status["run_id"]
     return None
@@ -122,7 +161,7 @@ def get_aoi(run_id: Optional[str] = None) -> dict:
     if run_id:
         p = _run_dir(run_id) / "aoi.json"
         if p.exists():
-            return json.loads(p.read_text())
+            return _read_json(p)
     if AOI_PATH.exists():
         return json.loads(AOI_PATH.read_text())
     return demo_data.AOI
@@ -132,7 +171,7 @@ def get_change_regions(run_id: Optional[str] = None) -> dict:
     if run_id:
         p = _run_dir(run_id) / "change_regions.json"
         if p.exists():
-            return json.loads(p.read_text())
+            return _read_json(p)
     if REGIONS_PATH.exists():
         return json.loads(REGIONS_PATH.read_text())
     return demo_data.CHANGE_REGIONS
