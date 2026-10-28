@@ -1,0 +1,816 @@
+{
+ "r257": {
+  "before": {
+   "covers": [
+    "water",
+    "bare"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "water",
+    "sparse_vegetation",
+    "bare",
+    "built"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r172": {
+  "before": {
+   "covers": [
+    "bare",
+    "built"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "sparse_vegetation",
+    "bare",
+    "built"
+   ],
+   "main": "sparse_vegetation",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r68": {
+  "before": {
+   "covers": [
+    "bare"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "sparse_vegetation",
+    "bare"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r355": {
+  "before": {
+   "covers": [
+    "water",
+    "dense_vegetation",
+    "built"
+   ],
+   "main": "water",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "water",
+    "dense_vegetation",
+    "built"
+   ],
+   "main": "water",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r247": {
+  "before": {
+   "covers": [
+    "bare"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "bare",
+    "built"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r159": {
+  "before": {
+   "covers": [
+    "water",
+    "sparse_vegetation",
+    "bare"
+   ],
+   "main": "water",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "water",
+    "sparse_vegetation",
+    "built"
+   ],
+   "main": "water",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r144": {
+  "before": {
+   "covers": [
+    "bare"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "sparse_vegetation",
+    "bare",
+    "built"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r441": {
+  "before": {
+   "covers": [
+    "water",
+    "dense_vegetation",
+    "built"
+   ],
+   "main": "water",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "water",
+    "dense_vegetation",
+    "built"
+   ],
+   "main": "water",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r231": {
+  "before": {
+   "covers": [
+    "sparse_vegetation",
+    "bare",
+    "built"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "sparse_vegetation",
+    "bare",
+    "built"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r470": {
+  "before": {
+   "covers": [
+    "water",
+    "dense_vegetation"
+   ],
+   "main": "water",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "water",
+    "dense_vegetation"
+   ],
+   "main": "water",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r128": {
+  "before": {
+   "covers": [
+    "sparse_vegetation",
+    "bare",
+    "built"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "sparse_vegetation",
+    "bare",
+    "built"
+   ],
+   "main": "sparse_vegetation",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r96": {
+  "before": {
+   "covers": [
+    "water",
+    "bare",
+    "built"
+   ],
+   "main": "water",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "water",
+    "bare",
+    "built"
+   ],
+   "main": "water",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "t33": {
+  "before": {
+   "covers": [
+    "bare",
+    "built"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "water",
+    "bare",
+    "built"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r9": {
+  "before": {
+   "covers": [
+    "dense_vegetation"
+   ],
+   "main": "dense_vegetation",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "dense_vegetation"
+   ],
+   "main": "dense_vegetation",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r126": {
+  "before": {
+   "covers": [
+    "sparse_vegetation",
+    "bare"
+   ],
+   "main": "sparse_vegetation",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "bare"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r398": {
+  "before": {
+   "covers": [
+    "dense_vegetation"
+   ],
+   "main": "dense_vegetation",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "dense_vegetation",
+    "built"
+   ],
+   "main": "dense_vegetation",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r393": {
+  "before": {
+   "covers": [
+    "sparse_vegetation",
+    "bare",
+    "built"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "sparse_vegetation",
+    "bare",
+    "built"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r133": {
+  "before": {
+   "covers": [
+    "bare",
+    "built"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "sparse_vegetation",
+    "bare",
+    "built"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r318": {
+  "before": {
+   "covers": [
+    "water",
+    "bare"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "bare",
+    "built"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r404": {
+  "before": {
+   "covers": [
+    "dense_vegetation",
+    "bare",
+    "built"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "dense_vegetation",
+    "bare",
+    "built"
+   ],
+   "main": "built",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r460": {
+  "before": {
+   "covers": [
+    "water"
+   ],
+   "main": "water",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "water"
+   ],
+   "main": "water",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r97": {
+  "before": {
+   "covers": [
+    "dense_vegetation",
+    "bare"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "dense_vegetation",
+    "bare",
+    "built"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r358": {
+  "before": {
+   "covers": [
+    "water",
+    "dense_vegetation",
+    "bare",
+    "built"
+   ],
+   "main": "dense_vegetation",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "water",
+    "dense_vegetation",
+    "bare",
+    "built"
+   ],
+   "main": "built",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "t17": {
+  "before": {
+   "covers": [
+    "sparse_vegetation",
+    "built"
+   ],
+   "main": "built",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "sparse_vegetation",
+    "built"
+   ],
+   "main": "built",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r16": {
+  "before": {
+   "covers": [
+    "dense_vegetation",
+    "bare"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "dense_vegetation",
+    "bare"
+   ],
+   "main": "dense_vegetation",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "t3": {
+  "before": {
+   "covers": [
+    "sparse_vegetation",
+    "built"
+   ],
+   "main": "built",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "sparse_vegetation",
+    "built"
+   ],
+   "main": "built",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r58": {
+  "before": {
+   "covers": [
+    "dense_vegetation"
+   ],
+   "main": "dense_vegetation",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "dense_vegetation"
+   ],
+   "main": "dense_vegetation",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r450": {
+  "before": {
+   "covers": [
+    "water"
+   ],
+   "main": "water",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "water"
+   ],
+   "main": "water",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r501": {
+  "before": {
+   "covers": [
+    "water",
+    "sparse_vegetation"
+   ],
+   "main": "water",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "water",
+    "sparse_vegetation"
+   ],
+   "main": "water",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r331": {
+  "before": {
+   "covers": [
+    "water",
+    "dense_vegetation",
+    "bare"
+   ],
+   "main": "water",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "water",
+    "dense_vegetation"
+   ],
+   "main": "water",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r121": {
+  "before": {
+   "covers": [
+    "dense_vegetation",
+    "bare",
+    "built"
+   ],
+   "main": "dense_vegetation",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "dense_vegetation",
+    "bare",
+    "built"
+   ],
+   "main": "dense_vegetation",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r395": {
+  "before": {
+   "covers": [
+    "dense_vegetation",
+    "built"
+   ],
+   "main": "dense_vegetation",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "dense_vegetation",
+    "built"
+   ],
+   "main": "dense_vegetation",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r444": {
+  "before": {
+   "covers": [
+    "water",
+    "dense_vegetation"
+   ],
+   "main": "water",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "water",
+    "dense_vegetation"
+   ],
+   "main": "water",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r486": {
+  "before": {
+   "covers": [
+    "water"
+   ],
+   "main": "water",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "water"
+   ],
+   "main": "water",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r122": {
+  "before": {
+   "covers": [
+    "sparse_vegetation",
+    "bare"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "bare"
+   ],
+   "main": "bare",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r196": {
+  "before": {
+   "covers": [
+    "dense_vegetation",
+    "built"
+   ],
+   "main": "dense_vegetation",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "dense_vegetation",
+    "built"
+   ],
+   "main": "dense_vegetation",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r276": {
+  "before": {
+   "covers": [
+    "dense_vegetation"
+   ],
+   "main": "dense_vegetation",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "dense_vegetation",
+    "bare"
+   ],
+   "main": "dense_vegetation",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "t15": {
+  "before": {
+   "covers": [
+    "built"
+   ],
+   "main": "built",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "sparse_vegetation",
+    "built"
+   ],
+   "main": "built",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r336": {
+  "before": {
+   "covers": [
+    "dense_vegetation",
+    "bare"
+   ],
+   "main": "dense_vegetation",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "dense_vegetation",
+    "bare"
+   ],
+   "main": "dense_vegetation",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ },
+ "r273": {
+  "before": {
+   "covers": [
+    "dense_vegetation",
+    "bare",
+    "built"
+   ],
+   "main": "dense_vegetation",
+   "cant_tell": false,
+   "image_date": "2018-11"
+  },
+  "after": {
+   "covers": [
+    "dense_vegetation",
+    "bare",
+    "built"
+   ],
+   "main": "dense_vegetation",
+   "cant_tell": false,
+   "image_date": "2022-10"
+  }
+ }
+}

@@ -241,3 +241,40 @@ def test_optical_confirmation(trend, first, last, change):
 def test_fastest_retreat_is_none_without_confirmed_retreat(written):
     _, summary = written
     assert summary["fastest_advance_m_yr"] is not None and summary["fastest_retreat_m_yr"] is None
+
+
+def test_years_stats_and_lines():
+    labels = [f"{y}-{(y + 1) % 100:02d}" for y in range(2015, 2021)]
+    st = s.years_stats(labels, [0, 10, 21, 30, 39, 50], [None, None, None, 5.0, None, 40.0])
+    assert st["trend"] == "advancing" and st["lrr"] == pytest.approx(10, abs=0.3) and st["change"] == "advancing"
+    assert s.years_stats(labels, [0, None, None, 30, None, None], [None] * 6)["change"] == "too_few"
+    assert s.years_stats(labels, [0, 10, 21, 30, 39, 50], [None] * 6)["change"] == "unconfirmed"   # no optical before S2 SR
+    feats = [{"id": f"t{i}", "properties": {"line": 0}, "geometry": {"type": "LineString", "coordinates": [[0, i * 0.001], [0.008, i * 0.001]]}}
+             for i in range(4)]
+    runs = s.season_lines(feats, {"t0": [0.0], "t1": [100.0], "t2": [None], "t3": [-300.0]}, 0)
+    assert runs == [[(0.003, 0.0), (0.004, 0.001), (0.0, 0.003)]]   # one missing transect (t2) is bridged, as monthly_lines
+
+
+def test_years_api(written, monkeypatch):
+    path, _ = written
+    monkeypatch.setattr(main.shoreline, "SHORELINE_DIR", path)
+    c = TestClient(main.app)
+    assert c.get("/api/shoreline/years").status_code == 404
+    transects = json.loads((path / "transects.geojson").read_text())
+    ids = [f["id"] for f in transects["features"]]
+    seasons = [["2015-16", "2015-10-01", "2016-04-01"], ["2016-17", "2016-10-01", "2017-04-01"]]
+    result = {"seasons": seasons, "positions": {t: [0.0, 40.0] for t in ids}, "optical": {t: [0.0, 35.0] for t in ids},
+              "transects": {t: {"n": 2, "lrr": 40.0, "ci95": None, "r2": None, "nsm": 40.0, "trend": "advancing",
+                                "opt_first": 0.0, "opt_last": 35.0, "opt_shift": 35.0, "change": "advancing"} for t in ids},
+              "status_counts": {"advancing": len(ids)}, "method": s.YEARS_METHOD}
+    out = s.years_outputs(result, transects, path)
+    assert out["seasons"] == ["2015-16", "2016-17"] and out["lines"] == 2
+    assert c.get("/api/shoreline/years").json()["seasons"] == ["2015-16", "2016-17"]
+    assert len(c.get("/api/shoreline/years/lines").json()["features"]) == 2
+    assert c.get("/api/shoreline/years/lines", params={"season": "2016-17"}).json()["features"][0]["properties"]["season"] == "2016-17"
+    assert c.get("/api/shoreline/years/lines", params={"season": "1999-00"}).status_code == 404
+    tr = c.get("/api/shoreline/years/transects").json()["features"]
+    assert len(tr) == len(ids) and tr[0]["properties"]["change"] == "advancing" and "monthly_iqr" not in tr[0]["properties"]
+    one = c.get(f"/api/shoreline/transects/{ids[0]}").json()
+    assert one["yearly"] == [{"season": "2015-16", "pos": 0.0, "optical": 0.0}, {"season": "2016-17", "pos": 40.0, "optical": 35.0}]
+    assert one["yearly_stats"]["change"] == "advancing"

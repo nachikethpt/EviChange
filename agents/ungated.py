@@ -19,7 +19,8 @@ from . import vlm_check
 from .schema import CHANGE_TYPES, CLAIM_TYPES, LANDCOVER_CLASSES, validate_claim
 
 REPORT_PROMPT_VERSION = "ungated_report_v1"   # v1: asks about the shoreline and buildings near it (D13)
-EXTRACT_PROMPT_VERSION = "claim_extract_v2"  # v2: JSON null, one class (v1 wrote "null" strings, dropped); v1: coast fields
+EXTRACT_PROMPT_VERSION = "claim_extract_v5"  # v5: "no shoreline movement" is an L1 no-change claim (v4: L3); v4: classes only when named (v3 read "vegetation" as trees); v3: most specific level; v2: JSON null; v1: coast
+PARSE_VERSION = "claim_parse_v2"  # v2: a class that is not a Dynamic World class is cleared, the claim kept (v1 dropped it)
 
 REPORT_PROMPT = """You are a remote-sensing analyst. You get {count} Sentinel-2 images of the same place:
 {images}
@@ -35,10 +36,16 @@ or leave out statements.
 
 For each claim give:
   "text":  the statement
-  "level": "L1" = whether change happened at all
-           "L2" = how much changed (hectares, percent, size words) or where it is
-           "L3" = what kind of change or land cover
-           "L4" = cause, purpose, legality, who did it, or what will happen next
+  "level": the MOST SPECIFIC level the statement reaches:
+           "L4" if it gives a cause, purpose, legality, who did it, or what will happen next
+                ("indicating erosion", "due to mining", "suggesting land degradation");
+           else "L3" if it names a kind of change or a land cover
+                ("vegetation loss", "more bare soil", "the water body shrank", "it is forest");
+           else "L2" if it says how much changed (hectares, percent, size words) or where
+                ("about 50 % of the box", "in the east");
+           else "L1": it only says whether change happened ("significant change occurred").
+           A statement that names a kind of change is L3 even if it also says change happened.
+           A statement that something did NOT change is L1, whatever it is about.
   "type":  one of {types}
   "change_type": one of {change_types}, or null
   "class_before", "class_after": one of {classes}, or null (only for land-cover statements)
@@ -46,6 +53,17 @@ For each claim give:
                       or null (only for shoreline statements)
   "strip": "0-200" or "200-500" (metres inland of the shore), "0-500", or null (only for statements
            about buildings near the shore)
+
+Do not make statements more specific than the report: give class_before / class_after only when the
+statement names that land cover itself (forest or trees, grass, crops or fields, shrub or scrub, built-up
+or buildings, bare soil or rock, water, flooded vegetation). Generic "vegetation" or "green" is not a
+class: for "more / less vegetation" use type "change_type" with change_type vegetation_gain / vegetation_loss
+and no classes.
+
+No-change statements about the coast: split "no shoreline movement or new buildings near the shore"
+into two claims, both L1: the shoreline one with type "shoreline" and shoreline_change "stable", the
+buildings one with type "coastal_built" and strip "0-500". A statement that the box has no visible
+coast, or that the shoreline can't be judged, is type "shoreline", level L1, shoreline_change null.
 
 Fill only the fields that apply to the statement. For every other field write null, the JSON value
 without quotes, never the text "null". class_before and class_after are ONE class name each, never a
@@ -72,9 +90,14 @@ def build_extract_prompt(report: str) -> str:
                                  classes=", ".join(LANDCOVER_CLASSES), report=report.strip())
 
 
-def parse_claims(text: str) -> tuple[list[dict], bool, int]:
+def parse_claims(text: str, stats: dict | None = None) -> tuple[list[dict], bool, int]:
     """(claims, parse_ok, dropped) from the extractor's text. Items that break the claim schema
-    are dropped and counted (a parse failure, evaluation metric 8), never repaired."""
+    are dropped and counted (a parse failure, evaluation metric 8), never repaired, with one
+    exception: a class_before / class_after that is not a Dynamic World class (e.g. "vegetation")
+    is the extractor's slip, not the report's, so it is cleared and the claim kept; `stats`
+    ["cleared"] counts the claims this happened to."""
+    if stats is not None:
+        stats["cleared"] = 0
     match = re.search(r"\[.*\]", text or "", re.S)
     try:
         items = json.loads(match.group(0)) if match else None
@@ -92,10 +115,15 @@ def parse_claims(text: str) -> tuple[list[dict], bool, int]:
         for field in ("change_type", "class_before", "class_after", "shoreline_change", "strip"):
             if item.get(field) is not None:
                 claim[field] = item[field]
+        bad = [f for f in ("class_before", "class_after") if f in claim and claim[f] not in LANDCOVER_CLASSES]
+        for f in bad:
+            del claim[f]
         if validate_claim(claim):
             dropped += 1
             continue
         claims.append(claim)
+        if bad and stats is not None:
+            stats["cleared"] += 1
     for i, c in enumerate(claims, 1):
         c["claim_id"] = f"c{i}"
     return claims, True, dropped
@@ -110,7 +138,14 @@ def run_ungated(writer, extractor, arm: str, key: str, before_window: list[str],
     out = writer.generate(prompt, images, max_new_tokens=600, replay_key=f"{REPORT_PROMPT_VERSION}:{arm}:{key}")
     ext = extractor.generate(build_extract_prompt(out["text"]), [], max_new_tokens=1200,
                              replay_key=f"{EXTRACT_PROMPT_VERSION}:{arm}:{key}")
-    claims, parse_ok, dropped = parse_claims(ext["text"])
-    return {"raw": out["text"], "model": out["model"], "claims": claims, "parse_ok": parse_ok, "dropped": dropped,
-            "extractor_model": ext["model"], "prompt_version": REPORT_PROMPT_VERSION,
-            "extract_version": EXTRACT_PROMPT_VERSION, "chips": chip_set}
+    return ungated_result(out["text"], out["model"], ext["text"], ext["model"], chip_set)
+
+
+def ungated_result(raw: str, model: str, extract_raw: str, extractor_model: str, chip_set: str = "rgb_swir") -> dict:
+    """run_ungated()'s output from the two models' answers (also re-parses logged answers)."""
+    stats: dict = {}
+    claims, parse_ok, dropped = parse_claims(extract_raw, stats)
+    return {"raw": raw, "model": model, "claims": claims, "parse_ok": parse_ok, "dropped": dropped,
+            "cleared": stats["cleared"], "extractor_model": extractor_model, "extract_raw": extract_raw,
+            "prompt_version": REPORT_PROMPT_VERSION, "extract_version": EXTRACT_PROMPT_VERSION,
+            "parse_version": PARSE_VERSION, "chips": chip_set}

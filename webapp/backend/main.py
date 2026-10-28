@@ -549,6 +549,52 @@ def shoreline_lines(month: Optional[str] = None, kind: Optional[Literal["month",
     return {**fc, "features": feats}
 
 
+def _years() -> dict:
+    data = shoreline.load("years.json")
+    if data is None:
+        raise HTTPException(404, "no yearly shorelines yet: run scripts/make_shoreline_years.py")
+    return data
+
+
+@app.get("/api/shoreline/years")
+def shoreline_years():
+    """The yearly (dry-season) shoreline run for the map's time slider: season labels, change counts, method."""
+    y = _years()
+    return {"seasons": [s[0] for s in y["seasons"]], "windows": y["seasons"], "status_counts": y["status_counts"],
+            "method": y["method"]}
+
+
+@app.get("/api/shoreline/years/lines")
+def shoreline_years_lines(season: Optional[str] = None):
+    """One MultiLineString per dry season (tide-averaged radar shoreline); ?season=2015-16 picks one."""
+    transects = _shoreline("transects.geojson")
+    lines = shoreline.load("years_lines.geojson")
+    if lines is None:
+        raise HTTPException(404, "no yearly shorelines yet: run scripts/make_shoreline_years.py")
+    fc = shoreline.hide_lines(lines, transects, shoreline.hidden_transects(transects))
+    feats = [f for f in fc["features"] if season is None or f["properties"]["season"] == season]
+    if season is not None and not feats:
+        raise HTTPException(404, f"no shoreline for season {season}")
+    return {**fc, "features": feats}
+
+
+@app.get("/api/shoreline/years/transects")
+def shoreline_years_transects(change: Optional[str] = None):
+    """Transects with their yearly-run rate and change (over the dry seasons) instead of the 24-month ones."""
+    fc, y = _shoreline("transects.geojson"), _years()
+    feats = []
+    for f in fc["features"]:
+        st = y["transects"].get(f["id"])
+        if st is None:
+            continue
+        props = {k: f["properties"][k] for k in ("id", "line", "chainage_m") if k in f["properties"]}
+        feats.append({**f, "properties": {**props, **st}})
+    out = shoreline.hide_transects({**fc, "features": feats}, shoreline.hidden_transects(fc))
+    if change:
+        out = {**out, "features": [f for f in out["features"] if f["properties"].get("change") == change]}
+    return out
+
+
 @app.get("/api/shoreline/transects/{tid}")
 def shoreline_transect(tid: str):
     """One transect's positions (m from the baseline, seaward +; null = none): monthly (tide-affected)
@@ -562,10 +608,14 @@ def shoreline_transect(tid: str):
         raise HTTPException(404, f"unknown transect {tid}")
     if tid in shoreline.hidden_transects(transects):          # Phase 14 reference transect: blind until digitised
         return {**shoreline.hide_transects({"features": [feat]}, {tid})["features"][0]["properties"],
-                "geometry": feat["geometry"], "series": None, "quarterly": None}
+                "geometry": feat["geometry"], "series": None, "quarterly": None, "yearly": None, "yearly_stats": None}
+    y = shoreline.load("years.json")
+    yearly = None if y is None else [{"season": s[0], "pos": p, "optical": o} for s, p, o in
+                                     zip(y["seasons"], y["positions"].get(tid, []), y["optical"].get(tid, []))]
     return {**feat["properties"], "geometry": feat["geometry"],
             "series": [{"month": m, "pos": p} for m, p in zip(pos["months"], pos["positions"][tid])],
-            "quarterly": [{"quarter": q, "pos": p} for q, p in zip(pos.get("quarters", []), pos.get("quarter_positions", {}).get(tid, []))]}
+            "quarterly": [{"quarter": q, "pos": p} for q, p in zip(pos.get("quarters", []), pos.get("quarter_positions", {}).get(tid, []))],
+            "yearly": yearly, "yearly_stats": None if y is None else y["transects"].get(tid)}
 
 
 # ---------- Phase 12 (D11): buildings near the shoreline ----------

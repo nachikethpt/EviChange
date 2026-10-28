@@ -395,6 +395,19 @@ in the PR (the code was written and unit-tested without an Earth Engine login; t
   the 2018–19 / 2022–23 windows a strip is where the coast is now (the same caveat as the window transects).
   Narrow water the sea mask's opening leaves out (docks, channels) counts as strip land, with no built area.
 
+**Yearly shorelines and the map's time slider (2026-10-28, asked by the professor).** The 24-month
+monthly series shows tides more than change (5 transects advancing, none retreating), so a yearly mode
+is added: one tide-averaged radar shoreline per dry season (Oct–Mar) from 2015-16 to 2025-26 on the same
+735 transects, plus that season's Sentinel-2 shoreline (from 2016-17; S2 SR does not cover 2015-16).
+The rate is a regression over the seasons (≥ 5 seasons, 95 % CI excludes 0) and the change is confirmed
+by the optical shoreline as in Phase 11 (`shoreline.build_years`, `scripts/make_shoreline_years.py`,
+`years.json`, `years_lines.geojson`). First run: 34 advancing (up to +41 m/yr, reclamation), 4
+retreating (to −46 m/yr), 446 stable, 45 unconfirmed, 206 too few. The map's **〰 Shoreline** panel
+(`webapp/frontend/shoreline.js`) shows the shoreline of the chosen season or month on a slider (play
+button, the first date dashed), the transects coloured by change, and a clicked transect's position
+series. API: `/api/shoreline/years`, `/api/shoreline/years/lines?season=`, `/api/shoreline/years/transects`;
+`/api/shoreline/transects/{id}` adds `yearly`. Phase 14 reference transects stay hidden (D13).
+
 ## D12 — Planet-ready imagery source (2026-10-08, proposed)
 
 **Decision.** `ee_engine` gets an imagery `source` (`sentinel2` now, `planet` when the data arrives)
@@ -795,6 +808,24 @@ weights stay frozen):
 - *The first-scheme labels* (329 boxes) are kept, as a comparison of what 10 m labelling got right.
 - *Outside yardstick:* both Qwen models are scored on GEOBench-VLM's temporal multiple-choice tasks
   (`scripts/geobench_eval.py`, evaluation only).
+- *Calibration round 1 (2026-10-27): not passed.* P2 and P3 on the 40 calibration boxes: main cover
+  per date κ 0.72 (79 % agree), derived change κ 0.40 (70 %), below 0.5. Of the 12 boxes derived
+  differently, 7 have the same main covers and differ only in the smaller covers ticked, and in 9 P2
+  ticks more than P3: "about a fifth" was read differently. Deriving change from the main cover alone
+  does not help (κ 0.31).
+- *Calibration round 2 (decided 2026-10-27, P2):*
+  1. **Cell rule** on the labelling page: the box is a 5 × 5 grid (the page's KML draws it in Google
+     Earth Pro); each cell goes to the cover that fills most of it; a cover is ticked at 5 cells or more,
+     the main cover has the most cells; when unsure whether a cover reaches 5 cells, it is not ticked;
+     a cover that looks the same at both dates is ticked at both or neither.
+  2. P2 and P3 go through the 12 round-1 disagreements together under the cell rule
+     (`finetune_mcq.py --review`). This only settles the rule; round-1 labels are not changed.
+  3. Both label 40 **fresh** calibration boxes (`calib2`, seeded, taken out of the training boxes).
+     κ on calib2 decides: training needs κ ≥ 0.5 on both the derived change and the main cover.
+     Round-1 boxes are not relabelled, because discussing them would inflate κ.
+  4. *Second labeller changed (2026-10-28, P2):* **P1 labels calib2 instead of P3.** κ on calib2 is
+     P2 vs P1. P1 did not take part in round 1 or the review, so P1 learns the cell rule from the
+     page only. Limit: round 1 and round 2 measure different pairs of labellers.
 
 **Limits.**
 - Two labellers, one of whom (P2) built the system; P2 labelled most of the boxes.
@@ -802,7 +833,7 @@ weights stay frozen):
   2022/23, not change in general.
 - 10 m chips.
 
-## D18 — Claim adjudication rules (2026-10-25, proposed)
+## D18 — Claim adjudication rules (2026-10-25; decided 2026-10-26)
 
 **Problem.** Two gaps in the Phase 5 truth axis would decide the comparison by wording alone
 (`docs/eval_audit.md`, findings 1–2):
@@ -823,3 +854,44 @@ weights stay frozen):
 sentence to "The detector found no change in the box" before the freeze.
 
 **Decide before the Phase 4 freeze**; the rules are then pinned by commit with the prompts.
+
+**Decided 2026-10-26 (P2): the proposal.** The alternative is not taken, so gated's rule-4 sentence keeps its
+wording.
+- `about_detector` claims are left out of the hallucination denominator (metrics 1 and 2). They are reported as a
+  count per condition and stratum, and "missed change at random sites" joins metric 6.
+- `unverifiable` is only for cause, intent, legality, ownership and the future. Numbers are judged with the
+  tolerances in `docs/adjudication_rules.md` § 3.
+- A second adjudicator does a seeded 20 % of sites (`eval/adjudication.py`, `SECOND_SHARE`), with κ on both axes.
+
+The analysis plan that uses these rules is `docs/analysis_plan.md`.
+
+## D19 — Phase 4 report prompts frozen (2026-10-27)
+
+**Decided 2026-10-27 (P2).** The report prompts and the claim parser are frozen for the evaluation on the
+30 labelled sites. They are pinned by the commit that adds this entry, together with the D18 adjudication
+rules and `docs/analysis_plan.md`:
+
+| Part | Version | File |
+|---|---|---|
+| Gated report | `gated_report_v6` (1-4 claims, most informative first) | `agents/gated.py` |
+| Ungated report | `ungated_report_v1` | `agents/ungated.py` |
+| Claim extractor (both ungated arms) | `claim_extract_v5` (no-change statements are L1) | `agents/ungated.py` |
+| Claim parser | `claim_parse_v2` (a class that is not a Dynamic World class is cleared, the claim kept and counted) | `agents/ungated.py` |
+| Template | rules | `webapp/backend/report.py` |
+
+Model and image set as D15: Qwen2.5-VL-7B-Instruct, `rgb_swir` chips.
+
+**Why now.** Five development rounds on the 80 D15 boxes (60 detected, 20 controls; log
+`data/reports_dev.jsonl`, summary `docs/report_dev.md`). Gated was stable from round 3: detected
+claims 72-80 % supported and 7-9 % unsupported, every control correctly "no change". Round 5 (gated v6):
+detected 72 % supported / 7 % unsupported / 21 % uncertain, 3.5 claims per box, no parse failures;
+controls 20/20 supported. Ungated (round 5, parser v2): detected 29 % / 25 % / 46 %, claims change in
+20/20 controls (0 % supported), 19 L4 claims. The last two rounds fixed the measurement (extractor and
+parser), not the gated prompt.
+
+**Known limits.**
+- The extractor is the same 7B model; it still attaches land-cover classes where the report names none.
+  Parser v2 clears them (246 claims in round 5). It runs on both ungated arms, so the comparison stays
+  fair, but extraction errors are a limitation of the ungated numbers.
+- About a fifth of gated claims are uncertain, mostly from low detection confidence (a detector property).
+- Any change after this point is a deviation: it is reported and all conditions are rerun.
