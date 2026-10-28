@@ -4,7 +4,8 @@
 **Why:** on 2026-10-28 the professor asked for the paper to focus on the **shoreline**. The shoreline part
 of `docs/related_work.md` ("Shoreline work uses MNDWI plus DSAS, with one Cam Pha study") is short, and
 most of its citations are tagged [PK] (from memory, never checked). The paper needs it solid.
-Nothing here blocks anyone, and no labels are involved, so there are no blindness rules.
+Nothing here blocks anyone. You're also a Phase 14 labeller (`docs/briefs/phase14_p1_third_labeller.md`):
+finish those labels first, so reading about our shoreline method can't influence them.
 
 ## What to do
 
