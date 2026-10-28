@@ -1,0 +1,204 @@
+{
+ "r393": {
+  "before": {
+   "covers": [
+    "bare",
+    "built"
+   ],
+   "main": "bare"
+  },
+  "after": {
+   "covers": [
+    "sparse_vegetation",
+    "bare",
+    "built"
+   ],
+   "main": "sparse_vegetation"
+  }
+ },
+ "r58": {
+  "before": {
+   "covers": [
+    "dense_vegetation"
+   ],
+   "main": "dense_vegetation"
+  },
+  "after": {
+   "covers": [
+    "dense_vegetation"
+   ],
+   "main": "dense_vegetation"
+  }
+ },
+ "r470": {
+  "before": {
+   "covers": [
+    "water",
+    "dense_vegetation"
+   ],
+   "main": "water"
+  },
+  "after": {
+   "covers": [
+    "water",
+    "dense_vegetation"
+   ],
+   "main": "water"
+  },
+  "note": "there is a  decrease in water so more vegitation"
+ },
+ "r273": {
+  "before": {
+   "covers": [
+    "dense_vegetation",
+    "sparse_vegetation",
+    "built"
+   ],
+   "main": "dense_vegetation"
+  },
+  "after": {
+   "covers": [
+    "dense_vegetation",
+    "sparse_vegetation",
+    "built"
+   ],
+   "main": "dense_vegetation"
+  },
+  "note": "loss of tress in one area and gain of trees in an other area both are dense vegitation"
+ },
+ "r96": {
+  "before": {
+   "covers": [
+    "water",
+    "built"
+   ],
+   "main": "water"
+  },
+  "after": {
+   "covers": [
+    "water",
+    "built"
+   ],
+   "main": "water"
+  }
+ },
+ "t15": {
+  "before": {
+   "covers": [
+    "built"
+   ],
+   "main": "built"
+  },
+  "after": {
+   "covers": [
+    "built"
+   ],
+   "main": "built"
+  }
+ },
+ "r231": {
+  "before": {
+   "covers": [
+    "sparse_vegetation",
+    "bare"
+   ],
+   "main": "bare"
+  },
+  "after": {
+   "covers": [
+    "bare",
+    "built"
+   ],
+   "main": "bare"
+  },
+  "note": "a mountain with little vegitation has been mined"
+ },
+ "r196": {
+  "before": {
+   "covers": [
+    "water",
+    "dense_vegetation",
+    "built"
+   ],
+   "main": null
+  },
+  "after": {
+   "covers": [
+    "water",
+    "sparse_vegetation",
+    "built"
+   ],
+   "main": "sparse_vegetation"
+  }
+ },
+ "r172": {
+  "before": {
+   "covers": [
+    "bare",
+    "built"
+   ],
+   "main": "bare"
+  },
+  "after": {
+   "covers": [
+    "sparse_vegetation",
+    "bare",
+    "built"
+   ],
+   "main": "sparse_vegetation"
+  }
+ },
+ "r144": {
+  "before": {
+   "covers": [
+    "bare",
+    "built"
+   ],
+   "main": "bare"
+  },
+  "after": {
+   "covers": [
+    "sparse_vegetation",
+    "bare",
+    "built"
+   ],
+   "main": "bare"
+  }
+ },
+ "r395": {
+  "before": {
+   "covers": [
+    "dense_vegetation",
+    "sparse_vegetation",
+    "bare",
+    "built"
+   ],
+   "main": "dense_vegetation"
+  },
+  "after": {
+   "covers": [
+    "dense_vegetation",
+    "sparse_vegetation",
+    "built"
+   ],
+   "main": "dense_vegetation"
+  }
+ },
+ "r404": {
+  "before": {
+   "covers": [
+    "bare",
+    "built"
+   ],
+   "main": "built"
+  },
+  "after": {
+   "covers": [
+    "sparse_vegetation",
+    "built"
+   ],
+   "main": "built"
+  },
+  "note": "more grass has appeared and the trees arond the edges of the box"
+ }
+}
