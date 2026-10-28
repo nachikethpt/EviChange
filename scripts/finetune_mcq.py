@@ -12,9 +12,11 @@ image used is recorded per window. Change and change types are then DERIVED (der
 
     python scripts\finetune_mcq.py --sheet --set calib  --labeller P2   # the 40 shared calibration boxes
     python scripts\finetune_mcq.py --sheet --set calib  --labeller P3   # same boxes, P3
+    python scripts\finetune_mcq.py --sheet --set calib2 --labeller P2   # 40 fresh calibration boxes, cell rule (round 2)
+    python scripts\finetune_mcq.py --review                             # the calibration boxes P2 and P3 derive differently
     python scripts\finetune_mcq.py --sheet --set holdout --labeller P2  # the 80 held-out boxes (both labellers)
     python scripts\finetune_mcq.py --sheet --set train  --labeller P2   # next 50 training boxes
-    python scripts\finetune_mcq.py --kappa                              # agreement on boxes both labelled
+    python scripts\finetune_mcq.py --kappa                              # agreement per set, on boxes both labelled
     python scripts\finetune_mcq.py --status
 
 Each page is <name>.html + <name>.kml. Save on the page downloads <name>.json; put it in
@@ -46,6 +48,12 @@ COVER_TEXT = {"water": "water (sea, rivers, ponds; aquaculture: fish / shrimp po
               "bare": "bare ground (soil, rock, sand, mine, fill)", "built": "built-up (buildings, roads, concrete)"}
 VEG = {"dense_vegetation", "sparse_vegetation", "crops"}
 CALIB_N, SEED, SHEET_SIZE = 40, 23, 50
+GRID = 5        # the cell rule: the box as GRID x GRID cells; a cover counts if it is the most of >= GRID cells
+CELL_RULE = (f"<b>Cell rule.</b> Picture the box as a {GRID} &times; {GRID} grid ({GRID * GRID} cells; the .kml draws it in "
+             f"Google Earth Pro). Give each cell to the cover that fills most of it. Tick a cover if it has at least {GRID} "
+             f"cells (a fifth); the main cover is the one with the most cells. Thin things (roads, a river, a row of "
+             f"houses) count only for the cells they fill most of. <b>If you are unsure whether a cover reaches {GRID} cells, "
+             f"do not tick it.</b> Judge both dates the same way: if a cover looks the same at both dates, tick it at both or at neither.")
 
 
 # ---------- deriving change ----------
@@ -103,12 +111,23 @@ def cover_kappa(labels_a: dict, labels_b: dict) -> dict:
 # ---------- sets and labels ----------
 def box_sets(fc: dict) -> dict[str, list[dict]]:
     """train: the D17 training boxes minus the calibration ones; calib: 40 of them, drawn once (seeded);
-    holdout: the 80 D15 boxes."""
+    calib2: 40 more for the second calibration round (cell rule), drawn once from the rest; holdout: the
+    80 D15 boxes."""
     train = json.loads(fd.BOXES.read_text(encoding="utf-8"))["boxes"]
     calib_ids = set(random.Random(SEED).sample(sorted(b["id"] for b in train), CALIB_N))
+    calib2_ids = set(random.Random(f"{SEED}-calib2").sample(sorted(b["id"] for b in train if b["id"] not in calib_ids), CALIB_N))
     return {"calib": [b for b in train if b["id"] in calib_ids],
-            "train": [b for b in train if b["id"] not in calib_ids],
+            "calib2": [b for b in train if b["id"] in calib2_ids],
+            "train": [b for b in train if b["id"] not in calib_ids | calib2_ids],
             "holdout": fd.holdout_items(fc)}
+
+
+def agreement(labels_a: dict, labels_b: dict, ids: set[str]) -> dict:
+    """kappa on the derived change and on the main cover per date, on the boxes in `ids` both labelled."""
+    both = sorted(set(labels_a) & set(labels_b) & ids)
+    pairs = [(derive(labels_a[i])["verdict"], derive(labels_b[i])["verdict"]) for i in both]
+    return {"n": len(both), "change": kappa(pairs),
+            "main_cover": cover_kappa({i: labels_a[i] for i in both}, {i: labels_b[i] for i in both})}
 
 
 def read_labels(labeller: str | None = None, folder: Path | None = None) -> dict[str, dict]:
@@ -117,6 +136,7 @@ def read_labels(labeller: str | None = None, folder: Path | None = None) -> dict
     folder = Path(folder or LABEL_DIR)
     out: dict[str, dict] = {}
     files = sorted(folder.glob("*.json"), key=lambda p: p.stat().st_mtime) if folder.exists() else []
+    files = [f for f in files if "_review_" not in f.name]      # agreed review answers settle the rule, they are not labels
     if labeller is None:
         files = [f for f in files if labeller_of(f.name) != "P2"] + [f for f in files if labeller_of(f.name) == "P2"]
     for p in files:
@@ -146,6 +166,7 @@ def earth_link(box: tuple) -> str:
 
 
 def kml(items: list[dict], title: str) -> str:
+    """The page's boxes (yellow, numbered as on the page) with the cell rule's grid inside (thin, white)."""
     marks = []
     for n, it in enumerate(items, 1):
         w, s, e, nn = it["box"]
@@ -153,6 +174,11 @@ def kml(items: list[dict], title: str) -> str:
         marks.append(f"<Placemark><name>{n}</name><Style><LineStyle><color>ff00ffff</color><width>2</width></LineStyle>"
                      f"<PolyStyle><fill>0</fill></PolyStyle></Style><Polygon><outerBoundaryIs><LinearRing><coordinates>{ring}"
                      f"</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>")
+        lines = [((w + (e - w) * k / GRID, s), (w + (e - w) * k / GRID, nn)) for k in range(1, GRID)] + \
+                [((w, s + (nn - s) * k / GRID), (e, s + (nn - s) * k / GRID)) for k in range(1, GRID)]
+        grid = "".join(f"<LineString><coordinates>{a[0]},{a[1]},0 {b[0]},{b[1]},0</coordinates></LineString>" for a, b in lines)
+        marks.append(f"<Placemark><name>{n} grid</name><Style><LineStyle><color>99ffffff</color><width>1</width></LineStyle></Style>"
+                     f"<MultiGeometry>{grid}</MultiGeometry></Placemark>")
     return (f'<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
             f"<name>{html.escape(title)}</name>{''.join(marks)}</Document></kml>\n")
 
@@ -187,7 +213,8 @@ def sheet(items: list[dict], params: dict, title: str, windows: list[list[str]])
 Best: open the box in Google Earth (link, or this page's .kml in Google Earth Pro) and use the
 <b>historical imagery</b> slider to find the clearest image <b>inside each window</b> (or the closest to it), and note its month.
 The Sentinel-2 chips below are the same place at 10 m, for reference. Tick every cover taking up at least about
-a fifth of the box, then the main one. Use "can't tell" only when no image lets you see the box.
+a fifth of the box, then the main one. Use "can't tell" only when no image lets you see the box.</p>
+<p>{CELL_RULE}
 <b>Aquaculture is water</b>: fish / shrimp ponds and floating cages (dots on the water) are water, never crops;
 tick built-up as well only if rafts and walkways cover a fifth of the box; wide pond walls are bare.</p>
 {''.join(cards)}
@@ -215,13 +242,78 @@ function save() {{
 """
 
 
+def review(items: list[dict], params: dict, labels: dict[str, dict], title: str) -> str:
+    """The boxes two labellers derive differently, side by side, for settling the cell rule together.
+    Only for boxes both have already labelled (the calibration round is over)."""
+    def cell(lab: dict, w: str) -> str:
+        d = lab.get(w) or {}
+        if d.get("cant_tell"):
+            return "can't tell"
+        covers = ", ".join(c.replace("_", " ") for c in d.get("covers") or [])
+        return (f'<b>{(d.get("main") or "–").replace("_", " ")}</b> &nbsp;<span class="muted">covers: {covers or "–"}; '
+                f'image {d.get("image_date") or "–"}</span>')
+    cards = []
+    for n, it in enumerate(items, 1):
+        folder = vlm_batch.chip_dir(params, tuple(it["box"]))
+        figs = "".join(
+            f'<figure><img src="data:image/png;base64,{base64.b64encode((folder / f"{w}_{k}.png").read_bytes()).decode()}">'
+            f'<figcaption>{w} · {k}</figcaption></figure>' for k in fd.ALL_KINDS for w in ("before", "after"))
+        rows = "".join(f'<tr><td>{who}</td><td>{derive(lab)["verdict"].replace("_", " ")}</td><td>{cell(lab, "before")}</td>'
+                       f'<td>{cell(lab, "after")}</td></tr>' for who, lab in labels[it["id"]].items())
+        bid = html.escape(it["id"])
+        agreed = "".join(
+            f'<div class="date"><b>Agreed {w.upper()}</b>: covers (5+ cells) '
+            + "".join(f'<label><input type="checkbox" name="c_{w}_{bid}" value="{c}"> {c.replace("_", " ")}</label>' for c in COVERS)
+            + "<br>main: " + "".join(f'<label><input type="radio" name="m_{w}_{bid}" value="{c}"> {c.replace("_", " ")}</label>' for c in COVERS)
+            + "</div>" for w in ("before", "after"))
+        cards.append(f'<section data-id="{bid}"><h2>{n}. <a href="{earth_link(tuple(it["box"]))}" target="_blank">open in Google Earth</a></h2>'
+                     f'<div class="imgs">{figs}</div><table><tr><th></th><th>derived</th><th>before</th><th>after</th></tr>{rows}</table>'
+                     f'{agreed}<label>Notes: <input type="text" name="n_{bid}" size="90"></label></section>')
+    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><title>{html.escape(title)}</title>
+<style>body{{font:14px system-ui,sans-serif;margin:16px;max-width:1300px}}section{{border-top:2px solid #999;padding:8px 0}}
+.imgs{{display:grid;grid-template-columns:repeat(6,1fr);gap:4px}}figure{{margin:0}}img{{width:100%}}figcaption{{font-size:11px;color:#555}}
+table{{border-collapse:collapse;margin:6px 0}}td,th{{border:1px solid #ccc;padding:4px 8px;text-align:left}}.muted{{color:#666}}
+.date{{margin:6px 0;padding:6px;background:#f4f4f4;border-radius:6px}}label{{margin-right:10px;white-space:nowrap;line-height:1.9}}
+button{{font-size:15px;padding:6px 14px;position:sticky;bottom:8px}}</style></head><body>
+<h1>{html.escape(title)} ({len(items)} boxes)</h1>
+<p>The calibration boxes where P2's and P3's labels derive differently (change vs no change). Go through them together
+with the grid (this page's .kml in Google Earth Pro) and settle each one under the cell rule, so both of you read
+"about a fifth" the same way. These answers are for agreeing the rule only: they do not replace either labeller's
+labels, and the agreement is measured again on 40 fresh boxes (calib2).</p>
+<p>{CELL_RULE}</p>
+{''.join(cards)}
+<p><button onclick="save()">Save agreed answers</button> <span id="n"></span></p>
+<script>
+function save() {{
+  const out = {{}};
+  document.querySelectorAll('section[data-id]').forEach(s => {{
+    const id = s.dataset.id, lab = {{}};
+    for (const w of ['before', 'after']) {{
+      const covers = [...s.querySelectorAll(`input[name="c_${{w}}_${{id}}"]:checked`)].map(c => c.value);
+      const main = s.querySelector(`input[name="m_${{w}}_${{id}}"]:checked`);
+      if (covers.length || main) lab[w] = {{covers, main: main ? main.value : null}};
+    }}
+    const note = s.querySelector(`input[name="n_${{id}}"]`).value;
+    if (note) lab.note = note;
+    if (Object.keys(lab).length) out[id] = lab;
+  }});
+  document.getElementById('n').textContent = Object.keys(out).length + ' of {len(items)} boxes have answers';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 1)], {{type: 'application/json'}}));
+  a.download = '{html.escape(title).replace(" ", "_").lower()}.json'; a.click();
+}}
+</script></body></html>
+"""
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--sheet", action="store_true")
-    ap.add_argument("--set", choices=("calib", "holdout", "train"), default="train")
+    ap.add_argument("--set", choices=("calib", "calib2", "holdout", "train"), default="train")
     ap.add_argument("--labeller", default="P2")
     ap.add_argument("--kappa", action="store_true")
     ap.add_argument("--status", action="store_true")
+    ap.add_argument("--review", action="store_true", help="page of the calibration boxes P2 and P3 derive differently")
     args = ap.parse_args(argv)
     sys.stdout.reconfigure(encoding="utf-8")
     fc = json.loads(vlm_batch.REGIONS.read_text(encoding="utf-8"))
@@ -232,10 +324,23 @@ def main(argv: list[str] | None = None) -> None:
         for name, items in sets.items():
             ids = {it["id"] for it in items}
             print(f"{name}: {len(items)} boxes; P2 {len(ids & set(mine['P2']))}, P3 {len(ids & set(mine['P3']))} labelled")
-        both = set(mine["P2"]) & set(mine["P3"])
-        if args.kappa and both:
-            pairs = [(derive(mine["P2"][i])["verdict"], derive(mine["P3"][i])["verdict"]) for i in sorted(both)]
-            print(f"both labelled {len(both)}: change / no change {kappa(pairs)}; main cover per date {cover_kappa(mine['P2'], mine['P3'])}")
+        if args.kappa:
+            for name in ("calib", "calib2", "holdout"):
+                a = agreement(mine["P2"], mine["P3"], {it["id"] for it in sets[name]})
+                if a["n"]:
+                    print(f"{name}: both labelled {a['n']}: change / no change {a['change']}; main cover per date {a['main_cover']}")
+        return
+    if args.review:
+        mine = {who: read_labels(who) for who in ("P2", "P3")}
+        items = [it for it in sets["calib"] if it["id"] in mine["P2"] and it["id"] in mine["P3"]
+                 and derive(mine["P2"][it["id"]])["verdict"] != derive(mine["P3"][it["id"]])["verdict"]]
+        if not items:
+            raise SystemExit("no calibration box is derived differently")
+        name = "lc_calib_review_1"
+        labels = {it["id"]: {"P2": mine["P2"][it["id"]], "P3": mine["P3"][it["id"]]} for it in items}
+        (ROOT / f"{name}.html").write_text(review(items, params, labels, name.replace("_", " ")), encoding="utf-8")
+        (ROOT / f"{name}.kml").write_text(kml(items, name.replace("_", " ")), encoding="utf-8")
+        print(f"{len(items)} boxes -> {name}.html + {name}.kml")
         return
     if args.sheet:
         who = args.labeller.upper()
