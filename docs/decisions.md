@@ -823,6 +823,9 @@ weights stay frozen):
   3. Both label 40 **fresh** calibration boxes (`calib2`, seeded, taken out of the training boxes).
      κ on calib2 decides: training needs κ ≥ 0.5 on both the derived change and the main cover.
      Round-1 boxes are not relabelled, because discussing them would inflate κ.
+  4. *Second labeller changed (2026-10-28, P2):* **P1 labels calib2 instead of P3.** κ on calib2 is
+     P2 vs P1. P1 did not take part in round 1 or the review, so P1 learns the cell rule from the
+     page only. Limit: round 1 and round 2 measure different pairs of labellers.
 
 **Limits.**
 - Two labellers, one of whom (P2) built the system; P2 labelled most of the boxes.

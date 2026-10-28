@@ -320,15 +320,18 @@ def main(argv: list[str] | None = None) -> None:
     params = vlm_batch.analysis_params(fc)
     sets = box_sets(fc)
     if args.status or args.kappa:
-        mine = {who: read_labels(who) for who in ("P2", "P3")}
+        # P2 against each second labeller (P3 in round 1; P1 took P3's place for calib2, D17)
+        mine = {who: read_labels(who) for who in ("P2", "P3", "P1")}
         for name, items in sets.items():
             ids = {it["id"] for it in items}
-            print(f"{name}: {len(items)} boxes; P2 {len(ids & set(mine['P2']))}, P3 {len(ids & set(mine['P3']))} labelled")
+            print(f"{name}: {len(items)} boxes; " + ", ".join(f"{w} {len(ids & set(mine[w]))}" for w in mine) + " labelled")
         if args.kappa:
             for name in ("calib", "calib2", "holdout"):
-                a = agreement(mine["P2"], mine["P3"], {it["id"] for it in sets[name]})
-                if a["n"]:
-                    print(f"{name}: both labelled {a['n']}: change / no change {a['change']}; main cover per date {a['main_cover']}")
+                for other in ("P3", "P1"):
+                    a = agreement(mine["P2"], mine[other], {it["id"] for it in sets[name]})
+                    if a["n"]:
+                        print(f"{name}, P2 vs {other}: both labelled {a['n']}: change / no change {a['change']}; "
+                              f"main cover per date {a['main_cover']}")
         return
     if args.review:
         mine = {who: read_labels(who) for who in ("P2", "P3")}

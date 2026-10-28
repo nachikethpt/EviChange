@@ -102,3 +102,7 @@ def test_kml_draws_the_cell_grid_and_review_shows_both(tmp_path, monkeypatch):
             (folder / f"{w}_{k}.png").write_bytes(b"png")
     page = fm.review(items, params, {"r200": {"P2": lab(["water"], ["bare"]), "P3": lab(["water"], ["water"])}}, "review")
     assert "P2" in page and "P3" in page and "no change" in page and "Cell rule" in page
+
+
+def test_p1_pages_are_p1s():
+    assert fm.labeller_of("lc_calib2_p1_1.json") == "P1" and fm.labeller_of("lc_calib2_p2_1.json") == "P2"
