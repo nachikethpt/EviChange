@@ -395,6 +395,19 @@ in the PR (the code was written and unit-tested without an Earth Engine login; t
   the 2018–19 / 2022–23 windows a strip is where the coast is now (the same caveat as the window transects).
   Narrow water the sea mask's opening leaves out (docks, channels) counts as strip land, with no built area.
 
+**Yearly shorelines and the map's time slider (2026-10-28, asked by the professor).** The 24-month
+monthly series shows tides more than change (5 transects advancing, none retreating), so a yearly mode
+is added: one tide-averaged radar shoreline per dry season (Oct–Mar) from 2015-16 to 2025-26 on the same
+735 transects, plus that season's Sentinel-2 shoreline (from 2016-17; S2 SR does not cover 2015-16).
+The rate is a regression over the seasons (≥ 5 seasons, 95 % CI excludes 0) and the change is confirmed
+by the optical shoreline as in Phase 11 (`shoreline.build_years`, `scripts/make_shoreline_years.py`,
+`years.json`, `years_lines.geojson`). First run: 34 advancing (up to +41 m/yr, reclamation), 4
+retreating (to −46 m/yr), 446 stable, 45 unconfirmed, 206 too few. The map's **〰 Shoreline** panel
+(`webapp/frontend/shoreline.js`) shows the shoreline of the chosen season or month on a slider (play
+button, the first date dashed), the transects coloured by change, and a clicked transect's position
+series. API: `/api/shoreline/years`, `/api/shoreline/years/lines?season=`, `/api/shoreline/years/transects`;
+`/api/shoreline/transects/{id}` adds `yearly`. Phase 14 reference transects stay hidden (D13).
+
 ## D12 — Planet-ready imagery source (2026-10-08, proposed)
 
 **Decision.** `ee_engine` gets an imagery `source` (`sentinel2` now, `planet` when the data arrives)

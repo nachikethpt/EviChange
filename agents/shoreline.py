@@ -389,7 +389,9 @@ def optical_water(ee: Any, aoi: dict, start: str, end: str) -> Any:
         return im.normalizedDifference(["B3", "B11"]).rename("mndwi").updateMask(ok)
 
     col = ee.ImageCollection(S2_COLLECTION).filterBounds(ee.Geometry(aoi)).filterDate(start, end).map(clear)
-    return col.median().gt(0).unmask(255).toByte()
+    water = col.median().gt(0).unmask(255).toByte()
+    # a season before Sentinel-2 SR covers the area has no images: all 255 (no optical position)
+    return ee.Image(ee.Algorithms.If(col.size().gt(0), water, ee.Image.constant(255).toByte().rename("mndwi")))
 
 
 def sea_polygons(ee: Any, aoi: dict, stack: Any) -> list[dict]:
@@ -667,6 +669,123 @@ def evidence_transects(box: tuple, transects: dict, stats: dict) -> list[dict]:
         out.append({"id": f["id"], "location": where_in_box(*mid, box), "change": st["change"],
                     "nsm": st["nsm"], "lrr": st["lrr"], "ci95": st["ci95"]})
     return out
+
+
+# ---------- yearly mode (map time slider) ----------
+# One shoreline per dry season (Oct-Mar, as D11) from 2015-16 to 2025-26 on the same transects, each from
+# a tide-averaged radar water map over the whole season (as the two-window mode) plus the season's optical
+# water. The 24-month monthly series shows tides more than change; ten seasons show the change.
+YEARS_FIRST, YEARS_LAST = "2015-10", "2026-03"
+MIN_SEASONS = 5                # seasons with a position needed for a rate
+
+
+def year_seasons(first: str = YEARS_FIRST, last: str = YEARS_LAST) -> list[tuple[str, str, str]]:
+    """[(label, first day, day after)], e.g. ('2015-16', '2015-10-01', '2016-04-01')."""
+    from .monthly import dry_seasons
+    return dry_seasons(first, last)
+
+
+def position_point(feature: dict, pos: float) -> tuple[float, float]:
+    """Lon/lat of a position (m from the baseline, seaward +) on a transects.geojson line."""
+    (lon_a, lat_a), (lon_b, lat_b) = feature["geometry"]["coordinates"]
+    f = (pos + LAND_M) / (LAND_M + SEA_M)
+    return round(lon_a + f * (lon_b - lon_a), 6), round(lat_a + f * (lat_b - lat_a), 6)
+
+
+def season_lines(features: list[dict], positions: dict[str, list[float | None]], idx: int,
+                 max_gap: int = 1) -> list[list[tuple[float, float]]]:
+    """A season's shoreline as polylines through consecutive transects' positions (as monthly_lines, from
+    transects.geojson: neighbours are consecutive features of the same baseline line)."""
+    runs, cur, prev = [], [], None
+    for k, f in enumerate(features):
+        p = (positions.get(f["id"]) or [None] * (idx + 1))[idx]
+        if p is None:
+            continue
+        line = f["properties"]["line"]
+        if prev is not None and (line != prev[0] or k - prev[1] > max_gap + 1):
+            if len(cur) >= 2:
+                runs.append(cur)
+            cur = []
+        cur.append(position_point(f, p))
+        prev = (line, k)
+    if len(cur) >= 2:
+        runs.append(cur)
+    return runs
+
+
+def years_stats(labels: list[str], radar: list[float | None], optical: list[float | None]) -> dict:
+    """A transect's rate over the seasons (rate_stats, years from the first season) with the change
+    confirmed by the optical shift between its first and last season with an optical position."""
+    t = [int(lb[:4]) - int(labels[0][:4]) for lb in labels]
+    st = rate_stats(list(zip(t, radar)), min_months=MIN_SEASONS)
+    opt = [p for p in optical if p is not None]
+    return {**st, "opt_first": opt[0] if opt else None, "opt_last": opt[-1] if len(opt) > 1 else None,
+            **confirm(st["trend"], opt[0] if opt else None, opt[-1] if len(opt) > 1 else None)}
+
+
+def build_years(aoi: dict, transects: dict, seasons: list[tuple[str, str, str]] | None = None, log=print) -> dict:
+    """Yearly shoreline positions and rates on the Phase 11 transects. {'seasons', 'positions': {id: [m]},
+    'optical': {id: [m]}, 'transects': {id: years_stats()}, 'status_counts', 'method'}."""
+    from .ee_engine import _ee
+    from .monthly import s1_thresholds, water_image
+    ee = _ee()
+    seasons = seasons or year_seasons()
+    bands, imgs = [], []
+    for label, s, e in seasons:
+        th = s1_thresholds(ee, aoi, s, e)
+        tag = label.replace("-", "_")
+        log(f"{label} {s} - {e}: {len(th)} radar scenes ({sum(1 for v in th.values() if v.get('fallback'))} on the fallback threshold)")
+        if th:
+            imgs.append(water_image(ee, aoi, s, e, th).unmask(255).rename(f"r_{tag}"))
+            bands.append(f"r_{tag}")
+        imgs.append(optical_water(ee, aoi, s, e).rename(f"o_{tag}"))
+        bands.append(f"o_{tag}")
+    stack = ee.Image.cat(imgs)
+    offsets = profile_offsets()
+    points = [(f["id"], i, lon, lat) for f in transects["features"] for i, (lon, lat) in enumerate(transect_points(f, offsets))]
+    log(f"{len(transects['features'])} transects, {len(points)} sample points, {len(bands)} bands")
+    profiles = sample_profiles(ee, stack, points, bands, log)
+    labels = [lb for lb, _, _ in seasons]
+    radar, optical, stats, counts = {}, {}, {}, {}
+    for f in transects["features"]:
+        prof = profiles.get(f["id"], {})
+        pos = lambda b: (shoreline_position([prof.get(b, {}).get(i) for i in range(len(offsets))], offsets)["pos"]
+                         if b in bands else None)
+        radar[f["id"]] = [pos(f"r_{lb.replace('-', '_')}") for lb in labels]
+        optical[f["id"]] = [pos(f"o_{lb.replace('-', '_')}") for lb in labels]
+        st = years_stats(labels, radar[f["id"]], optical[f["id"]])
+        counts[st["change"]] = counts.get(st["change"], 0) + 1
+        stats[f["id"]] = st
+    return {"seasons": [[lb, s, e] for lb, s, e in seasons], "positions": radar, "optical": optical,
+            "transects": stats, "status_counts": counts, "method": YEARS_METHOD}
+
+
+YEARS_METHOD = {
+    "transects": "the Phase 11 transects (transects.geojson), unchanged",
+    "seasons": "dry seasons Oct-Mar, 2015-16 to 2025-26 (D11's dry-season months)",
+    "radar": "Sentinel-1 VV water over each whole season (per-scene Otsu thresholds, water in >= half of the looks: tide-averaged)",
+    "optical": "Sentinel-2 SR median MNDWI > 0 over each season's clear looks (none before Sentinel-2 SR covers the area)",
+    "position": "as Phase 11 (landward edge of the sea-connected water); none where the line lies outside the transect",
+    "rate": f"linear regression of the radar positions over the seasons (m/yr, seaward +) with a 95 % CI, >= {MIN_SEASONS} seasons; "
+            "advancing / retreating only when the CI excludes 0",
+    "change": f"radar trend confirmed by the optical shoreline moving the same way by >= {OPT_MIN_SHIFT_M} m between its first and "
+              "last season with an optical position, else unconfirmed",
+}
+
+
+def years_outputs(result: dict, transects: dict, out_dir: Path | None = None) -> dict:
+    """Write years.json (seasons, positions, stats) and years_lines.geojson (one MultiLineString per season)."""
+    out_dir = out_dir or SHORELINE_DIR
+    labels = [s[0] for s in result["seasons"]]
+    feats = []
+    for i, lb in enumerate(labels):
+        runs = season_lines(transects["features"], result["positions"], i)
+        if runs:
+            feats.append({"type": "Feature", "properties": {"season": lb, "kind": "season"},
+                          "geometry": {"type": "MultiLineString", "coordinates": [[list(p) for p in r] for r in runs]}})
+    (out_dir / "years.json").write_text(json.dumps(result))
+    (out_dir / "years_lines.geojson").write_text(json.dumps({"type": "FeatureCollection", "features": feats}))
+    return {"seasons": labels, "lines": len(feats), "status_counts": result["status_counts"]}
 
 
 # ---------- Phase 14 blind lock ----------
