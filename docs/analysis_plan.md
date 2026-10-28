@@ -173,4 +173,4 @@ Every change after the freeze commit: date, what changed, why, and whether any c
 
 | Date | Change | Reason | Results seen? |
 |---|---|---|---|
-| | | | |
+| 2026-10-28 | Implemented the items listed under "To implement before the freeze" in `eval/metrics.py`, `eval/adjudication.py` and `scripts/results_tables.py`: about_detector claims counted apart (metrics 1–5 exclude them; sensitivity comparison includes them), wrong rejections, missed change at random sites, Pratt zero handling next to Wilcoxon, Holm adjustment for the D16 secondary, pre-gate and detected-only comparisons, labeller and adjudicator reliability (κ with site-bootstrap CI, Gwet AC1). No change to what is measured or how it is decided; code only, with synthetic tests. | The plan specified these but they were not coded; doing it before any claims exist keeps the analysis fixed in advance. Touches P2's `eval/metrics.py`: P2 to review. | No: no claims or results existed |

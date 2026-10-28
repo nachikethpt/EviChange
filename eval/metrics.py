@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import math
 import random
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -63,6 +64,60 @@ def cohen_kappa(a: list, b: list) -> float | None:
     return None if pe == 1 else (po - pe) / (1 - pe)
 
 
+def gwet_ac1(a: list, b: list, categories: Iterable | None = None) -> float | None:
+    """Gwet's AC1 of two raters over the same items (the plan's sensitivity check on kappa, which is
+    unstable when one answer is much more common than the others). `categories` is the full set of
+    possible answers; it defaults to the answers seen, which understates the chance agreement when a
+    possible answer never occurs, so pass the set when it is known. None when undefined."""
+    if len(a) != len(b):
+        raise ValueError("raters must label the same items")
+    n = len(a)
+    cats = list(categories) if categories is not None else sorted(set(a) | set(b), key=str)
+    if n == 0 or len(cats) < 2:
+        return None
+    po = sum(x == y for x, y in zip(a, b)) / n
+    pe = sum(((a.count(c) + b.count(c)) / (2 * n)) * (1 - (a.count(c) + b.count(c)) / (2 * n)) for c in cats) / (len(cats) - 1)
+    return None if pe == 1 else (po - pe) / (1 - pe)
+
+
+def agreement_bootstrap(items: list[tuple[str, object, object]], statistic: Callable[[list, list], float | None],
+                        reps: int = BOOT_REPS, seed: int = SEED) -> tuple[float | None, float | None, float | None]:
+    """(estimate, lo, hi): a two-rater agreement statistic over items (site, answer a, answer b), with a
+    percentile 95 % CI from resampling sites with replacement (items within a site stay together).
+    Resamples where the statistic is undefined are skipped; the estimate is None if it is undefined
+    on the full data."""
+    if not items:
+        return None, None, None
+    by_site: dict[str, list[tuple]] = defaultdict(list)
+    for site, x, y in items:
+        by_site[site].append((x, y))
+    groups = list(by_site.values())
+    est = statistic([x for g in groups for x, _ in g], [y for g in groups for _, y in g])
+    rng = random.Random(seed)
+    draws = []
+    for _ in range(reps):
+        picked = [groups[rng.randrange(len(groups))] for _ in groups]
+        v = statistic([x for g in picked for x, _ in g], [y for g in picked for _, y in g])
+        if v is not None:
+            draws.append(v)
+    if est is None or not draws:
+        return est, None, None
+    draws.sort()
+    q = lambda f: draws[min(len(draws) - 1, max(0, int(round(f * (len(draws) - 1)))))]
+    return est, q(0.025), q(0.975)
+
+
+def holm_adjust(pvalues: dict[str, float | None]) -> dict[str, float | None]:
+    """Holm step-down adjustment of a family of p-values; undefined (None) ones stay None and are not
+    counted in the family. The adjusted values are monotone and capped at 1."""
+    defined = sorted(((p, k) for k, p in pvalues.items() if p is not None))
+    m, out, running = len(defined), {k: None for k in pvalues}, 0.0
+    for i, (p, k) in enumerate(defined):
+        running = max(running, min(1.0, (m - i) * p))
+        out[k] = running
+    return out
+
+
 def cluster_bootstrap(clusters: dict[str, tuple[int, int]], reps: int = BOOT_REPS, seed: int = SEED
                       ) -> tuple[float | None, float | None, float | None]:
     """Pooled rate sum(k) / sum(n) over clusters {site: (k, n)} with a percentile 95 % CI from
@@ -88,10 +143,11 @@ def cluster_bootstrap(clusters: dict[str, tuple[int, int]], reps: int = BOOT_REP
 
 
 def paired_cluster_bootstrap(a: dict[str, tuple[int, int]], b: dict[str, tuple[int, int]], reps: int = BOOT_REPS,
-                             seed: int = SEED) -> tuple[float | None, float | None, float | None]:
+                             seed: int = SEED, info: dict | None = None) -> tuple[float | None, float | None, float | None]:
     """Difference of pooled rates, a minus b, over the same sites {site: (k, n)}, with a percentile
     95 % CI from resampling sites with replacement (both conditions together, so the pairing is
-    kept). Resamples where either condition has no claims are skipped."""
+    kept). Resamples where either condition has no claims are skipped; with `info` given, the number of
+    skipped resamples is stored in info["skipped"] (the analysis plan reports it)."""
     sites = sorted(set(a) & set(b))
     na, nb = sum(a[s][1] for s in sites), sum(b[s][1] for s in sites)
     if not na or not nb:
@@ -106,6 +162,8 @@ def paired_cluster_bootstrap(a: dict[str, tuple[int, int]], b: dict[str, tuple[i
             ka, na_, kb, nb_ = ka + a[s][0], na_ + a[s][1], kb + b[s][0], nb_ + b[s][1]
         if na_ and nb_:
             draws.append(ka / na_ - kb / nb_)
+    if info is not None:
+        info["skipped"] = reps - len(draws)
     draws.sort()
     q = lambda f: draws[min(len(draws) - 1, max(0, int(round(f * (len(draws) - 1)))))]
     return diff, q(0.025), q(0.975)
@@ -123,11 +181,21 @@ def sign_test(diffs: Iterable[float]) -> tuple[int, int, float | None]:
     return pos, neg, min(1.0, 2 * tail)
 
 
-def wilcoxon_signed_rank(diffs: Iterable[float]) -> tuple[float | None, float | None]:
-    """(W+, exact two-sided p) of the Wilcoxon signed-rank test. Zeros are dropped; ties get mid-ranks
-    and the exact null distribution is built over the doubled (integer) ranks, so it stays exact."""
+def wilcoxon_signed_rank(diffs: Iterable[float], zeros: str = "wilcoxon") -> tuple[float | None, float | None]:
+    """(W+, exact two-sided p) of the Wilcoxon signed-rank test. Ties get mid-ranks and the exact null
+    distribution is built over the doubled (integer) ranks, so it stays exact.
+
+    zeros="wilcoxon" (default): zero differences are dropped before ranking.
+    zeros="pratt": zeros are ranked first (they take the smallest ranks) and then dropped, so each
+    non-zero difference keeps the rank it has among all of them, shifted up by the number of zeros. The
+    exact p-value is the sign-flip distribution of those shifted ranks, given which differences are zero.
+    The analysis plan (section 7) reports this as a sensitivity analysis of the primary test."""
+    if zeros not in ("wilcoxon", "pratt"):
+        raise ValueError("zeros must be 'wilcoxon' or 'pratt'")
+    diffs = list(diffs)
     d = [x for x in diffs if x]
     n = len(d)
+    shift2 = 2 * (len(diffs) - n) if zeros == "pratt" else 0
     if n == 0:
         return None, None
     order = sorted(range(n), key=lambda i: abs(d[i]))
@@ -138,7 +206,7 @@ def wilcoxon_signed_rank(diffs: Iterable[float]) -> tuple[float | None, float | 
         while j + 1 < n and abs(d[order[j + 1]]) == abs(d[order[i]]):
             j += 1
         for k in range(i, j + 1):
-            ranks2[order[k]] = i + j + 2
+            ranks2[order[k]] = i + j + 2 + shift2
         i = j + 1
     w2 = sum(r for r, x in zip(ranks2, d) if x > 0)
     total = sum(ranks2)
@@ -208,7 +276,10 @@ def verifier_scores(claims: list[dict]) -> dict:
     of supported / not against the human support axis."""
     rejected = [c for c in claims if not passed(c)]
     bad = [c for c in claims if hallucinated(c)]
+    true_claims = [c for c in claims if c["truth"] == "true"]
     return {
+        "wrong_rejections": wilson(sum(not passed(c) for c in true_claims), len(true_claims)),
+        "n_wrong_rejections": sum(not passed(c) for c in true_claims),
         "catch_rate": wilson(sum(not passed(c) for c in bad), len(bad)),
         "precision": wilson(sum(hallucinated(c) for c in rejected), len(rejected)),
         "kappa_vs_support": cohen_kappa([passed(c) for c in claims], [c["support"] == "supported" for c in claims]),
@@ -236,10 +307,56 @@ def informativeness(claims: list[dict], runs: list[dict], labels: dict[str, dict
     }
 
 
+# A claim that says nothing changed. Same rule as scripts/report_dev.py claims_change, so the development
+# summaries and the evaluation agree on what "claims change" means.
+_NO_CHANGE_RE = re.compile(r"\bno\b(?:\s+[\w-]+){0,3}\s+(?:change|movement|increase)|\bnot\s+detected|\bno\s+detected"
+                           r"|\bno\s+(?:visible\s+)?(?:coast|coastline|shoreline)\b", re.I)
+
+
+def asserts_change(claim: dict) -> bool:
+    """The claim says change happened: any L2 / L3 claim, or an L1 claim that does not say "no change"."""
+    if claim.get("level") in ("L2", "L3"):
+        return True
+    return claim.get("level") == "L1" and not _NO_CHANGE_RE.search(claim.get("text", ""))
+
+
+def missed_change(claims: list[dict], runs: list[dict], labels: dict[str, dict], key: dict[str, dict]) -> dict:
+    """Metric 6, "missed change at random sites": of the random sites labelled as changed, those where the
+    condition made no true claim that change happened (claims about the detector do not count; nor does a
+    true "no change" claim). Sites labelled unsure or no are left out. Wilson CI over sites."""
+    random_changed = [r["site_id"] for r in runs
+                      if key.get(r["site_id"], {}).get("origin") == "random"
+                      and labels.get(r["site_id"], {}).get("change_occurred") == "yes"]
+    found = {c["site_id"] for c in claims
+             if c["truth"] == "true" and not c.get("about_detector") and asserts_change(c)}
+    missed = sum(s not in found for s in random_changed)
+    return {"random_sites_labelled_change": len(random_changed), "missed": missed, "rate": wilson(missed, len(random_changed))}
+
+
 def parse_failure_rate(runs: list[dict]) -> tuple[float | None, float | None, float | None]:
     """Metric 8: items that broke the claim schema, over all items the model produced."""
     fails = sum(r["n_parse_failures"] for r in runs)
     return wilson(fails, fails + sum(r["n_claims"] for r in runs))
+
+
+def label_agreement(labels_a: dict[str, dict], labels_b: dict[str, dict], reps: int = BOOT_REPS) -> dict:
+    """Agreement of two labellers on the sites both labelled (analysis plan, section 8): Cohen's kappa on
+    `change_occurred` with a site-bootstrap CI, Gwet's AC1, raw agreement (Wilson), and per change type
+    the share of sites where both agree the type is present or absent, plus how many sites have exactly
+    the same set of types."""
+    sites = sorted(set(labels_a) & set(labels_b))
+    items = [(s, labels_a[s]["change_occurred"], labels_b[s]["change_occurred"]) for s in sites]
+    a, b = [x for _, x, _ in items], [y for _, _, y in items]
+    per_type = {}
+    for t in sorted({t for s in sites for lab in (labels_a[s], labels_b[s]) for t in lab.get("change_types") or []}):
+        both = [(t in (labels_a[s].get("change_types") or []), t in (labels_b[s].get("change_types") or [])) for s in sites]
+        per_type[t] = {"agreement": wilson(sum(x == y for x, y in both), len(both)), "present_in_either": sum(x or y for x, y in both)}
+    same_set = sum(set(labels_a[s].get("change_types") or []) == set(labels_b[s].get("change_types") or []) for s in sites)
+    return {"sites": len(sites),
+            "change_occurred": {"kappa": agreement_bootstrap(items, cohen_kappa, reps),
+                                "ac1": gwet_ac1(a, b, ("yes", "no", "unsure")),
+                                "agreement": wilson(sum(x == y for x, y in zip(a, b)), len(items))},
+            "change_types": {"same_set_on": same_set, "per_type": per_type}}
 
 
 def detector_scores(labels: dict[str, dict], key: dict[str, dict]) -> dict:
@@ -268,14 +385,28 @@ def paired_comparison(claims_a: list[dict], claims_b: list[dict], sites: Iterabl
     both = [s for s in sites if ca[s][1] and cb[s][1]]
     rate_d = [ca[s][0] / ca[s][1] - cb[s][0] / cb[s][1] for s in both]
     a_better = sum(d < 0 for d in count_d)
+    boot_info: dict = {}
     return {
         "sites": len(sites), "sites_with_rates": len(both), "sites_without_rates": len(sites) - len(both),
         "a_fewer_on": a_better, "b_fewer_on": sum(d > 0 for d in count_d),
         "count_wilcoxon": wilcoxon_signed_rank(count_d), "count_sign": sign_test(count_d),
         "rate_wilcoxon": wilcoxon_signed_rank(rate_d), "rate_sign": sign_test(rate_d),
         "mean_rate_diff": sum(rate_d) / len(rate_d) if rate_d else None,
-        "pooled_rate_diff": paired_cluster_bootstrap(ca, cb, reps),
+        "pooled_rate_diff": paired_cluster_bootstrap(ca, cb, reps, info=boot_info),
+        "bootstrap_skipped": boot_info["skipped"],
+        "count_wilcoxon_pratt": wilcoxon_signed_rank(count_d, zeros="pratt"),
+        "rate_wilcoxon_pratt": wilcoxon_signed_rank(rate_d, zeros="pratt"),
     }
+
+
+def rate_site_counts(claims_a: list[dict], claims_b: list[dict], sites: Iterable[str], only_passed: bool = True) -> dict:
+    """How many of `sites` have a rate in both conditions (at least one claim each, passed ones when
+    only_passed), and how many do not. The analysis plan reports this pooled and per stratum."""
+    sites = list(sites)
+    keep = passed if only_passed else (lambda c: True)
+    ca, cb = _clusters(claims_a, sites, hallucinated, keep), _clusters(claims_b, sites, hallucinated, keep)
+    both = sum(1 for s in sites if ca[s][1] and cb[s][1])
+    return {"sites": len(sites), "sites_with_rates": both, "sites_without_rates": len(sites) - both}
 
 
 def by_claim_type(claims: list[dict], sites: Iterable[str], reps: int = BOOT_REPS) -> dict[str, dict]:
@@ -379,15 +510,26 @@ def load_phase3(labeler_file: str = "labels_v1.jsonl") -> tuple[dict[str, dict],
 
 
 def report(claims: list[dict], runs: list[dict], labels: dict[str, dict], key: dict[str, dict],
-           reps: int = BOOT_REPS) -> dict:
+           reps: int = BOOT_REPS, labels2: dict[str, dict] | None = None) -> dict:
     """All per-condition metrics, pooled and per stratum (detected / random), plus the pre-specified
-    comparisons: gated vs ungated (primary) and gated vs ungated_gpt (secondary, D16)."""
+    comparisons: gated vs ungated (primary) and gated vs ungated_gpt (secondary, D16, Holm-adjusted).
+
+    Claims tagged about_detector (D18 rule 2) are left out of metrics 1-5 and counted instead, per
+    condition and stratum. The sensitivity analyses of the analysis plan (section 7) are reported
+    next to the primary result: with those claims included, within the detected stratum alone, before
+    the gate (metric 1), and Pratt's zero rule for the Wilcoxon test (inside each comparison)."""
+    all_claims = claims
+    claims = [c for c in all_claims if not c.get("about_detector")]
     by_cond: dict[str, list[dict]] = defaultdict(list)
+    by_cond_all: dict[str, list[dict]] = defaultdict(list)
     for c in claims:
         by_cond[c["condition"]].append(c)
+    for c in all_claims:
+        by_cond_all[c["condition"]].append(c)
     runs_by_cond: dict[str, list[dict]] = defaultdict(list)
     for r in runs:
         runs_by_cond[r["condition"]].append(r)
+    origin = lambda s: key.get(s, {}).get("origin")
     out: dict = {"detector": detector_scores(labels, key), "conditions": {}, "comparisons": {}}
     for cond in REPORT_CONDITIONS:
         if cond not in runs_by_cond:
@@ -395,18 +537,42 @@ def report(claims: list[dict], runs: list[dict], labels: dict[str, dict], key: d
         sites = [r["site_id"] for r in runs_by_cond[cond]]
         cl = by_cond[cond]
         strata = {}
-        for origin in ("detected", "random"):
-            ss = [s for s in sites if key.get(s, {}).get("origin") == origin]
-            strata[origin] = claim_rates([c for c in cl if c["site_id"] in ss], ss, reps)
+        for o in ("detected", "random"):
+            ss = [s for s in sites if origin(s) == o]
+            strata[o] = claim_rates([c for c in cl if c["site_id"] in ss], ss, reps)
+        flagged = [c for c in by_cond_all[cond] if c.get("about_detector")]
         out["conditions"][cond] = {"pooled": claim_rates(cl, sites, reps), **strata,
                                    "verifier": verifier_scores(cl),
                                    "informativeness": informativeness(cl, runs_by_cond[cond], labels),
+                                   "missed_change_random": missed_change(cl, runs_by_cond[cond], labels, key),
+                                   "about_detector": {"n": len(flagged),
+                                                      "detected": sum(origin(c["site_id"]) == "detected" for c in flagged),
+                                                      "random": sum(origin(c["site_id"]) == "random" for c in flagged)},
+                                   "with_about_detector": claim_rates(by_cond_all[cond], sites, reps),
                                    "parse_failures": parse_failure_rate(runs_by_cond[cond]),
                                    "by_claim_type": by_claim_type(cl, sites, reps)}
-    for name, a, b in (("primary", "gated", "ungated"), ("secondary_d16", "gated", "ungated_gpt")):
-        if a in runs_by_cond and b in runs_by_cond:
-            common = sorted({r["site_id"] for r in runs_by_cond[a]} & {r["site_id"] for r in runs_by_cond[b]})
-            out["comparisons"][name] = {"a": a, "b": b, **paired_comparison(by_cond[a], by_cond[b], common, reps=reps)}
+
+    def compare(a: str, b: str, claims_by: dict, site_filter=lambda s: True, only_passed: bool = True) -> dict:
+        common = sorted(s for s in {r["site_id"] for r in runs_by_cond[a]} & {r["site_id"] for r in runs_by_cond[b]} if site_filter(s))
+        return {"a": a, "b": b, **paired_comparison(claims_by[a], claims_by[b], common, only_passed=only_passed, reps=reps)}
+
+    if "gated" in runs_by_cond and "ungated" in runs_by_cond:
+        primary = compare("gated", "ungated", by_cond)
+        common = sorted({r["site_id"] for r in runs_by_cond["gated"]} & {r["site_id"] for r in runs_by_cond["ungated"]})
+        primary["by_stratum"] = {o: rate_site_counts(by_cond["gated"], by_cond["ungated"], [s for s in common if origin(s) == o])
+                                 for o in ("detected", "random")}
+        out["comparisons"]["primary"] = primary
+        out["comparisons"]["primary_pre_gate"] = compare("gated", "ungated", by_cond, only_passed=False)           # metric 1
+        out["comparisons"]["primary_detected_only"] = compare("gated", "ungated", by_cond, lambda s: origin(s) == "detected")
+        out["comparisons"]["primary_with_about_detector"] = compare("gated", "ungated", by_cond_all)
+    if "gated" in runs_by_cond and "ungated_gpt" in runs_by_cond:
+        secondary = {"secondary_d16": compare("gated", "ungated_gpt", by_cond)}
+        adjusted = holm_adjust({k: (v["rate_wilcoxon"] or (None, None))[1] for k, v in secondary.items()})
+        for k, v in secondary.items():
+            v["rate_wilcoxon_p_holm"] = adjusted[k]
+        out["comparisons"].update(secondary)
+    if labels2:
+        out["label_reliability"] = label_agreement(labels, labels2, reps)
     return out
 
 
@@ -433,4 +599,6 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         sys.exit("usage: python -m eval.metrics claims.jsonl runs.jsonl")
     labels, key = load_phase3()
-    print_report(report(load_claims(Path(sys.argv[1])), read_jsonl(Path(sys.argv[2])), labels, key))
+    second = LABELS_DIR / "labels_v1_labeler2.jsonl"
+    labels2 = {r["site_id"]: r for r in read_jsonl(second)} if second.exists() else None
+    print_report(report(load_claims(Path(sys.argv[1])), read_jsonl(Path(sys.argv[2])), labels, key, labels2=labels2))

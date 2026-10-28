@@ -71,10 +71,11 @@ def test_join_back_to_metric_records():
     one = next(iter(items))
     judgements.append({"item_id": one, "adjudicator": "p3", "about_detector": True})
     claims, runs = adj.to_metric_records(REPORTS, judgements, "p3")
-    assert len(claims) == len(items) - 1                    # the about_detector claim is left out
+    assert len(claims) == len(items)                        # flagged claims stay in; metrics.report counts them apart
+    assert sum(1 for c in claims if c.get("about_detector")) == 1
     assert all(metrics.check_claim(c) == [] for c in claims)
     assert {c["condition"] for c in claims} == {"template", "gated", "ungated"}
-    assert len(adj.to_metric_records(REPORTS, judgements, "p3", drop_about_detector=False)[0]) == len(items)
+    assert len(adj.to_metric_records(REPORTS, judgements, "p3", drop_about_detector=True)[0]) == len(items) - 1
     run = next(r for r in runs if r["site_id"] == "s3" and r["condition"] == "ungated")
     assert run == {"site_id": "s3", "condition": "ungated", "n_claims": 2, "n_parse_failures": 2}
     rep = metrics.report(claims, runs, {}, {s: {"origin": "detected"} for s in ("s1", "s2", "s3", "s4", "s5")}, reps=100)

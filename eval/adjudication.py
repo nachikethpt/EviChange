@@ -30,7 +30,7 @@ from pathlib import Path
 
 from agents.schema import LOCATIONS, REPORT_CONDITIONS
 
-from .metrics import SEED, SUPPORTS, TRUTHS, cohen_kappa, read_jsonl, wilson
+from .metrics import BOOT_REPS, SEED, SUPPORTS, TRUTHS, agreement_bootstrap, cohen_kappa, gwet_ac1, read_jsonl, wilson
 
 SECOND_SHARE = 0.20
 LABELS_FILE = Path(__file__).resolve().parent.parent / "data" / "quangninh" / "labels" / "labels_v1.jsonl"
@@ -143,10 +143,12 @@ def latest_judgements(rows: list[dict]) -> dict[str, dict]:
 
 
 def to_metric_records(records: list[dict], judgements: list[dict], adjudicator: str,
-                      drop_about_detector: bool = True) -> tuple[list[dict], list[dict]]:
+                      drop_about_detector: bool = False) -> tuple[list[dict], list[dict]]:
     """(claims, runs) for eval/metrics.py: every fully judged claim, joined back to its condition and
-    the verifier's verdict, and one run per site and condition. Claims tagged about_detector are left
-    out of the claims (rule 2 of the proposed rules) unless drop_about_detector is False."""
+    the verifier's verdict, and one run per site and condition. Claims tagged about_detector stay in,
+    flagged: metrics.report() leaves them out of metrics 1-5 (D18 rule 2), counts them per condition and
+    stratum, and reruns the primary result with them included (sensitivity analysis). Pass
+    drop_about_detector=True to remove them here instead."""
     items = build_items(records)
     judged = latest_judgements(judgements)
     claims = []
@@ -180,20 +182,26 @@ def _axis_value(judged: dict, axis: str):
     return judged.get(axis)
 
 
-def agreement(records: list[dict], first_rows: list[dict], second_rows: list[dict]) -> dict:
+AXIS_DOMAINS = {"truth": TRUTHS, "support": SUPPORTS, "about_detector": (False, True), "compound": (False, True)}
+
+
+def agreement(records: list[dict], first_rows: list[dict], second_rows: list[dict], reps: int = BOOT_REPS) -> dict:
     """Agreement of the second adjudicator with the first, on the second adjudicator's seeded share of
-    sites, per axis: {n, kappa, agreement (rate, lo, hi)}. Only items both judged on that axis count
-    (the flags count only where both judged truth, since they are ticked on that pass). The first-pass
-    records are never changed by resolving disagreements, so kappa stays what the two did independently."""
+    sites, per axis: {n, kappa, kappa_ci (lo, hi from a site bootstrap), ac1 (Gwet's, the sensitivity
+    check), agreement (rate, lo, hi)}. Only items both judged on that axis count (the flags count only
+    where both judged truth, since they are ticked on that pass). The first-pass records are never
+    changed by resolving disagreements, so kappa stays what the two did independently."""
     first, second = latest_judgements(first_rows), latest_judgements(second_rows)
-    overlap = {it["item_id"] for site in queue(records, "second") for it in site["items"]}
-    out = {"items_in_overlap": len(overlap), "axes": {}}
+    site_of = {it["item_id"]: site["site_id"] for site in queue(records, "second") for it in site["items"]}
+    out = {"items_in_overlap": len(site_of), "axes": {}}
     for axis in AGREEMENT_AXES:
         gate = "truth" if axis in ("about_detector", "compound") else axis
-        ids = sorted(i for i in overlap if first.get(i, {}).get(gate) and second.get(i, {}).get(gate))
+        ids = sorted(i for i in site_of if first.get(i, {}).get(gate) and second.get(i, {}).get(gate))
         a = [_axis_value(first[i], axis) for i in ids]
         b = [_axis_value(second[i], axis) for i in ids]
-        out["axes"][axis] = {"n": len(ids), "kappa": cohen_kappa(a, b),
+        kappa, lo, hi = agreement_bootstrap([(site_of[i], x, y) for i, x, y in zip(ids, a, b)], cohen_kappa, reps)
+        out["axes"][axis] = {"n": len(ids), "kappa": kappa, "kappa_ci": (lo, hi),
+                             "ac1": gwet_ac1(a, b, AXIS_DOMAINS[axis]),
                              "agreement": wilson(sum(x == y for x, y in zip(a, b)), len(ids))}
     return out
 
@@ -240,7 +248,10 @@ def main(argv: list[str]) -> None:
         print(f"{res['items_in_overlap']} items in the second adjudicator's sites")
         for axis, v in res["axes"].items():
             k = "n/a" if v["kappa"] is None else f"{v['kappa']:.2f}"
-            print(f"  {axis:15s} n={v['n']:3d}  kappa {k}  agreement {_fmt_ci(v['agreement'])}")
+            lo, hi = v["kappa_ci"]
+            ci = "" if lo is None else f" [{lo:.2f}, {hi:.2f}]"
+            ac1 = "n/a" if v["ac1"] is None else f"{v['ac1']:.2f}"
+            print(f"  {axis:15s} n={v['n']:3d}  kappa {k}{ci}  AC1 {ac1}  agreement {_fmt_ci(v['agreement'])}")
         diff = disagreements(reports, first, second)
         print(f"{len(diff)} items differ on truth or support")
         if len(argv) == 5:
