@@ -536,7 +536,8 @@ function alertBox(msg) { showHint(msg); setTimeout(() => showHint(null), 6000); 
 // ---------- 10. Panels + toolbar ----------
 const PANEL_TITLES = { basemap: 'Basemap gallery', measure: 'Measure', draw: 'Draw area to analyse', swipe: 'Swipe compare',
                        changes: 'Find changes', run: 'Run pipeline', report: 'AI change report', symbology: 'Symbology',
-                       indices: 'Index layers (Earth Engine)', tools: 'Geoprocessing', charts: 'Charts', print: 'Export & print' };
+                       indices: 'Index layers (Earth Engine)', tools: 'Geoprocessing', charts: 'Charts', print: 'Export & print',
+                       shoreline: 'Shoreline change' };
 
 function openPanel(name) {
   if (state.panel === name) return renderPanel();
@@ -926,6 +927,7 @@ async function refreshRunList() {
 }
 
 function closePanel(resize = true) {
+  if (state.panel === 'shoreline') shoreStop();     // the shoreline layers stay on the map; "Hide" removes them
   // keep a finished drawn area visible when moving on to the change panel or report; clear everything else
   if (state.sketch) {
     stopSketch(!(state.panel === 'draw' && state.sketch.done) && state.panel !== 'run');
@@ -992,6 +994,7 @@ function renderPanel() {
   if (name === 'tools') renderToolsPanel(body);
   if (name === 'charts') renderChartsPanel(body);
   if (name === 'print') renderPrintPanel(body);
+  if (name === 'shoreline') renderShorelinePanel(body);
   if (name === 'report') {
     const ids = [...state.selected].sort();
     body.innerHTML = `
