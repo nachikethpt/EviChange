@@ -43,7 +43,18 @@ def test_compare_with_detector(verdict, types, agreement):
     assert out == {"detector_types": ["vegetation_loss", "built_up_increase"], "agreement": agreement}
 
 
-def test_labelled_sites_are_locked():
+@pytest.fixture
+def locked(monkeypatch):
+    """The lock as it was before the D19 freeze: these tests check the lock still works if switched on."""
+    monkeypatch.setattr(vlm_check, "LABELLED_SITES_UNLOCKED", False)
+
+
+def test_labelled_sites_unlocked_since_the_freeze():
+    assert vlm_check.LABELLED_SITES_UNLOCKED                 # D19, 2026-10-27: the 30-site run may use them
+    assert not vlm_check.touches_labelled_site(vlm_check.labelled_site_boxes()[0])
+
+
+def test_labelled_sites_are_locked(locked):
     box = vlm_check.labelled_site_boxes()[0]
     assert len(vlm_check.labelled_site_boxes()) == 30
     assert vlm_check.touches_labelled_site(box)
@@ -169,7 +180,7 @@ def test_default_prompt_is_v1():
     assert hashlib.sha256(prompt.encode()).hexdigest() == V1_PROMPT_SHA256
 
 
-def test_check_blocks_labelled_sites(client):
+def test_check_blocks_labelled_sites(client, locked):
     body = client.post("/api/vlm/check", json={"region_id": "onsite"}).json()
     assert body["status"] == "blocked" and not client.chip_calls       # nothing rendered or sent
 
@@ -178,7 +189,7 @@ def test_check_unknown_region(client):
     assert client.post("/api/vlm/check", json={"region_id": "nope"}).status_code == 404
 
 
-def test_check_without_model_server(client, monkeypatch):
+def test_check_without_model_server(client, monkeypatch, locked):
     monkeypatch.setattr(main, "vlm", VLMClient(mode="off"))
     resp = client.post("/api/vlm/check", json={"region_id": "free"})
     assert resp.status_code == 503 and "VLM_URL" in resp.json()["detail"]
@@ -204,7 +215,7 @@ def test_answers_are_logged_and_survive_a_restart(client, monkeypatch):
     assert len(client.chip_calls) == 2 and len(vlm_check.read_log()) == 2        # no new render, no new line
 
 
-def test_blocked_sites_are_not_logged(client):
+def test_blocked_sites_are_not_logged(client, locked):
     client.post("/api/vlm/check", json={"region_id": "onsite"})
     assert vlm_check.read_log() == []
 
