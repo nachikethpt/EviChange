@@ -148,3 +148,37 @@ def test_api_hides_reference_transects():
     detail = client.get(f"/api/shoreline/transects/{tid}").json()
     assert detail["series"] is None and detail["hidden"]
     assert sum(f["properties"].get("hidden", False) for f in feats.values()) == len(s.hidden_transects())
+
+
+# ---------- (b) on Google Earth ----------
+def _ge():
+    import importlib.util, pathlib
+    spec = importlib.util.spec_from_file_location("ge", pathlib.Path(__file__).parent.parent / "scripts" / "shoreline_reference_ge.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_ge_kml_is_blind_and_ticked():
+    refs = l14.sample_transects(_transects(), n=3)
+    kml = l14.ge_kml(refs, "t")
+    assert all(r["transect_id"] not in kml for r in refs) and "<name>1</name>" in kml and "<name>50</name>" in kml
+    t = l14.ticks(refs[0])
+    assert t[0][0] == 0 and t[1][0] == l14.TICK_M
+    assert t[-1][0] <= l14.drawn_segment(refs[0])[2] < t[-1][0] + l14.TICK_M
+
+
+def test_ge_records_validate_and_score():
+    ge = _ge()
+    refs = l14.sample_transects(_transects(), n=2)
+    s_m = refs[0]["extend_land_m"] + s.LAND_M + 10            # 10 m seaward of the baseline
+    saved = {"answers": [
+        {"n": 1, "season": "2016-17", "status": "edge", "drawn_m": s_m, "month": "2017-01", "confidence": "high", "notes": None},
+        {"n": 2, "season": "2016-17", "status": "not_visible", "drawn_m": None, "month": None, "confidence": "low", "notes": "cloud"}]}
+    recs = ge.to_records(saved, refs, "P2")
+    assert recs[0]["pos_m"] == 10 and recs[0]["source"] == "google_earth" and recs[1]["month"] == "2016-10"
+    assert all(l14.validate_record("shoreline", r) == [] for r in recs)
+    assert l14.validate_record("shoreline", {**recs[0], "source": "bing"}) and l14.validate_record("shoreline", {**recs[0], "season": "2016"})
+    years = {"seasons": [["2016-17", "2016-10-01", "2017-04-01"]], "positions": {refs[0]["transect_id"]: [25.0]}}
+    sc = ge.score(recs, years)
+    assert sc["all"] == {"n": 1, "bias_m": 15.0, "rmse_m": 15.0, "mae_m": 15.0, "within_20m": 1.0, "within_30m": 1.0}

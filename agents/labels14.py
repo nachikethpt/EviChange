@@ -53,6 +53,13 @@ CELL_ANSWERS = ("built", "not_built", "unsure")
 PROTOCOL = "labels14_v1"
 KINDS = ("classes", "shoreline", "cells", "change_month")
 _MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+_SEASON = re.compile(r"^\d{4}-\d{2}$")
+# (b) on Google Earth (D13, changed 2026-10-28): the same 30 reference transects traced on Google Earth
+# Pro's historical imagery for 4 dry seasons across the yearly shorelines' ten years, so the yearly
+# lines are checked over their whole span. Planet (b) stays for the recent dates when its months arrive.
+GE_SEASONS = ("2016-17", "2019-20", "2022-23", "2025-26")
+SOURCES = ("planet", "google_earth")
+TICK_M = 25                         # tick marks on the drawn transect in the KML
 
 
 # ---------- (b) reference transects ----------
@@ -110,6 +117,42 @@ def hidden_transect_ids(transects: dict, refs: list[dict], neighbour_m: float = 
         if any(p["line"] == line and abs(p["chainage_m"] - c) <= neighbour_m + 1e-6 for line, c in keys):
             out.add(f["id"])
     return out
+
+
+def ticks(ref: dict, step: float = TICK_M) -> list[tuple[float, float, float]]:
+    """[(metres from the drawn start, lon, lat)] every `step` along the drawn (extended) transect."""
+    (lon0, lat0), (lon1, lat1), length = drawn_segment(ref)
+    return [(s, lon0 + (lon1 - lon0) * s / length, lat0 + (lat1 - lat0) * s / length)
+            for s in [k * step for k in range(int(length // step) + 1)]]
+
+
+def ge_kml(refs: list[dict], title: str) -> str:
+    """Google Earth Pro KML: each reference transect as its drawn line (numbered as on the page), a short
+    tick every TICK_M m and a label every 50 m (metres from the drawn line's landward start, which is not
+    the baseline). Ids, the baseline and the extracted shorelines are left out (blind)."""
+    marks = []
+    for n, ref in enumerate(refs, 1):
+        (lon0, lat0), (lon1, lat1), length = drawn_segment(ref)
+        frame = LocalFrame(lon0, lat0)
+        ex, ey = frame.to_m(lon1, lat1)
+        px, py = -ey / length, ex / length                       # unit normal, for the ticks
+        marks.append(f"<Placemark><name>{n}</name><Style><LineStyle><color>ff00ffff</color><width>2</width></LineStyle></Style>"
+                     f"<LineString><coordinates>{lon0:.7f},{lat0:.7f},0 {lon1:.7f},{lat1:.7f},0</coordinates></LineString></Placemark>")
+        segs, labels = [], []
+        for s, lon, lat in ticks(ref):
+            x, y = frame.to_m(lon, lat)
+            half = 8 if s % 50 == 0 else 4
+            a, b = frame.to_lonlat(x - px * half, y - py * half), frame.to_lonlat(x + px * half, y + py * half)
+            segs.append(f"<LineString><coordinates>{a[0]:.7f},{a[1]:.7f},0 {b[0]:.7f},{b[1]:.7f},0</coordinates></LineString>")
+            if s % 50 == 0:
+                labels.append(f"<Placemark><name>{s:g}</name><styleUrl>#tick</styleUrl><Point><coordinates>{lon:.7f},{lat:.7f},0</coordinates></Point></Placemark>")
+        marks.append(f"<Placemark><name>{n} ticks</name><Style><LineStyle><color>ff00ffff</color><width>1.5</width></LineStyle></Style>"
+                     f"<MultiGeometry>{''.join(segs)}</MultiGeometry></Placemark>")
+        marks.append(f"<Folder><name>{n} metres</name>{''.join(labels)}</Folder>")
+    style = ('<Style id="tick"><IconStyle><scale>0</scale></IconStyle><LabelStyle><scale>0.7</scale>'
+             '<color>ff00ffff</color></LabelStyle></Style>')
+    return (f'<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
+            f"<name>{title}</name>{style}{''.join(marks)}</Document></kml>\n")
 
 
 # ---------- (c) coastal cells ----------
@@ -199,6 +242,10 @@ def validate_record(kind: str, rec: dict) -> list[str]:
                 errs.append("an edge needs drawn_m and pos_m")
         elif rec.get("pos_m") is not None:
             errs.append("pos_m must be null unless status is edge")
+        if rec.get("source", "planet") not in SOURCES:
+            errs.append(f"source must be one of {SOURCES}")
+        if rec.get("season") is not None and not (isinstance(rec["season"], str) and _SEASON.match(rec["season"])):
+            errs.append("season must be like 2016-17")
     elif kind == "cells":
         if not rec.get("cell_id"):
             errs.append("cell_id is required")
