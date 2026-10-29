@@ -117,8 +117,9 @@ def one_report(arm: str, vlm, fc: dict, box: dict, ev: dict, chips: dict[str, by
 
 
 def run(vlm, arms: list[str], limit: int | None = None, log_path: Path | None = None, render=None, log=print,
-        sleep=time.sleep) -> dict:
-    """Every arm on every development box; skips reports already logged. Returns counts."""
+        sleep=time.sleep, boxes: tuple[dict, list[dict]] | None = None) -> dict:
+    """Every arm on every development box (or on `boxes` = (regions fc, [{'id', 'stratum', 'box'}]), as
+    scripts/report_sites.py passes the 30 labelled sites); skips reports already logged. Returns counts."""
     from agents.vlm_client import VLMUnavailable
     model = None
     if any(a != "template" for a in arms):
@@ -126,7 +127,7 @@ def run(vlm, arms: list[str], limit: int | None = None, log_path: Path | None = 
         if not status["available"]:
             raise SystemExit(f"Geo-VLM not available: {status['detail']}")
         model = status["model"]
-    fc, boxes = dev_boxes(limit)
+    fc, boxes = boxes or dev_boxes(limit)
     params = vlm_batch.analysis_params(fc)
     done_keys = {r["key"] for r in read_log(log_path)}
     counts = {"done": 0, "skipped": 0, "failed": 0}

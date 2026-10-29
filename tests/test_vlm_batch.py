@@ -87,7 +87,8 @@ def test_run_logs_then_resumes(tmp_path, monkeypatch, no_sites):
     assert other == {"done": 1, "skipped": 0, "failed": 0}                 # a new model checks again
 
 
-def test_run_refuses_without_server_or_with_a_site_region(tmp_path, no_sites):
+def test_run_refuses_without_server_or_with_a_site_region(tmp_path, no_sites, monkeypatch):
+    monkeypatch.setattr(vlm_check, "LABELLED_SITES_UNLOCKED", False)          # the lock as before the D19 freeze
     fc = {"metadata": PARAMS_META, "features": [region("r1", 107.25), region("site", 107.3998)]}
     with pytest.raises(SystemExit, match="not available"):
         vb.run(FakeVLM(available=False), fc, ["r1"], ["rgb"], tmp_path / "log.jsonl", None, lambda *_: None)
@@ -95,7 +96,8 @@ def test_run_refuses_without_server_or_with_a_site_region(tmp_path, no_sites):
         vb.run(FakeVLM(), fc, ["site"], ["rgb"], tmp_path / "log.jsonl", None, lambda *_: None)
 
 
-def test_committed_sample_is_outside_the_sites():
+def test_committed_sample_is_outside_the_sites(monkeypatch):
+    monkeypatch.setattr(vlm_check, "LABELLED_SITES_UNLOCKED", False)
     sample = json.loads(vb.SAMPLE.read_text(encoding="utf-8"))
     fc = json.loads((vb.ROOT / sample["regions_file"]).read_text(encoding="utf-8"))
     by_id = {f["properties"]["id"]: f for f in fc["features"]}

@@ -25,7 +25,7 @@ from pathlib import Path
 from .schema import CHANGE_TYPES, region_change_types
 
 PROMPT_VERSION = "vlmcheck_v1"
-LABELLED_SITES_UNLOCKED = False
+LABELLED_SITES_UNLOCKED = True     # Phase-4 prompts frozen 2026-10-27 (D19); unlocked for the 30-site run
 SITES_FILE = Path(__file__).resolve().parent.parent / "data" / "quangninh" / "labels" / "sites.json"
 LOG_FILE = Path(os.environ.get("VLM_LOG") or Path(__file__).resolve().parent.parent / "data" / "vlm_checks.jsonl")
 VERDICTS = ("change", "no_change", "unsure")
