@@ -230,6 +230,7 @@ map.on('click', e => {
     syncSelection(); generateReport();
     return;
   }
+  if (state.panel === 'monthly' && hit && layerOfMapLayer(hit.layer.id)?.id === CHANGE_ID) return monthlySelectRegion(hit.properties.id);
   // Otherwise clicking a change region opens its detail card (explore.js)
   if (hit && layerOfMapLayer(hit.layer.id)?.id === CHANGE_ID) return openRegion(hit.properties.id);
   const html = hit
@@ -537,7 +538,7 @@ function alertBox(msg) { showHint(msg); setTimeout(() => showHint(null), 6000); 
 const PANEL_TITLES = { basemap: 'Basemap gallery', measure: 'Measure', draw: 'Draw area to analyse', swipe: 'Swipe compare',
                        changes: 'Find changes', run: 'Run pipeline', report: 'AI change report', symbology: 'Symbology',
                        indices: 'Index layers (Earth Engine)', tools: 'Geoprocessing', charts: 'Charts', print: 'Export & print',
-                       shoreline: 'Shoreline change' };
+                       shoreline: 'Shoreline change', monthly: 'Monthly & coast' };
 
 function openPanel(name) {
   if (state.panel === name) return renderPanel();
@@ -995,6 +996,7 @@ function renderPanel() {
   if (name === 'charts') renderChartsPanel(body);
   if (name === 'print') renderPrintPanel(body);
   if (name === 'shoreline') renderShorelinePanel(body);
+  if (name === 'monthly') renderMonthlyPanel(body);
   if (name === 'report') {
     const ids = [...state.selected].sort();
     body.innerHTML = `
