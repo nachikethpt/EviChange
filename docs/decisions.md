@@ -461,6 +461,18 @@ once the mosaics are in Earth Engine. **Feb 2025 is skipped for now** (refused o
 delivered months go in first, and rerunning the notebook in November adds February alone.
 Neither the scenes nor the mosaics are committed to either repository (licence).
 
+**Phase 13c wiring (2026-11-01).** Planet now has monthly map tiles and explicit-date Geo-VLM
+checks, plus a separate optical shoreline series on the fixed Phase 11 transects. The 3 m NDWI
+profiles exclude Phase 14 references and neighbours, preserve cloud gaps, and corroborate only
+when at least two valid positions exist in each of the first and last radar quarters and their
+median shift agrees with the significant radar trend by ≥20 m. Radar-flagged tidal flats remain
+uncertain; the median does not correct tides. Results are kept apart from published radar /
+Sentinel-2 statistics and frozen report evidence. The live 11-month run produced 2,872 positions
+on 654 visible transects, with 81 withheld. All 26 visible significant trends await the missing
+2026 endpoint mosaics. Planet Geo-VLM checks use `planetcheck_v1`, source/date/asset/framing-aware
+identities and clear-box checks. Checks outside the detector's date windows never hide detections
+or report detector agreement. Details and rerun commands: `briefs/phase13c_planet_monthly.md`.
+
 ## D13 — Extended evaluation: classes, shoreline and coastal buildings (2026-10-08, proposed)
 
 **Decision.** The new outputs are also evaluated, not only shown, using the same two-axis design

@@ -36,7 +36,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from agents import coastal, ee_engine, landcover, monthly, planet, search_spec, shoreline, ungated, vlm_check
+from agents import coastal, ee_engine, landcover, monthly, planet, planet_shoreline, planet_vlm, search_spec, shoreline, ungated, vlm_check
 from agents.gpt_client import GPTClient
 from agents.vlm_client import VLMClient, VLMUnavailable
 from agents.graph import run_pipeline
@@ -325,13 +325,17 @@ def vlm_status():
     vlm._status = None
     return {**vlm.status(), "labelled_sites_locked": not vlm_check.LABELLED_SITES_UNLOCKED,
             "prompt_version": vlm_check.prompt_version(vlm_check.DEFAULT_CHIP_SET),
-            "chip_sets": list(vlm_check.CHIP_SETS), "default_chips": vlm_check.DEFAULT_CHIP_SET}
+            "chip_sets": list(vlm_check.CHIP_SETS), "default_chips": vlm_check.DEFAULT_CHIP_SET,
+            "planet_chip_sets": list(planet_vlm.CHIP_SETS)}
 
 
 class VLMCheckRequest(BaseModel):
     region_id: str
     run_id: Optional[str] = None
     chips: Optional[str] = None          # a vlm_check.CHIP_SETS key; default VLM_CHIPS / rgb_swir
+    source: Literal["sentinel2", "planet"] = "sentinel2"
+    before_month: Optional[str] = None
+    after_month: Optional[str] = None
 
 
 @app.post("/api/vlm/check")
@@ -339,6 +343,10 @@ def vlm_check_region(req: VLMCheckRequest):
     """D7 candidate check for one region: before/after chips -> Geo-VLM -> verdict, compared with
     the detector. One region per request so the app can show progress; results are cached."""
     _require_valid_run(req.run_id)
+    if req.source == "planet":
+        return _planet_vlm_check(req)
+    if req.before_month is not None or req.after_month is not None:
+        raise HTTPException(400, "Planet months require source=planet")
     chip_set = req.chips or vlm_check.DEFAULT_CHIP_SET
     if chip_set not in vlm_check.CHIP_SETS:
         raise HTTPException(400, f"chips must be one of {list(vlm_check.CHIP_SETS)}")
@@ -374,6 +382,79 @@ def vlm_check_region(req: VLMCheckRequest):
     except VLMUnavailable as exc:
         raise HTTPException(503, str(exc))
     if vlm.mode != "replay":   # replayed answers are already recorded somewhere
+        vlm_check.log_check(record)
+    _vlm_checks[key] = result
+    return result
+
+
+def _planet_vlm_check(req: VLMCheckRequest) -> dict:
+    chip_set = req.chips or "planet_rgb_nir"
+    if chip_set not in planet_vlm.CHIP_SETS:
+        raise HTTPException(400, f"Planet chips must be one of {list(planet_vlm.CHIP_SETS)}")
+    try:
+        planet.check_month(req.before_month)
+        planet.check_month(req.after_month)
+        if req.before_month >= req.after_month:
+            raise ValueError("Planet before_month must precede after_month")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    fc = data_store.get_change_regions(req.run_id)
+    feature = next((f for f in fc["features"] if f["properties"]["id"] == req.region_id), None)
+    if feature is None:
+        raise HTTPException(404, f"unknown region id: {req.region_id}")
+    bbox = _bbox(feature["geometry"])
+    transects = shoreline.load("transects.geojson")
+    reference_overlap = False
+    if transects:
+        hidden = shoreline.hidden_transects(transects)
+        for f in transects["features"]:
+            if f["id"] not in hidden:
+                continue
+            points = f["geometry"]["coordinates"]
+            xs, ys = [p[0] for p in points], [p[1] for p in points]
+            if bbox[0] <= max(xs) and bbox[2] >= min(xs) and bbox[1] <= max(ys) and bbox[3] >= min(ys):
+                reference_overlap = True
+                break
+    if vlm_check.touches_labelled_site(bbox) or reference_overlap:
+        return {"region_id": req.region_id, "source": "planet", "status": "blocked",
+                "detail": "Overlaps a locked evaluation site or Phase 14 shoreline reference: no Planet check until its labels are unlocked."}
+    params = data_store.analysis_params(req.run_id)
+    if params is None:
+        raise HTTPException(404, "these change regions have no Earth Engine analysis behind them (demo data)")
+    try:
+        rows = planet_vlm.pair(_planet_catalog(), req.before_month, req.after_month)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except LookupError as exc:
+        raise HTTPException(404, str(exc))
+    status = vlm.status()
+    if not status["available"]:
+        raise HTTPException(503, status["detail"])
+    version = f"{planet_vlm.PROMPT_VERSION}_{chip_set}"
+    key = vlm_check.check_key(planet_vlm.context(params, rows, bbox), req.region_id, version, status["model"])
+    cached = _cached_check(key)
+    if cached:
+        return cached
+    try:
+        ee = ee_engine._ee()
+        clear = [planet.box_clear_share(ee, row["month"], bbox) for row in rows]
+        if min(clear) < planet_vlm.MIN_BOX_CLEAR:
+            return {"region_id": req.region_id, "source": "planet", "status": "insufficient_imagery",
+                    "acquisitions": rows, "box_clear_share": clear,
+                    "detail": "Planet saw less than half of this box clearly on one or both dates; no model judgement was requested."}
+        chips = {}
+        for when, row in zip(("before", "after"), rows):
+            chips.update({f"{when}_{kind}": img for kind, img in planet.region_chips(
+                row["month"], bbox, kinds=planet_vlm.CHIP_SETS[chip_set]).items()})
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc))
+    except Exception as exc:
+        raise HTTPException(502, f"Earth Engine: {exc}")
+    try:
+        result, record = planet_vlm.check(vlm, params, feature["properties"], bbox, chip_set, rows, chips, clear, req.run_id)
+    except VLMUnavailable as exc:
+        raise HTTPException(503, str(exc))
+    if vlm.mode != "replay":
         vlm_check.log_check(record)
     _vlm_checks[key] = result
     return result
@@ -658,14 +739,38 @@ def shoreline_transect(tid: str):
         raise HTTPException(404, f"unknown transect {tid}")
     if tid in shoreline.hidden_transects(transects):          # Phase 14 reference transect: blind until digitised
         return {**shoreline.hide_transects({"features": [feat]}, {tid})["features"][0]["properties"],
-                "geometry": feat["geometry"], "series": None, "quarterly": None, "yearly": None, "yearly_stats": None}
+                "geometry": feat["geometry"], "series": None, "quarterly": None, "yearly": None, "yearly_stats": None, "planet": None}
     y = shoreline.load("years.json")
     yearly = None if y is None else [{"season": s[0], "pos": p, "optical": o} for s, p, o in
                                      zip(y["seasons"], y["positions"].get(tid, []), y["optical"].get(tid, []))]
     return {**feat["properties"], "geometry": feat["geometry"],
             "series": [{"month": m, "pos": p} for m, p in zip(pos["months"], pos["positions"][tid])],
             "quarterly": [{"quarter": q, "pos": p} for q, p in zip(pos.get("quarters", []), pos.get("quarter_positions", {}).get(tid, []))],
-            "yearly": yearly, "yearly_stats": None if y is None else y["transects"].get(tid)}
+            "yearly": yearly, "yearly_stats": None if y is None else y["transects"].get(tid),
+            "planet": planet_shoreline.detail(shoreline.load(planet_shoreline.FILE), tid)}
+
+
+def _planet_shoreline_data() -> tuple[dict, dict]:
+    data = shoreline.load(planet_shoreline.FILE)
+    if data is None:
+        raise HTTPException(404, "no Planet shorelines yet: run scripts/make_planet_shoreline.py")
+    return data, _shoreline("transects.geojson")
+
+
+@app.get("/api/shoreline/planet")
+def planet_shoreline_summary():
+    data, transects = _planet_shoreline_data()
+    return planet_shoreline.summary(data, transects)
+
+
+@app.get("/api/shoreline/planet/lines")
+def planet_shoreline_lines(month: Optional[str] = None):
+    if month is not None and not _MONTH_RE.fullmatch(month):
+        raise HTTPException(400, "month must be YYYY-MM")
+    data, transects = _planet_shoreline_data()
+    if month is not None and month not in {r["month"] for r in data["catalog"]}:
+        raise HTTPException(404, f"no Planet mosaic in {month}: shown as a gap")
+    return planet_shoreline.lines(data, transects, month)
 
 
 # ---------- Phase 12 (D11): buildings near the shoreline ----------

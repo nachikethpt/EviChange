@@ -409,13 +409,15 @@ def sea_polygons(ee: Any, aoi: dict, stack: Any) -> list[dict]:
     return vec.filter(ee.Filter.gte("area_ha", SEA_MIN_HA)).filter(ee.Filter.eq("touches_edge", 1)).getInfo()["features"]
 
 
-def sample_profiles(ee: Any, stack: Any, points: list[tuple[str, int, float, float]], bands: list[str], log=print) -> dict:
-    """{transect id: {band: [value per offset]}} sampled at STEP_M. points: [(tid, i, lon, lat)]."""
+def sample_profiles(ee: Any, stack: Any, points: list[tuple[str, int, float, float]], bands: list[str], log=print,
+                    scale: float = STEP_M) -> dict:
+    """{transect id: {band: {offset index: value}}}; raster scale defaults to STEP_M.
+    points: [(tid, offset index, lon, lat)]. Planet supplies its native 3 m scale explicitly."""
     out: dict[str, dict[str, list]] = {}
     for b0 in range(0, len(points), SAMPLE_BATCH):
         batch = points[b0: b0 + SAMPLE_BATCH]
         fc = ee.FeatureCollection([ee.Feature(ee.Geometry.Point([lon, lat]), {"t": t, "i": i}) for t, i, lon, lat in batch])
-        got = stack.reduceRegions(collection=fc, reducer=ee.Reducer.first(), scale=STEP_M, tileScale=4).getInfo()["features"]
+        got = stack.reduceRegions(collection=fc, reducer=ee.Reducer.first(), scale=scale, tileScale=4).getInfo()["features"]
         for f in got:
             p = f["properties"]
             rec = out.setdefault(p["t"], {b: {} for b in bands})

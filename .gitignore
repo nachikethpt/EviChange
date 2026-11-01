@@ -9,5 +9,6 @@ __pycache__/
 *.tiff
 webapp/backend/data/
 data/planet/raw/
+data/planet/shoreline_cache/
 data/vlm_chips/
 data/finetune/chips.zip

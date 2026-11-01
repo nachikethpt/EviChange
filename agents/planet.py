@@ -40,7 +40,7 @@ _MONTH = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
 
 # ---------- names (no Earth Engine needed) ----------
 def check_month(month: str) -> str:
-    if not _MONTH.match(month or ""):
+    if not _MONTH.fullmatch(month or ""):
         raise ValueError(f"month must be YYYY-MM, got {month!r}")
     return month
 
@@ -157,11 +157,23 @@ def water_image(ee: Any, month: str, threshold: float = NDWI_WATER) -> Any:
     return indices(ee, month_image(ee, month)).select("NDWI").gt(threshold).rename("water")
 
 
-def region_chips(month: str, bbox: tuple[float, float, float, float]) -> dict[str, bytes]:
+def box_clear_share(ee: Any, month: str, bbox: tuple) -> float:
+    """Observed clear share of the requested box, including uncovered pixels as not clear."""
+    image = month_image(ee, month)
+    value = image.select("red").mask().unmask(0, False).reduceRegion(
+        reducer=ee.Reducer.mean(), geometry=ee.Geometry.Rectangle(list(bbox)), scale=NATIVE_SCALE,
+        maxPixels=1e8, tileScale=4).get("red").getInfo()
+    return float(value or 0)
+
+
+def region_chips(month: str, bbox: tuple[float, float, float, float],
+                 kinds: tuple[str, ...] = ("rgb", "nir")) -> dict[str, bytes]:
     """Planet chips around a region for the Geo-VLM check: true colour + NIR false colour (no SWIR),
     same framing as ee_engine.region_chips(). Keys: rgb, nir."""
     import urllib.request
 
+    if any(kind not in CHIP_VIS for kind in kinds):
+        raise ValueError(f"Planet chips must be one of {tuple(CHIP_VIS)} (no SWIR)")
     from .ee_engine import CHIP_PX, _ee, chip_box
     ee = _ee()
     img = month_image(ee, month)
@@ -169,7 +181,8 @@ def region_chips(month: str, bbox: tuple[float, float, float, float]) -> dict[st
     edge = (ee.Image().byte().paint(ee.FeatureCollection([ee.Feature(ee.Geometry.Rectangle(list(bbox)))]), 1, 2)
             .visualize(palette=["ffff00"]))
     chips = {}
-    for kind, (bands, lo, hi) in CHIP_VIS.items():
+    for kind in kinds:
+        bands, lo, hi = CHIP_VIS[kind]
         url = img.visualize(bands=bands, min=lo, max=hi).unmask(0).blend(edge).getThumbURL(
             {"region": region, "dimensions": CHIP_PX, "format": "png"})
         with urllib.request.urlopen(url, timeout=120) as resp:

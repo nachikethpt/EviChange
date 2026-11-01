@@ -1045,6 +1045,7 @@ async function loadLayers(runId = null) {
   state.selected.clear();                          // region ids belong to the previous run
   explore.meta.clear(); explore.drawnIds = null; explore.regionId = null; explore.scope = 'all'; explore.filter = emptyFilter();
   gv.results.clear();                              // Geo-VLM answers are per region id, and ids repeat between runs
+  gv.revision++; gv.stop = true; gv.running = false; // ignore an in-flight answer for the previous run
 
   for (const d of layers) {
     const data = await (await fetch(d.url)).json();

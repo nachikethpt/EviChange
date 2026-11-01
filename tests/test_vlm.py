@@ -5,7 +5,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import pytest
 from fastapi.testclient import TestClient
 
-from agents import ee_engine, vlm_check
+from agents import ee_engine, planet, planet_vlm, vlm_check
 from agents.vlm_client import VLMClient, VLMUnavailable
 from webapp.backend import data_store, main
 
@@ -93,9 +93,10 @@ def fake_server():
             self._reply(200, {"model": "fake-qwen"})
 
         def do_POST(self):
+            payload = self.rfile.read(int(self.headers["Content-Length"]))
             if self.headers.get("Authorization") != "Bearer secret":
                 return self._reply(401, {"detail": "bad token"})
-            seen.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+            seen.append(json.loads(payload))
             self._reply(200, {"text": '{"verdict": "change", "change_types": ["vegetation_loss"], "reason": "cleared"}', "model": "fake-qwen"})
 
     srv = HTTPServer(("127.0.0.1", 0), Handler)
@@ -224,3 +225,84 @@ def test_read_log_skips_broken_lines(tmp_path):
     p = tmp_path / "log.jsonl"
     p.write_text('{"key": "a", "region_id": "r1"}\n{"key": "b", "regi', encoding="utf-8")
     assert [r["key"] for r in vlm_check.read_log(p)] == ["a"]
+
+
+@pytest.fixture
+def planet_client(client, monkeypatch):
+    rows = [{"month": "2025-01", "date": "2025-01-12", "asset_id": "jan", "clear_share": .9},
+            {"month": "2025-09", "date": "2025-09-20", "asset_id": "sep", "clear_share": .8}]
+    monkeypatch.setattr(main, "_planet_catalog", lambda: {"months": rows})
+    monkeypatch.setattr(main.ee_engine, "_ee", lambda: object())
+    monkeypatch.setattr(main.shoreline, "hidden_transects", lambda *_: set())
+    monkeypatch.setattr(planet, "box_clear_share", lambda *_: .9)
+    calls = []
+    monkeypatch.setattr(planet, "region_chips", lambda month, box, kinds: calls.append((month, kinds)) or
+                        {k: f"{month}_{k}".encode() for k in kinds})
+    client.planet_calls = calls
+    return client
+
+
+PLANET_REQUEST = {"region_id": "free", "source": "planet", "before_month": "2025-01", "after_month": "2025-09"}
+
+
+def test_planet_check_dates_chips_and_cache_are_separate(planet_client):
+    import base64
+    body = planet_client.post("/api/vlm/check", json=PLANET_REQUEST).json()
+    assert body["status"] == "checked" and body["source"] == "planet"
+    assert body["agreement"] == "different_period" and body["comparable"] is False
+    assert body["prompt_version"].startswith("planetcheck_v1_")
+    sent = planet_client.seen[-1]
+    assert "2025-01-12" in sent["prompt"] and "2025-09-20" in sent["prompt"]
+    assert "Sentinel-2 images" not in sent["prompt"] and "SWIR false colour" not in sent["prompt"]
+    assert [base64.b64decode(im) for im in sent["images"]] == [
+        b"2025-01_rgb", b"2025-09_rgb", b"2025-01_nir", b"2025-09_nir"]
+    planet_client.post("/api/vlm/check", json=PLANET_REQUEST)
+    assert len(planet_client.planet_calls) == 2
+    sentinel = planet_client.post("/api/vlm/check", json={"region_id": "free"}).json()
+    assert sentinel["prompt_version"] == vlm_check.PROMPT_VERSION and len(planet_client.chip_calls) == 1
+    assert len(vlm_check.read_log()) == 2
+
+
+@pytest.mark.parametrize("patch,status", [
+    ({"before_month": "2025-09", "after_month": "2025-01"}, 400),
+    ({"before_month": None}, 400), ({"after_month": "2025-13"}, 400),
+    ({"after_month": "2025-02"}, 404), ({"chips": "rgb_swir"}, 400),
+])
+def test_invalid_or_missing_planet_pair_never_renders_or_calls_model(planet_client, patch, status):
+    response = planet_client.post("/api/vlm/check", json={**PLANET_REQUEST, **patch})
+    assert response.status_code == status
+    assert planet_client.planet_calls == [] and planet_client.seen == []
+
+
+def test_planet_cloudy_box_does_not_get_a_model_verdict(planet_client, monkeypatch):
+    monkeypatch.setattr(planet, "box_clear_share", lambda *_: .2)
+    body = planet_client.post("/api/vlm/check", json=PLANET_REQUEST).json()
+    assert body["status"] == "insufficient_imagery" and "verdict" not in body
+    assert planet_client.planet_calls == [] and planet_client.seen == [] and vlm_check.read_log() == []
+
+
+def test_planet_respects_both_evaluation_locks(planet_client, monkeypatch, locked):
+    assert planet_client.post("/api/vlm/check", json={**PLANET_REQUEST, "region_id": "onsite"}).json()["status"] == "blocked"
+    f = {"id": "reference", "geometry": {"coordinates": [[107.214, 20.974], [107.216, 20.976]]}}
+    monkeypatch.setattr(main.shoreline, "load", lambda *_: {"features": [f]})
+    monkeypatch.setattr(main.shoreline, "hidden_transects", lambda *_: {"reference"})
+    assert planet_client.post("/api/vlm/check", json=PLANET_REQUEST).json()["status"] == "blocked"
+    assert planet_client.planet_calls == [] and planet_client.seen == []
+
+
+def test_planet_pair_replay_identity_includes_acquisitions_and_framing():
+    rows = [{"month": "2025-01", "date": "2025-01-12", "asset_id": "jan"},
+            {"month": "2025-09", "date": "2025-09-20", "asset_id": "sep"}]
+    params = {"before_window": ["2025-01-01", "2025-01-31"], "after_window": ["2025-09-01", "2025-09-30"]}
+    seen = []
+    class Model:
+        def generate(self, _prompt, _images, replay_key):
+            seen.append(replay_key)
+            return {"text": '{"verdict":"no_change","reason":"same"}', "model": "fake"}
+    chips = {f"{when}_rgb": b"png" for when in ("before", "after")}
+    result, record = planet_vlm.check(Model(), params, REGION, (0, 0, 1, 1), "planet_rgb", rows, chips, [.9, .9])
+    assert result["comparable"] is True and result["agreement"] == "disagrees"
+    changed = [{**rows[0], "date": "2025-01-13"}, rows[1]]
+    planet_vlm.check(Model(), params, REGION, (0, 0, 1, 1), "planet_rgb", changed, chips, [.9, .9])
+    planet_vlm.check(Model(), params, REGION, (0, 0, 2, 2), "planet_rgb", rows, chips, [.9, .9])
+    assert len(set(seen)) == 3 and record["source"] == "planet"

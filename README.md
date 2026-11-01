@@ -37,6 +37,7 @@ python -m venv .venv
 | Pipeline demo (prints every handoff) | `.venv\Scripts\python.exe run_demo.py` |
 | Pipeline → live map | `run_pipeline_windows.bat` (or `python run_and_publish.py --condition gated`) |
 | Web app | `run_webapp_windows.bat` → http://localhost:8000 |
+| Planet shoreline check (resumes cached batches) | `.venv\Scripts\python.exe scripts\make_planet_shoreline.py` |
 | Import a real Earth Engine export | `python import_geojson.py path\to\change_regions.json` |
 | Earth Engine check | `pip install -r requirements-ee.txt`, then `python scripts/ee_smoke_test.py --project <id>` |
 
