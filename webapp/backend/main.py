@@ -36,7 +36,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from agents import coastal, ee_engine, landcover, monthly, planet, search_spec, shoreline, ungated, vlm_check
+from agents import assistant_plan, ccdc, coastal, ee_engine, landcover, monthly, planet, search_spec, shoreline, ungated, vlm_check
 from agents.gpt_client import GPTClient
 from agents.vlm_client import VLMClient, VLMUnavailable
 from agents.graph import run_pipeline
@@ -131,9 +131,55 @@ def aoi(run_id: Optional[str] = None):
 
 @app.get("/api/data/change_regions")
 def change_regions(run_id: Optional[str] = None):
-    """Change regions; land-cover classes (D10) are hidden at the labelled sites until Phase 14."""
+    """Change regions; land-cover classes (D10) are hidden at the labelled sites until Phase 14. The study's
+    own regions (no run_id) also carry the CCDC month of change (D14, Phase 10b) where it has been run."""
     _require_valid_run(run_id)
-    return landcover.hide_at_labelled_sites(data_store.get_change_regions(run_id))
+    fc = landcover.hide_at_labelled_sites(data_store.get_change_regions(run_id))
+    return fc if run_id else ccdc.attach(fc, _ccdc_regions())
+
+
+def _ccdc_regions() -> dict | None:
+    path = REPO_ROOT / ccdc.REGIONS_FILE
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+
+CCDC_SERIES_DIR = REPO_ROOT / "data" / "quangninh" / "ccdc_series"
+
+
+@app.get("/api/ccdc/regions/{region_id}")
+def ccdc_region(region_id: str):
+    """One study region's CCDC result (D14) and its time series for the chart: mean NDVI on every clear
+    Sentinel-2 look since 2018, the seasonal curve fitted before and after the break, and the change window.
+    The series is fetched from Earth Engine on first request (~20 s) and kept in data/quangninh/ccdc_series/."""
+    data = _ccdc_regions()
+    if data is None:
+        raise HTTPException(404, "no CCDC run yet: run scripts/make_ccdc_regions.py")
+    if region_id in set(data.get("locked", [])):
+        raise HTTPException(403, "Hidden at a labelled evaluation site until the Phase 14 (d) change-month labels are done.")
+    res = data["regions"].get(region_id)
+    if res is None:
+        raise HTTPException(404, f"no CCDC result for region {region_id}")
+    fc = data_store.get_change_regions(None)
+    feat = next((f for f in fc["features"] if f["properties"]["id"] == region_id), None)
+    if feat is None:
+        raise HTTPException(404, f"unknown region id: {region_id}")
+    cache = CCDC_SERIES_DIR / f"{re.sub(r'[^A-Za-z0-9_-]', '_', region_id)}.json"
+    if cache.exists():
+        looks = json.loads(cache.read_text(encoding="utf-8"))
+    else:
+        try:
+            looks = ccdc.ee_series(ee_engine._ee(), feat["geometry"])
+        except RuntimeError as exc:
+            raise HTTPException(503, str(exc))
+        except Exception as exc:
+            raise HTTPException(502, f"Earth Engine: {exc}")
+        CCDC_SERIES_DIR.mkdir(parents=True, exist_ok=True)
+        cache.write_text(json.dumps(looks), encoding="utf-8")
+    det, mon = res.get("detection") or {}, res.get("monitoring") or {}
+    month = det.get("break_month") if det.get("lasting") else None
+    return {"region_id": region_id, "detection": det, "monitoring": mon, "params": data["params"],
+            "matches_detector": ccdc.matches_detector(feat["properties"], det.get("magnitude")) if month else None,
+            "series": ccdc.series_result(looks, month, ccdc.main_index(feat["properties"]))}
 
 
 INDEX_TILE_TTL_S = 3600   # Earth Engine map ids expire after a few hours
@@ -362,6 +408,28 @@ def search_spec_endpoint(req: SearchSpecRequest):
         raise HTTPException(503, status["detail"])
     try:
         return search_spec.spec_from_prompt(vlm, req.prompt)
+    except VLMUnavailable as exc:
+        raise HTTPException(503, str(exc))
+
+
+class AssistantPlanRequest(BaseModel):
+    text: str
+    layers: list[str] = []          # the names of the layers on the map, for the prompt
+
+
+@app.post("/api/assistant/plan")
+def assistant_plan_endpoint(req: AssistantPlanRequest):
+    """D9 / Phase 7c: a typed request the keyword parser didn't understand -> map-assistant steps from the
+    Geo-VLM (text only). 503 without a model (the app then says it didn't understand); status "search"
+    when the request is a change search, "invalid" when the steps aren't runnable. The browser checks the
+    steps against its layers again before anything runs."""
+    if not req.text.strip():
+        raise HTTPException(400, "text is empty")
+    status = vlm.status()
+    if not status["available"]:
+        raise HTTPException(503, status["detail"])
+    try:
+        return assistant_plan.plan_from_prompt(vlm, req.text, req.layers)
     except VLMUnavailable as exc:
         raise HTTPException(503, str(exc))
 
@@ -680,17 +748,19 @@ def shoreline_transect(tid: str):
     if tid in shoreline.hidden_transects(transects):          # Phase 14 reference transect: blind until digitised
         return {**shoreline.hide_transects({"features": [feat]}, {tid})["features"][0]["properties"],
                 "geometry": feat["geometry"], "series": None, "quarterly": None, "yearly": None, "yearly_stats": None,
-                "planet": None}
+                "planet": None, "planet_corroboration": None}
     y = shoreline.load("years.json")
     p = shoreline.load("planet.json")
     planet_series = None if p is None else [{"month": m, "date": d, "pos": v} for m, d, v in
                                             zip(p["months"], p["dates"], p["positions"].get(tid, []))]
+    planet_corrob = None if p is None else (p.get("corroboration") or {}).get(tid)
     yearly = None if y is None else [{"season": s[0], "pos": p, "optical": o} for s, p, o in
                                      zip(y["seasons"], y["positions"].get(tid, []), y["optical"].get(tid, []))]
     return {**feat["properties"], "geometry": feat["geometry"],
             "series": [{"month": m, "pos": p} for m, p in zip(pos["months"], pos["positions"][tid])],
             "quarterly": [{"quarter": q, "pos": p} for q, p in zip(pos.get("quarters", []), pos.get("quarter_positions", {}).get(tid, []))],
-            "yearly": yearly, "yearly_stats": None if y is None else y["transects"].get(tid), "planet": planet_series}
+            "yearly": yearly, "yearly_stats": None if y is None else y["transects"].get(tid), "planet": planet_series,
+            "planet_corroboration": planet_corrob}
 
 
 # ---------- Phase 12 (D11): buildings near the shoreline ----------

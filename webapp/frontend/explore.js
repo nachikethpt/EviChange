@@ -59,7 +59,7 @@ const explore = {
   cardMaps: [],
   hoverFid: null,
 };
-function emptyFilter() { return { types: null, minHa: null, maxHa: null, locations: null, top: null, classFrom: null, classTo: null }; }
+function emptyFilter() { return { types: null, minHa: null, maxHa: null, locations: null, top: null, classFrom: null, classTo: null, monthFrom: null, monthTo: null }; }
 
 // ---------- classification ----------
 async function loadChangeTypes() {
@@ -143,10 +143,14 @@ function matchesFilter(f, flt = explore.filter) {
   if (flt.locations && !flt.locations.has(p.location)) return false;
   if (flt.classFrom && p.class_before !== flt.classFrom) return false;   // unknown / hidden classes never match
   if (flt.classTo && p.class_after !== flt.classTo) return false;
+  if ((flt.monthFrom || flt.monthTo) && !ccdcMonths(p).some(m => (!flt.monthFrom || m >= flt.monthFrom) && (!flt.monthTo || m <= flt.monthTo))) return false;
   return true;
 }
 
-function filterActive() { const f = explore.filter; return !!(f.types || f.minHa != null || f.maxHa != null || f.locations || f.top || f.classFrom || f.classTo); }
+/** Months a region's lasting change happened (CCDC, D14): the detected change and any later one. */
+function ccdcMonths(p) { return [p.ccdc_month, p.ccdc_again_month].filter(Boolean); }
+
+function filterActive() { const f = explore.filter; return !!(f.types || f.minHa != null || f.maxHa != null || f.locations || f.top || f.classFrom || f.classTo || f.monthFrom || f.monthTo); }
 
 /** Regions in the scope that match the filter, largest first (defaults: the panel's current search). */
 function currentResults(flt = explore.filter, scope = explore.scope, keepRejected = false) {
@@ -171,6 +175,10 @@ function filterSql(flt, scope) {
   if (flt.locations) conds.push(`location IN (${[...flt.locations].map(l => `'${l}'`).join(', ')})`);
   if (flt.classFrom) conds.push(`class_before = '${flt.classFrom}'`);
   if (flt.classTo) conds.push(`class_after = '${flt.classTo}'`);
+  if (flt.monthFrom || flt.monthTo) {
+    const one = f => [flt.monthFrom && `${f} >= '${flt.monthFrom}'`, flt.monthTo && `${f} <= '${flt.monthTo}'`].filter(Boolean).join(' AND ');
+    conds.push(`((${one('ccdc_month')}) OR (${one('ccdc_again_month')}))`);
+  }
   let sql = conds.length ? `WHERE ${conds.join('\n  AND ')}` : 'WHERE TRUE   -- every region';
   const where = { view: 'inside the current map view', drawn: 'intersecting the drawn area', selection: 'among the selected regions' }[scope];
   if (where) sql += `\n  -- ${where}`;
@@ -293,6 +301,9 @@ function parseQuery(text) {
   if (/^\s*(clear|reset|show (me )?(all|everything)|all( changes)?|everything|any change)\s*$/.test(q)) return { reset: true };
 
   let m;
+  // When (CCDC month of change, D14) before the sizes, so "after 2021" is never read as hectares.
+  const when = parseWhen(q);
+  if (when) { flt.monthFrom = when.from; flt.monthTo = when.to; q = q.replace(when.text, ' '); understood = true; }
   if ((m = q.match(BETWEEN_RE))) {
     const a = toHa(m[1], m[2] || m[4]), b = toHa(m[3], m[4] || m[2]);
     [flt.minHa, flt.maxHa] = [Math.min(a, b), Math.max(a, b)]; cut(m);
@@ -349,6 +360,80 @@ function parseQuery(text) {
   return { filter: flt, scope, notes, understood };
 }
 
+// ---------- dates (Phase 10b): "after June 2021", "since 2020", "before 2022", "in 2021", "between 2020 and 2022" ----------
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const MONTH_WORD = '(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
+const WHEN_ONE = `(?:${MONTH_WORD}\\s+)?((?:19|20)\\d\\d)`;
+const ym = (mon, year) => `${year}-${String(mon ? MONTHS.indexOf(mon.slice(0, 3)) + 1 : 1).padStart(2, '0')}`;
+const shift = (m, k) => { const [y, mo] = m.split('-').map(Number), i = y * 12 + mo - 1 + k; return `${Math.floor(i / 12)}-${String(i % 12 + 1).padStart(2, '0')}`; };
+function fmtMonth(m) { return new Date(`${m}-15`).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }); }
+
+function parseWhen(q) {
+  let m;
+  if ((m = q.match(new RegExp(`\\bbetween\\s+${WHEN_ONE}\\s+and\\s+${WHEN_ONE}`)))) {
+    const a = ym(m[1], m[2]), b = m[3] ? ym(m[3], m[4]) : `${m[4]}-12`;
+    return { from: a < b ? a : b, to: a < b ? b : a, text: m[0] };
+  }
+  if ((m = q.match(new RegExp(`\\b(after|since|from)\\s+${WHEN_ONE}`)))) {
+    const start = ym(m[2], m[3]);
+    return { from: m[1] === 'after' ? (m[2] ? shift(start, 1) : `${+m[3] + 1}-01`) : start, to: null, text: m[0] };
+  }
+  if ((m = q.match(new RegExp(`\\b(before|until|by)\\s+${WHEN_ONE}`)))) {
+    const start = ym(m[2], m[3]);
+    return { from: null, to: m[1] === 'before' ? shift(start, -1) : (m[2] ? start : `${m[3]}-12`), text: m[0] };
+  }
+  if ((m = q.match(new RegExp(`\\b(?:in|during)\\s+${WHEN_ONE}`)))) {
+    return m[1] ? { from: ym(m[1], m[2]), to: ym(m[1], m[2]), text: m[0] } : { from: `${m[2]}-01`, to: `${m[2]}-12`, text: m[0] };
+  }
+  return null;
+}
+
+/** "When did it change" block of the region card (CCDC, D14). */
+function ccdcHtml(p) {
+  const head = '<div class="section"><div class="pane-subtitle">When it changed (CCDC time series)</div>';
+  if (p.ccdc_hidden) return `${head}<p class="muted">🔒 Hidden at labelled evaluation sites until the month-of-change labels (Phase 14 d) are done.</p></div>`;
+  if (!('ccdc_lasting' in p)) return '';
+  const pct = p.ccdc_share != null ? `${Math.round(p.ccdc_share * 100)} % of its pixels` : '';
+  const match = p.ccdc_matches === true ? ' It goes the same way as the detected change, so this is when it most likely happened.'
+    : p.ccdc_matches === false ? ' <b>It goes a different way from the detected change</b>: probably another event, so the detected change is not dated.' : '';
+  const main = p.ccdc_month
+    ? `<p>Break from the seasonal pattern around <b>${esc(fmtMonth(p.ccdc_month))}</b> in ${pct} between the detector's windows.${match}</p>`
+    : `<p>No break in most of the region between the detector's two windows${pct ? ` (${pct})` : ''}: the change may be seasonal or too gradual for CCDC.</p>`;
+  const again = p.ccdc_again ? `<p>Another break around <b>${esc(fmtMonth(p.ccdc_again_month))}</b> (Oct 2024 – Sep 2026).</p>` : '<p class="muted small">No break in most of the region in Oct 2024 – Sep 2026.</p>';
+  return `${head}${main}${again}<button class="btn" id="ccdcLoad">📈 Show the time series</button><div id="ccdcChart"></div></div>`;
+}
+
+function ccdcChart(d) {
+  const s = d.series, W = 320, H = 150, L = 34, R = 8, T = 10, B = 24;
+  if (!s.looks.length) return '<p class="muted">No clear Sentinel-2 look of this region.</p>';
+  const ts = s.looks.map(p => p[0]), vs = s.looks.map(p => p[1]).concat(s.curves.flat().filter(Boolean).map(p => p[1]));
+  const t0 = Math.min(...ts), t1 = Math.max(...ts), lo = Math.min(...vs), hi = Math.max(...vs) + 1e-6;
+  const x = t => L + (t - t0) / (t1 - t0 || 1) * (W - L - R), y = v => T + (hi - v) / (hi - lo) * (H - T - B);
+  const ms = m => Date.UTC(+m.slice(0, 4), +m.slice(5, 7) - 1, 1);
+  const band = s.change_window ? `<rect x="${x(ms(s.change_window[0])).toFixed(1)}" y="${T}" width="${Math.max(2, x(ms(s.change_window[1]) + 30 * 864e5) - x(ms(s.change_window[0]))).toFixed(1)}" height="${H - T - B}" fill="#f59e0b" opacity=".25"><title>Change window ${s.change_window.join(' – ')}</title></rect>` : '';
+  const dots = s.looks.map(([t, v]) => `<circle cx="${x(t).toFixed(1)}" cy="${y(v).toFixed(1)}" r="1.6" fill="#22d3ee" opacity=".7"><title>${new Date(t).toISOString().slice(0, 10)}: ${v}</title></circle>`).join('');
+  const curves = s.curves.filter(Boolean).map(c => `<path d="M${c.map(([t, v]) => `${x(t).toFixed(1)},${y(v).toFixed(1)}`).join('L')}" fill="none" stroke="#e2e8f0" stroke-width="1.5"/>`).join('');
+  const years = []; for (let yv = new Date(t0).getUTCFullYear() + 1; yv <= new Date(t1).getUTCFullYear(); yv += 2) years.push(yv);
+  const ticks = years.map(yv => `<text x="${x(Date.UTC(yv, 0, 1)).toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="9" fill="currentColor" opacity=".7">${yv}</text>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" style="color:var(--text)">${band}
+      <text x="4" y="${T + 8}" font-size="9" fill="currentColor" opacity=".7">${hi.toFixed(2)}</text>
+      <text x="4" y="${H - B}" font-size="9" fill="currentColor" opacity=".7">${lo.toFixed(2)}</text>${dots}${curves}${ticks}</svg>
+    <p class="muted small">${esc(s.index)} of the region on every clear Sentinel-2 look (dots), the seasonal curve CCDC-style fitted before and after the break (line),
+    and the change window (orange: last clear look before the break → break month). Monsoon months have few clear looks.</p>`;
+}
+
+function wireCcdc(p) {
+  const btn = $('#ccdcLoad'); if (!btn) return;
+  btn.onclick = async () => {
+    btn.disabled = true; $('#ccdcChart').innerHTML = '<p class="muted">Loading the time series from Earth Engine (about 20 s the first time)…</p>';
+    try {
+      const r = await fetch(`/api/ccdc/regions/${encodeURIComponent(p.id)}`), d = await r.json();
+      if (!r.ok) throw new Error(d.detail || r.statusText);
+      if (explore.regionId === p.id) $('#ccdcChart').innerHTML = ccdcChart(d);
+    } catch (err) { $('#ccdcChart').innerHTML = `<p class="muted">${esc(err.message)}</p>`; btn.disabled = false; }
+  };
+}
+
 function schemaLocations() { return ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west', 'centre']; }
 
 function describeFilter(flt, scope) {
@@ -360,6 +445,8 @@ function describeFilter(flt, scope) {
   else if (flt.minHa != null) parts.push(`at least ${fmtHa(flt.minHa)}`);
   else if (flt.maxHa != null) parts.push(`at most ${fmtHa(flt.maxHa)}`);
   if (flt.locations) parts.push(`in the ${[...flt.locations].join(' / ')}`);
+  if (flt.monthFrom || flt.monthTo) parts.push(`changed ${flt.monthFrom && flt.monthTo ? (flt.monthFrom === flt.monthTo ? `in ${fmtMonth(flt.monthFrom)}` : `between ${fmtMonth(flt.monthFrom)} and ${fmtMonth(flt.monthTo)}`)
+    : flt.monthFrom ? `from ${fmtMonth(flt.monthFrom)} on` : `by ${fmtMonth(flt.monthTo)}`} (CCDC month of change)`);
   parts.push({ all: 'in the whole study area', view: 'in the current map view', drawn: 'inside the drawn area', selection: 'among the selected regions' }[scope]);
   if (flt.top) parts.push(`(largest ${flt.top})`);
   return parts.join(', ');
@@ -604,6 +691,7 @@ function renderRegionCard(body, f) {
     <div class="section"><div class="pane-subtitle">What changed</div>
       ${types.map(t => `<p class="explain"><span class="swatch" style="background:${info(t).color}">${info(t).icon}</span> ${esc(info(t).plain)}</p>`).join('')}</div>
     ${landcoverHtml(p)}
+    ${ccdcHtml(p)}
     <div class="section"><div class="pane-subtitle">Index changes (after − before)</div>
       ${['dNDVI', 'dNDBI', 'dMNDWI'].map(k => indexBar(k, p[k] ?? 0)).join('')}
       <p class="muted small">Grey band = ±${explore.tIdx}: changes inside it are too small to count as evidence.</p></div>
@@ -625,6 +713,7 @@ function renderRegionCard(body, f) {
   explore.cardMaps.push(miniMap('mmBefore', 's2_2018', clean), miniMap('mmAfter', 's2_2022', clean));
   $('#cardBack').onclick = () => { explore.regionId = null; renderPanel(); };
   wireVlmCard(p.id);
+  wireCcdc(p);
   $('#cardZoom').onclick = () => map.fitBounds(explore.meta.get(p.id).bbox, { padding: 80, maxZoom: 15 });
   $('#cardSwipe').onclick = () => { map.fitBounds(explore.meta.get(p.id).bbox, { padding: 80, maxZoom: 15, duration: 0 }); openPanel('swipe'); };
   $('#cardAI').onclick = async () => {

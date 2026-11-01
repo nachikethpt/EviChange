@@ -65,3 +65,73 @@ def test_dev_run_with_a_fake_ccdc(tmp_path):
     assert out["windows"] == {rid: ["2025-03", "2025-11"]} and out["params"]["lasting_share"] == ccdc.LASTING_SHARE
     failing = cm.run("dev", [rid], site_fn=lambda box: (_ for _ in ()).throw(RuntimeError("quota")), log=lambda *_: None)
     assert failing["results"][rid] == {"error": "quota"} and failing["windows"] == {}
+
+
+# ---------- change regions (Phase 10b) ----------
+from agents import ccdc  # noqa: E402
+
+
+def test_month_index_and_detection_period():
+    assert ccdc.month_index(ccdc.ms_of("2018-01-15")) == 0 and ccdc.month_from_index(15) == "2019-04"
+    assert ccdc.detection_period("2018-11-01/2019-03-31", "2022-11-01/2023-03-31") == ("2019-04-01", "2023-03-31")
+
+
+def test_region_result_dates_the_most_common_month():
+    r = ccdc.region_result({"22": 3, "21": 5, "40": 5}, 20, {"NDVI": -0.21, "NDBI": 0.1, "MNDWI": None})
+    assert r["n_break"] == 13 and r["share"] == 0.65 and r["lasting"]
+    assert r["break_month"] == "2019-10"                          # 21 and 40 tie at 5: the earlier month wins
+    assert ccdc.region_result({}, 50)["break_month"] is None and not ccdc.region_result({}, 50)["lasting"]
+    assert not ccdc.region_result({"30": 2}, 50)["lasting"]       # 4 % of the pixels: not dated
+
+
+def test_matches_detector_and_main_index():
+    region = {"dNDVI": -0.3, "dNDBI": 0.2, "dMNDWI": 0.02}
+    assert ccdc.matches_detector(region, {"NDVI": -0.4, "NDBI": 0.3, "MNDWI": 0.5}) is True    # MNDWI not counted (|d| <= 0.1)
+    assert ccdc.matches_detector(region, {"NDVI": 0.4, "NDBI": 0.3, "MNDWI": 0}) is False
+    assert ccdc.matches_detector({"dNDVI": 0.0}, {"NDVI": 0.4}) is None
+    assert ccdc.main_index(region) == "NDVI" and ccdc.main_index({}) == "NDVI"
+
+
+def test_attach_hides_locked_and_dates_matching():
+    fc = {"features": [{"properties": {"id": "a", "dNDVI": -0.3}}, {"properties": {"id": "b"}}, {"properties": {"id": "c"}}]}
+    data = {"locked": ["b"], "regions": {"a": {"detection": {"lasting": True, "share": 0.7, "break_month": "2020-05",
+                                                             "magnitude": {"NDVI": -0.2, "NDBI": 0, "MNDWI": 0}},
+                                               "monitoring": {"lasting": False, "break_month": "2025-01"}}}}
+    a, b, c = (f["properties"] for f in ccdc.attach(fc, data)["features"])
+    assert a["ccdc_month"] == "2020-05" and a["ccdc_matches"] is True and a["ccdc_again"] is False and a["ccdc_again_month"] is None
+    assert b == {"id": "b", "ccdc_hidden": True} and c == {"id": "c"}
+
+
+def test_harmonic_fit_and_series():
+    import math
+    t = [i / 24 for i in range(48)]
+    coef = ccdc.harmonic_fit(t, [0.3 + 0.1 * math.cos(2 * math.pi * x) for x in t])
+    assert [round(v, 3) for v in coef] == [0.3, 0.0, 0.1, 0.0]
+    assert ccdc.harmonic_fit([0, 1], [1, 2]) is None
+    month = 30 * 86_400_000
+    looks = [{"t": ccdc.ms_of("2019-01-01") + i * month, "NDVI": 0.8 if i < 12 else 0.3} for i in range(24)]
+    s = ccdc.series_result(looks, "2020-01")
+    assert len(s["curves"]) == 2 and all(s["curves"]) and s["change_window"][1] == "2020-01"
+    assert ccdc.series_result(looks, None)["curves"][0] and ccdc.series_result(looks, None)["change_window"] is None
+
+
+def test_ccdc_api(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from webapp.backend import main
+    c = TestClient(main.app)
+    monkeypatch.setattr(main, "_ccdc_regions", lambda: None)
+    assert c.get("/api/ccdc/regions/r1").status_code == 404
+    fc = main.data_store.get_change_regions(None)
+    rid = fc["features"][0]["properties"]["id"]
+    data = {"params": {}, "locked": ["rX"], "regions": {rid: {"detection": {"lasting": True, "share": 0.6, "break_month": "2020-01",
+                                                                       "magnitude": {"NDVI": -0.1, "NDBI": 0.1, "MNDWI": 0}},
+                                                         "monitoring": {"lasting": False}}}}
+    monkeypatch.setattr(main, "_ccdc_regions", lambda: data)
+    monkeypatch.setattr(main, "CCDC_SERIES_DIR", tmp_path)
+    looks = [{"t": ccdc.ms_of("2019-01-01") + i * 30 * 86_400_000, "NDVI": 0.5, "NDBI": 0.1 * (i > 12), "MNDWI": 0.0} for i in range(30)]
+    (tmp_path / f"{rid}.json").write_text(json.dumps(looks))
+    assert c.get("/api/ccdc/regions/rX").status_code == 403
+    body = c.get(f"/api/ccdc/regions/{rid}").json()
+    assert body["series"]["break_month"] == "2020-01" and len(body["series"]["looks"]) == 30
+    regions = c.get("/api/data/change_regions").json()["features"]
+    assert next(f for f in regions if f["properties"]["id"] == rid)["properties"]["ccdc_month"] == "2020-01"

@@ -120,6 +120,15 @@ async function shorePlanetImage(month) {
   } catch (err) { if (req === shore.imgReq) { drop(); alertBox(`Planet image: ${err.message}`); } }
 }
 
+const PLANET_CORROB_TEXT = { confirmed: 'Planet confirms the radar trend', not_confirmed: 'Planet does not confirm the radar trend',
+  pending_coverage: 'Planet check pending: no Planet images yet for the last radar quarter (Jul–Sep 2026)',
+  tidal_uncertainty: 'Planet check withheld: tidal flat', no_radar_trend: '' };
+function shorePlanetCorroboration(c) {
+  if (!c || !PLANET_CORROB_TEXT[c.status]) return '';
+  const pos = c.positions_m.every(v => v != null) ? ` (Planet ${c.positions_m.map(v => `${v} m`).join(' → ')}${c.shift_m != null ? `, shift ${c.shift_m} m` : ''})` : '';
+  return `<p class="muted">${esc(PLANET_CORROB_TEXT[c.status])}${esc(pos)}. Planet months per end quarter: ${c.n.join(' / ')} (2 needed each); single days, no tide correction.</p>`;
+}
+
 function shorePlanetSummary() {
   const c = shore.planet?.compare;
   if (!c) return '';
@@ -200,7 +209,7 @@ function shoreChart() {
     </svg>
     <span class="muted">Shoreline position from the baseline, seaward +. ${shore.mode === 'years'
       ? 'Blue: radar, tide-averaged over each dry season; orange: optical (Sentinel-2, once its surface reflectance covers the area).'
-      : 'Blue: radar, one month (moves with the tide, so expect jumps on tidal flats); pink: Planet 3 m, one day that month; the rate above is fitted to the tide-averaged quarters.'}</span></div>`;
+      : 'Blue: radar, one month (moves with the tide, so expect jumps on tidal flats); pink: Planet 3 m, one day that month; the rate above is fitted to the tide-averaged quarters.'}</span>${shore.mode === 'months' ? shorePlanetCorroboration(shore.detail.planet_corroboration) : ''}</div>`;
 }
 
 function renderShorelinePanel(body) {

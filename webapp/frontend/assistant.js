@@ -6,8 +6,9 @@
  *
  * parseActions() is a keyword parser (no model): it returns the steps of a request, each checked
  * against the layers that exist, or null when the text isn't an action (the chat then searches
- * change regions as before). The Phase 4 Geo-VLM may later produce the same step objects; they go
- * through the same validate() and run the same way. Actions only call the app's own tools: the
+ * change regions as before). When the parser doesn't understand a request that looks like an action
+ * (ACTION_HINT), the Geo-VLM is asked (POST /api/assistant/plan, agents/assistant_plan.py): it makes
+ * the same step objects, which go through the same validateStep() and run the same way. Actions only call the app's own tools: the
  * change regions are never edited, geoprocessing outputs are new layers (D8), and nothing here
  * starts an Earth Engine run (D7: runs need a drawn area and a confirmation).
  *
@@ -126,7 +127,19 @@ function describeStep(s, name) {
   }[s.action]();
 }
 
-if (typeof module !== 'undefined') module.exports = { parseActions, parseStep, resolveLayer, describeStep };
+/** Words that make a request look like a tool action rather than a change search (worth asking the model). */
+const ACTION_HINT = /\b(buffer|clip|intersect|dissolve|style|colou?r|paint|transparen\w*|opacity|export|download|save|zoom|chart|graph|plot|ndvi|ndbi|mndwi|layer|undo|outline|symbol\w*)\b/i;
+
+/** Steps from the model, checked like the parser's. {steps} or {error}. */
+function checkModelSteps(raw, layers) {
+  const checked = raw.map(s => validateStep(s.color ? { ...s, color: parseColor(s.color) || s.color } : s, layers));
+  const err = checked.find(r => r.error);
+  if (err) return { error: `${err.error} Nothing was run.` };
+  if (Object.values(checked[0].step).some(v => v?.ref)) return { error: '“it” needs an earlier step that makes a layer. Nothing was run.' };
+  return { steps: checked.map(r => r.step) };
+}
+
+if (typeof module !== 'undefined') module.exports = { parseActions, parseStep, resolveLayer, describeStep, checkModelSteps, ACTION_HINT };
 
 // ---------- running (browser only) ----------
 const assistUndo = [];          // [{label, undo: () => void}]
@@ -179,9 +192,14 @@ async function runStep(s, lastId) {
  *  text is not an action, so the chat searches as before. */
 async function askAssistant(text) {
   const vl = state.layers.map(l => ({ id: l.id, name: l.name }));
-  const plan = parseActions(text, vl);
-  if (!plan) return false;
   const say = html => { explore.chat.push({ who: 'bot', html }); explore.chat = explore.chat.slice(-8); renderPanel(); };
+  let plan = parseActions(text, vl), byModel = false;
+  if ((!plan || plan.error) && ACTION_HINT.test(text)) {
+    const m = await assistModelPlan(text, vl);
+    if (m === 'search') return false;
+    if (m) { plan = m; byModel = true; }
+  }
+  if (!plan) return false;
   if (plan.error) { say(esc(plan.error)); return true; }
   if (plan.steps.length === 1 && plan.steps[0].action === 'undo') {
     const last = assistUndo.pop();
@@ -203,9 +221,22 @@ async function askAssistant(text) {
       break;
     }
   }
-  say(`<b>Ran:</b><pre class="sql">${chain.map((c, i) => `${i + 1}. ${esc(c)}`).join('\n')}</pre>${log.join('<br>')}` +
+  say(`<b>Ran${byModel ? ' (read by the Geo-VLM)' : ''}:</b><pre class="sql">${chain.map((c, i) => `${i + 1}. ${esc(c)}`).join('\n')}</pre>${log.join('<br>')}` +
       (assistUndo.length ? '<br><button class="btn" data-assist-undo>↶ Undo last</button> <span class="muted small">or type “undo”</span>' : ''));
   return true;
+}
+
+/** The model's plan: {steps} | {error} | 'search' | null (no model, or it found nothing: keep the parser's answer). */
+async function assistModelPlan(text, layers) {
+  try {
+    const r = await fetch('/api/assistant/plan', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                   body: JSON.stringify({ text, layers: layers.map(l => l.name) }) });
+    if (!r.ok) return null;
+    const d = await r.json();
+    if (d.status === 'search') return 'search';
+    if (d.status !== 'ok') return null;
+    return checkModelSteps(d.steps, layers);
+  } catch (err) { return null; }
 }
 
 if (typeof document !== 'undefined') {

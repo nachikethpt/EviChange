@@ -319,3 +319,24 @@ def test_planet_outputs_and_api(written, monkeypatch):
     assert one["planet"] == [{"month": "2024-10", "date": "2024-10-05", "pos": 3.0}, {"month": "2025-04", "date": "2025-04-16", "pos": None}]
     assert c.get("/api/planet/layer", params={"month": "2025-02"}).status_code == 404     # no Planet image that month
     assert c.get("/api/planet/layer", params={"month": "2024-10", "kind": "swir"}).status_code == 400
+
+
+def test_planet_position_cloud_checks():
+    offs = [float(o) for o in range(-50, 55, 5)]                       # 21 samples, landward first
+    clean = [0] * 10 + [1] * 11                                        # land then sea: edge near 0 m
+    assert s.planet_position(clean, offs)["pos"] is not None
+    cloudy = [None] * 6 + clean[6:]                                    # 6 of 21 unclear: under 80 % valid
+    assert s.planet_position(cloudy, offs)["status"] == "cloudy"
+    gap = clean[:15] + [None] + clean[16:]                             # a cloud seaward of the edge
+    assert s.planet_position(gap, offs)["status"] == "cloud_gap"
+
+
+def test_planet_corroboration():
+    radar_months = [f"2024-{m}" for m in ("10", "11", "12")] + [f"2025-{m:02d}" for m in range(1, 10)]
+    months = ["2024-10", "2024-11", "2025-07", "2025-08"]
+    adv = {"trend": "advancing", "tidal": False}
+    assert s.planet_corroboration(months, [0.0, 4.0, 30.0, 34.0], radar_months, adv)["status"] == "confirmed"
+    assert s.planet_corroboration(months, [0.0, 4.0, 5.0, 6.0], radar_months, adv)["status"] == "not_confirmed"
+    assert s.planet_corroboration(months, [0.0, None, 30.0, 34.0], radar_months, adv)["status"] == "pending_coverage"
+    assert s.planet_corroboration(months, [0.0, 4.0, 30.0, 34.0], radar_months, {**adv, "tidal": True})["status"] == "tidal_uncertainty"
+    assert s.planet_corroboration(months, [0.0, 4.0, 30.0, 34.0], radar_months, {"trend": "stable"})["status"] == "no_radar_trend"

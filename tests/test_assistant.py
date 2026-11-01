@@ -64,3 +64,27 @@ def test_errors_never_run_anything():
 
 def test_undo():
     assert parse("undo") == [{"steps": [{"action": "undo"}]}]
+
+
+# ---------- VLM side (Phase 7c) ----------
+def check_model(steps):
+    script = (f"const a = require({json.dumps(str(JS))});"
+              f"console.log(JSON.stringify(a.checkModelSteps({json.dumps(steps)}, {json.dumps(LAYERS)})));")
+    out = subprocess.run(["node", "-e", script], capture_output=True, text=True, encoding="utf-8", check=True).stdout
+    return json.loads(out)
+
+
+def test_model_steps_are_checked_like_the_parsers():
+    ok = check_model([{"action": "buffer", "layer": "river lines", "distance": 200, "units": "meters"},
+                      {"action": "style_layer", "layer": "it", "color": "purple"}])
+    assert ok["steps"][0] == {"action": "buffer", "layer": "gp-1", "distance": 200, "units": "meters"}
+    assert ok["steps"][1] == {"action": "style_layer", "layer": {"ref": "last"}, "color": "#9333ea"}
+    assert "No layer called" in check_model([{"action": "zoom", "layer": "roads"}])["error"]
+    assert "“it” needs" in check_model([{"action": "zoom", "layer": "it"}])["error"]
+
+
+def test_action_hint():
+    script = (f"const a = require({json.dumps(str(JS))});"
+              "console.log(JSON.stringify(['outline the rivers in blue', 'forest loss in the north', 'download that'].map(t => a.ACTION_HINT.test(t))));")
+    out = subprocess.run(["node", "-e", script], capture_output=True, text=True, encoding="utf-8", check=True).stdout
+    assert json.loads(out) == [True, False, True]
