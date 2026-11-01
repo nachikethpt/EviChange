@@ -775,9 +775,13 @@ def adjudicate_chip(source: str, site_id: str, name: str):
     return FileResponse(folder / name, media_type="image/png")
 
 
+# The pages are never cached, so a browser always picks up the versioned scripts they name (?v=N).
+NO_CACHE = {"Cache-Control": "no-cache"}
+
+
 @app.get("/adjudicate")
 def adjudicate_page():
-    return FileResponse(FRONTEND / "adjudicate.html")
+    return FileResponse(FRONTEND / "adjudicate.html", headers=NO_CACHE)
 
 
 app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
@@ -785,4 +789,4 @@ app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
 
 @app.get("/")
 def index():
-    return FileResponse(FRONTEND / "index.html")
+    return FileResponse(FRONTEND / "index.html", headers=NO_CACHE)
