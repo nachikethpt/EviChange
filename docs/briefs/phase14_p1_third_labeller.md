@@ -1,5 +1,8 @@
 # Phase 14 brief: third labeller (P1)
 
+> **Replaced on 2026-11-01** by `labelling_split_2026-11-01.md`: P1 is now first labeller of (b) and (d).
+
+
 **Owner:** P1, from 2026-10-26 (back on 2026-10-28, alongside the shoreline literature review). **Estimate:** ≈ 2–3 h.
 **What for:** P2 labels every item; P3 (second labeller) and you (third) label the same 10 items of each
 task. Your labels give inter-labeller agreement from someone who built neither the land-cover classes
