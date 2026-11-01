@@ -502,6 +502,13 @@ delivered) are wired into the shoreline, the monthly maps and the Geo-VLM check:
   must move the trend's way by 20 m; all 26 significant trends are *pending* until the
   year-2 Planet months cover Jul – Sep 2026.
 
+- *Clipped orders (2026-11-01):* to finish within days instead of waiting for December's quota, the orders that
+  didn't fit went on November's quota clipped to the area that uses them (`scripts/planet_clip_plans.py`): Apr – Jun
+  2026 to the Phase 11 transect corridor (300 m landward to 500 m seaward, ≈ 62 km² a month) and the two 4b
+  windows (D17) to the chips of the 4b boxes and the 30 sites (≈ 206 km² each). The clip is a MultiPolygon of
+  grid rectangles (under Planet's 500-vertex limit, ~2 m apart because Planet rejects touching parts). Those
+  mosaics cover only their clip; the rest of the AOI is no data, so monthly maps show it as a gap.
+
 ## D13 — Extended evaluation: classes, shoreline and coastal buildings (2026-10-08, proposed)
 
 **Decision.** The new outputs are also evaluated, not only shown, using the same two-axis design
