@@ -545,6 +545,8 @@ function openPanel(name) {
   closePanel(false);
   state.panel = name;
   $('#panel').hidden = false;
+  if (COAST_PANELS.includes(name)) coastFocus(true);
+  if (name === 'shoreline' && mon.on) { mon.req++; monRemoveLayer(); mon.on = false; }   // the Monthly raster would hide the shoreline
   if (name === 'measure') startSketch('line', 'measure');
   if (name === 'draw') startSketch('polygon', 'draw');
   if (name === 'swipe') swipeOn();
@@ -927,8 +929,20 @@ async function refreshRunList() {
   });
 }
 
+// Shoreline and Monthly show only the coast: the detected change regions are hidden while either is open
+// and come back (if they were on) when it closes. The Contents checkbox can still turn them on meanwhile.
+const COAST_PANELS = ['shoreline', 'monthly'];
+let coastHidChanges = false;
+function coastFocus(on) {
+  const layer = state.layers.find(l => l.id === CHANGE_ID);
+  if (!layer) return;
+  if (on && layer.visible) { setVisible(layer, false); coastHidChanges = true; renderLayerList(); }
+  if (!on && coastHidChanges) { if (!layer.visible) setVisible(layer, true); coastHidChanges = false; renderLayerList(); }
+}
+
 function closePanel(resize = true) {
   if (state.panel === 'shoreline') shoreStop();     // the shoreline layers stay on the map; "Hide" removes them
+  if (COAST_PANELS.includes(state.panel)) coastFocus(false);
   // keep a finished drawn area visible when moving on to the change panel or report; clear everything else
   if (state.sketch) {
     stopSketch(!(state.panel === 'draw' && state.sketch.done) && state.panel !== 'run');
