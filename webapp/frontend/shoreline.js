@@ -1,19 +1,22 @@
 // Shoreline change panel (D11, Phases 11/15): the shoreline through time with a slider, the transects
 // coloured by how the shoreline moved, and one transect's position series as a chart.
 //   yearly  = one tide-averaged shoreline per dry season (Oct-Mar), 2015-16 .. 2025-26 (years.json)
-//   monthly = one shoreline per month, Oct 2024 .. Sep 2026 (moves with the tide; shorelines.geojson)
+//   monthly = one shoreline per month, Oct 2024 .. Sep 2026 (moves with the tide; shorelines.geojson),
+//             with the Planet 3 m shoreline and image of the month where there is one (Oct 2024 .. Sep 2025, planet.json)
 // Uses app.js's map, $, esc and alertBox; renderShorelinePanel() is called from renderPanel().
 
 const SHORE_COLORS = { advancing: '#22c55e', retreating: '#ef4444', stable: '#94a3b8', unconfirmed: '#f59e0b', too_few: '#475569' };
 const SHORE_TEXT = { advancing: 'advancing (land gained)', retreating: 'retreating (sea moved in)', stable: 'stable',
                      unconfirmed: 'radar moved, optical did not confirm', too_few: 'too few positions' };
 const shore = { mode: 'years', labels: [], lines: [], transects: null, idx: 0, ref: true, timer: null,
-                tid: null, detail: null, loaded: null };
+                tid: null, detail: null, loaded: null,
+                planet: null, planetLines: [], planetOn: true, planetImg: false, imgReq: 0 };
+const PLANET_COLOR = '#e879f9';
 
 function shoreEnsureLayers() {
   if (map.getSource('shore-tr')) return;
   const empty = { type: 'FeatureCollection', features: [] };
-  ['shore-tr', 'shore-ref', 'shore-cur'].forEach(id => map.addSource(id, { type: 'geojson', data: empty }));
+  ['shore-tr', 'shore-ref', 'shore-cur', 'shore-planet'].forEach(id => map.addSource(id, { type: 'geojson', data: empty }));
   map.addLayer({ id: 'shore-tr', type: 'line', source: 'shore-tr', paint: {
     'line-color': ['match', ['get', 'change'], ...Object.entries(SHORE_COLORS).flat(), '#475569'],
     'line-width': ['match', ['get', 'change'], ['advancing', 'retreating'], 3, 'unconfirmed', 2, 1],
@@ -21,6 +24,7 @@ function shoreEnsureLayers() {
   map.addLayer({ id: 'shore-ref', type: 'line', source: 'shore-ref', paint: {
     'line-color': '#e2e8f0', 'line-width': 1.5, 'line-dasharray': [2, 2], 'line-opacity': 0.8 } });
   map.addLayer({ id: 'shore-cur', type: 'line', source: 'shore-cur', paint: { 'line-color': '#22d3ee', 'line-width': 2.5 } });
+  map.addLayer({ id: 'shore-planet', type: 'line', source: 'shore-planet', paint: { 'line-color': PLANET_COLOR, 'line-width': 2 } });
   // the transect whose chart is open
   map.addLayer({ id: 'shore-sel', type: 'line', source: 'shore-tr', filter: ['==', ['get', 'id'], ''], paint: {
     'line-color': '#facc15', 'line-width': 6, 'line-opacity': 0.95 } });
@@ -30,7 +34,8 @@ function shoreEnsureLayers() {
 }
 
 function shoreSetVisible(on) {
-  ['shore-tr', 'shore-ref', 'shore-cur', 'shore-sel'].forEach(id => {
+  if (!on) shorePlanetImage(null);
+  ['shore-tr', 'shore-ref', 'shore-cur', 'shore-planet', 'shore-sel'].forEach(id => {
     if (!map.getLayer(id)) return;
     map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
     if (on) map.moveLayer(id);                      // above the change regions and the other Contents layers
@@ -49,6 +54,12 @@ async function shoreLoad(mode) {
     } else {
       const [lines, tr] = await Promise.all([get('/api/shoreline/lines?kind=month'), get('/api/shoreline/transects')]);
       shore.lines = lines.features; shore.labels = lines.features.map(f => f.properties.month); shore.transects = tr;
+      if (!shore.planet) {                            // Planet is optional: no planet.json yet = no Planet rows
+        try {
+          const [pl, plines] = await Promise.all([get('/api/shoreline/planet'), get('/api/shoreline/planet/lines')]);
+          shore.planet = pl; shore.planetLines = plines.features;
+        } catch (err) { shore.planet = { error: err.message }; shore.planetLines = []; }
+      }
     }
   } catch (err) { alertBox(`Shoreline: ${err.message}`); shore.lines = []; shore.labels = []; shore.transects = null; }
   for (let i = 0; i < 1200 && !map.style?._loaded; i++) await new Promise(r => setTimeout(r, 100));   // addSource throws mid-load
@@ -70,6 +81,51 @@ function shoreShow(i) {
   const lab = document.getElementById('shLabel'); if (lab) lab.textContent = shoreLabel(shore.labels[i]);
   const sl = document.getElementById('shSlider'); if (sl && +sl.value !== i) sl.value = i;
   const ch = document.getElementById('shChart'); if (ch) ch.innerHTML = shoreChart();
+  const month = shore.mode === 'months' ? shore.labels[i] : null;
+  const pline = month && shore.planetOn ? shore.planetLines.find(f => f.properties.month === month) : null;
+  map.getSource('shore-planet')?.setData(fc(pline ? [pline] : []));
+  shorePlanetImage(month && shore.planetImg && shorePlanetMonth(month) ? month : null);
+  const pn = document.getElementById('shPlanetNote'); if (pn) pn.innerHTML = shorePlanetNote(month);
+}
+
+// Planet (D12): one clear day per month, Oct 2024 - Sep 2025 (Feb 2025 not delivered)
+function shorePlanetMonth(month) {
+  const p = shore.planet;
+  if (!p || p.error) return null;
+  const i = p.months.indexOf(month);
+  return i < 0 ? null : { month, date: p.dates[i] };
+}
+
+function shorePlanetNote(month) {
+  if (!month) return '';
+  const pm = shorePlanetMonth(month);
+  if (!pm) return `No Planet image for ${esc(shoreLabel(month))}.`;
+  const d = new Date(pm.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  const row = shore.planet.compare?.per_month.find(r => r.month === month);
+  return `Planet image of <b>${esc(d)}</b>` + (row && row.n ? `: against the radar line this month, median difference ${row.median_abs_m} m over ${row.n} transects.` : '.');
+}
+
+async function shorePlanetImage(month) {
+  const req = ++shore.imgReq;
+  const drop = () => { if (map.getLayer('shore-pimg')) map.removeLayer('shore-pimg'); if (map.getSource('shore-pimg')) map.removeSource('shore-pimg'); };
+  if (!month) { drop(); return; }
+  try {
+    const r = await fetch(`/api/planet/layer?month=${month}&kind=rgb`);
+    const t = await r.json();
+    if (!r.ok) throw new Error(t.detail || r.statusText);
+    if (req !== shore.imgReq) return;               // the slider moved on meanwhile
+    drop();
+    map.addSource('shore-pimg', { type: 'raster', tiles: t.tiles, tileSize: 256, attribution: t.attribution });
+    map.addLayer({ id: 'shore-pimg', type: 'raster', source: 'shore-pimg' }, map.getLayer('shore-tr') ? 'shore-tr' : undefined);
+  } catch (err) { if (req === shore.imgReq) { drop(); alertBox(`Planet image: ${err.message}`); } }
+}
+
+function shorePlanetSummary() {
+  const c = shore.planet?.compare;
+  if (!c) return '';
+  const line = (label, st) => st && st.n ? `<div>${label}: median ${st.median_abs_m} m, ${Math.round(st.within_20m * 100)} % within 20 m <span class="muted">(${st.n} positions)</span></div>` : '';
+  return `<div class="muted" style="margin-top:4px">Planet against radar, same transect and month:</div>
+    ${line('dry months (Oct–Mar)', c.dry)}${line('monsoon months (Apr–Sep)', c.monsoon)}${line('Planet dry months vs the 2024-25 yearly line', c.yearly)}`;
 }
 
 function shoreLabel(l) {
@@ -106,7 +162,8 @@ function shoreSeries() {
   const d = shore.detail;
   if (!d || d.error) return null;
   if (shore.mode === 'years') return d.yearly && { stats: d.yearly_stats, pts: d.yearly.map(p => ({ label: p.season, pos: p.pos, opt: p.optical })) };
-  return d.series && { stats: d, pts: d.series.map(p => ({ label: p.month, pos: p.pos })) };
+  const planet = Object.fromEntries((d.planet || []).map(p => [p.month, p.pos]));
+  return d.series && { stats: d, pts: d.series.map(p => ({ label: p.month, pos: p.pos, planet: planet[p.month] ?? null })) };
 }
 
 function shoreChart() {
@@ -116,7 +173,7 @@ function shoreChart() {
   const s = shoreSeries();
   if (!s) return `<p class="muted">Transect ${esc(shore.tid)} is a hidden Phase 14 reference transect: its series stays blind until the reference shorelines are digitised.</p>`;
   const W = 300, H = 150, L = 34, R = 8, T = 10, B = 26;
-  const vals = s.pts.flatMap(p => [p.pos, p.opt]).filter(v => v !== null && v !== undefined);
+  const vals = s.pts.flatMap(p => [p.pos, p.opt, p.planet]).filter(v => v !== null && v !== undefined);
   if (!vals.length) return `<p class="muted">No positions on transect ${esc(shore.tid)}.</p>`;
   let lo = Math.min(...vals), hi = Math.max(...vals);
   if (hi - lo < 20) { const m = (hi + lo) / 2; lo = m - 10; hi = m + 10; }
@@ -126,7 +183,7 @@ function shoreChart() {
     .reduce((acc, pt) => { if (!pt) acc.push([]); else acc[acc.length - 1].push(pt); return acc; }, [[]])
     .filter(r => r.length).map(r => `M${r.map(p => p.map(v => v.toFixed(1)).join(',')).join('L')}`).join('');
   const dots = key => s.pts.map((p, i) => p[key] === null || p[key] === undefined ? '' :
-    `<circle cx="${x(i).toFixed(1)}" cy="${y(p[key]).toFixed(1)}" r="${key === 'pos' ? 3 : 2.5}" fill="${key === 'pos' ? '#22d3ee' : '#f59e0b'}"><title>${esc(p.label)}: ${p[key]} m</title></circle>`).join('');
+    `<circle cx="${x(i).toFixed(1)}" cy="${y(p[key]).toFixed(1)}" r="${key === 'pos' ? 3 : 2.5}" fill="${{ pos: '#22d3ee', opt: '#f59e0b', planet: PLANET_COLOR }[key]}"><title>${esc(p.label)}: ${p[key]} m</title></circle>`).join('');
   const change = s.stats?.change ?? s.stats?.trend;
   const rate = s.stats?.lrr === null || s.stats?.lrr === undefined ? '–' : `${s.stats.lrr > 0 ? '+' : ''}${s.stats.lrr} m/yr${s.stats.ci95 ? ` ± ${s.stats.ci95}` : ''}`;
   const tick = i => `<text x="${x(i).toFixed(1)}" y="${H - 8}" text-anchor="${i === 0 ? 'start' : i === s.pts.length - 1 ? 'end' : 'middle'}" font-size="9" fill="currentColor" opacity=".7">${esc(shore.mode === 'years' ? s.pts[i].label.slice(0, 4) : s.pts[i].label.slice(2))}</text>`;
@@ -138,11 +195,12 @@ function shoreChart() {
       <text x="4" y="${T + 8}" font-size="9" fill="currentColor" opacity=".7">${Math.round(hi)} m</text>
       <text x="4" y="${H - B}" font-size="9" fill="currentColor" opacity=".7">${Math.round(lo)} m</text>
       <path d="${path('opt')}" fill="none" stroke="#f59e0b" stroke-width="1" stroke-dasharray="3 2"/>${dots('opt')}
-      <path d="${path('pos')}" fill="none" stroke="#22d3ee" stroke-width="1.5"/>${dots('pos')}${ticks}
+      <path d="${path('pos')}" fill="none" stroke="#22d3ee" stroke-width="1.5"/>${dots('pos')}
+      <path d="${path('planet')}" fill="none" stroke="${PLANET_COLOR}" stroke-width="1" stroke-dasharray="2 2"/>${dots('planet')}${ticks}
     </svg>
     <span class="muted">Shoreline position from the baseline, seaward +. ${shore.mode === 'years'
       ? 'Blue: radar, tide-averaged over each dry season; orange: optical (Sentinel-2, once its surface reflectance covers the area).'
-      : 'Blue: radar, one month (moves with the tide, so expect jumps on tidal flats); the rate above is fitted to the tide-averaged quarters.'}</span></div>`;
+      : 'Blue: radar, one month (moves with the tide, so expect jumps on tidal flats); pink: Planet 3 m, one day that month; the rate above is fitted to the tide-averaged quarters.'}</span></div>`;
 }
 
 function renderShorelinePanel(body) {
@@ -164,12 +222,19 @@ function renderShorelinePanel(body) {
         `<div><span style="display:inline-block;width:18px;height:3px;background:${SHORE_COLORS[k]};vertical-align:middle;margin-right:6px"></span>${esc(SHORE_TEXT[k])}: <b>${counts[k]}</b></div>`).join('')}
       <p class="muted">${shore.mode === 'years' ? 'Each season is one tide-averaged radar shoreline (Sentinel-1, Oct–Mar); a change needs a rate whose 95 % CI excludes 0, confirmed by the optical shoreline.'
         : 'Monthly lines move with the tide (several m); the rate comes from the tide-averaged quarters.'}</p></div>
+    ${shore.mode === 'months' && shore.planet && !shore.planet.error ? `<div class="section"><div class="pane-subtitle">Planet 3 m (one clear day a month, Oct 2024 – Sep 2025)</div>
+      <label><input type="checkbox" id="shPlanetOn" ${shore.planetOn ? 'checked' : ''}> <span style="display:inline-block;width:18px;height:3px;background:${PLANET_COLOR};vertical-align:middle"></span> Planet shoreline</label>
+      <label style="margin-left:8px"><input type="checkbox" id="shPlanetImg" ${shore.planetImg ? 'checked' : ''}> Planet image</label>
+      <p id="shPlanetNote" class="muted">${shorePlanetNote(shore.labels[shore.idx])}</p>${shorePlanetSummary()}
+      <p class="muted">Imagery © Planet Labs PBC.</p></div>` : ''}
     <div id="shChart">${shoreChart()}</div>
     <button class="btn" id="shHide">Hide shoreline layers</button>`;
   body.querySelectorAll('[data-m]').forEach(b => b.onclick = () => { if (b.dataset.m !== shore.mode) { shore.mode = b.dataset.m; renderPanel(); } });
   const sl = $('#shSlider'); if (sl) sl.oninput = e => { shoreStop(); shoreShow(+e.target.value); };
   const pl = $('#shPlay'); if (pl) pl.onclick = shorePlay;
   const rf = $('#shRef'); if (rf) rf.onchange = e => { shore.ref = e.target.checked; shoreShow(shore.idx); };
+  const po = $('#shPlanetOn'); if (po) po.onchange = e => { shore.planetOn = e.target.checked; shoreShow(shore.idx); };
+  const pi = $('#shPlanetImg'); if (pi) pi.onchange = e => { shore.planetImg = e.target.checked; shoreShow(shore.idx); };
   $('#shHide').onclick = () => { shoreStop(); shoreSetVisible(false); closePanel(); };
   shoreSetVisible(true);
 }

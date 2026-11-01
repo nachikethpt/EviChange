@@ -409,13 +409,14 @@ def sea_polygons(ee: Any, aoi: dict, stack: Any) -> list[dict]:
     return vec.filter(ee.Filter.gte("area_ha", SEA_MIN_HA)).filter(ee.Filter.eq("touches_edge", 1)).getInfo()["features"]
 
 
-def sample_profiles(ee: Any, stack: Any, points: list[tuple[str, int, float, float]], bands: list[str], log=print) -> dict:
-    """{transect id: {band: [value per offset]}} sampled at STEP_M. points: [(tid, i, lon, lat)]."""
+def sample_profiles(ee: Any, stack: Any, points: list[tuple[str, int, float, float]], bands: list[str], log=print,
+                    scale: float = STEP_M) -> dict:
+    """{transect id: {band: [value per offset]}}, each point read at `scale` m. points: [(tid, i, lon, lat)]."""
     out: dict[str, dict[str, list]] = {}
     for b0 in range(0, len(points), SAMPLE_BATCH):
         batch = points[b0: b0 + SAMPLE_BATCH]
         fc = ee.FeatureCollection([ee.Feature(ee.Geometry.Point([lon, lat]), {"t": t, "i": i}) for t, i, lon, lat in batch])
-        got = stack.reduceRegions(collection=fc, reducer=ee.Reducer.first(), scale=STEP_M, tileScale=4).getInfo()["features"]
+        got = stack.reduceRegions(collection=fc, reducer=ee.Reducer.first(), scale=scale, tileScale=4).getInfo()["features"]
         for f in got:
             p = f["properties"]
             rec = out.setdefault(p["t"], {b: {} for b in bands})
@@ -786,6 +787,145 @@ def years_outputs(result: dict, transects: dict, out_dir: Path | None = None) ->
     (out_dir / "years.json").write_text(json.dumps(result))
     (out_dir / "years_lines.geojson").write_text(json.dumps({"type": "FeatureCollection", "features": feats}))
     return {"seasons": labels, "lines": len(feats), "status_counts": result["status_counts"]}
+
+
+# ---------- Planet 3 m shoreline (D12, Phase 13c) ----------
+# One PlanetScope day per month (Oct 2024 - Sep 2025, Feb 2025 missing; agents/planet.py), water = NDWI > 0
+# on Planet's clear pixels, read on the same transects every PLANET_STEP_M at Planet's 3 m. A single day is
+# at one tide, like a single radar look, so these positions are compared with the radar, never fitted for
+# rates. They give: (1) a 3 m check of the radar shorelines month by month, dry and monsoon months apart
+# (the monsoon months have no clear Sentinel-2, so this is their only optical check), and (2) a 3 m check
+# of the tide-averaged yearly 2024-25 shoreline against the median of the Planet dry-season months.
+PLANET_STEP_M = 5               # m between samples (Planet pixels are 3 m)
+PLANET_YEAR = "2024-25"         # the yearly (dry-season) shoreline the Planet dry months are compared with
+CHECK_WITHIN_M = (20, 30)       # report the share of differences within these
+
+
+def planet_offsets() -> list[float]:
+    return profile_offsets(step=PLANET_STEP_M)
+
+
+def is_dry_month(month: str) -> bool:
+    return int(month[5:7]) in (10, 11, 12, 1, 2, 3)
+
+
+def diff_stats(diffs: list[float]) -> dict:
+    """Agreement of two shorelines from their position differences (a - b, m, seaward +)."""
+    if not diffs:
+        return {"n": 0, "bias_m": None, "mae_m": None, "rmse_m": None, "median_abs_m": None,
+                **{f"within_{w}m": None for w in CHECK_WITHIN_M}}
+    n = len(diffs)
+    absd = sorted(abs(d) for d in diffs)
+    return {"n": n, "bias_m": round(sum(diffs) / n, 1), "mae_m": round(sum(absd) / n, 1),
+            "rmse_m": round(math.sqrt(sum(d * d for d in diffs) / n), 1), "median_abs_m": round(median(absd), 1),
+            **{f"within_{w}m": round(sum(1 for d in absd if d <= w) / n, 3) for w in CHECK_WITHIN_M}}
+
+
+def median(values: list[float]) -> float | None:
+    v = sorted(values)
+    if not v:
+        return None
+    return v[len(v) // 2] if len(v) % 2 else (v[len(v) // 2 - 1] + v[len(v) // 2]) / 2
+
+
+def planet_compare(months: list[str], planet: dict[str, list[float | None]], radar_months: list[str],
+                   radar: dict[str, list[float | None]], yearly: dict[str, float | None] | None = None,
+                   skip: set[str] = frozenset()) -> dict:
+    """Planet vs radar positions. planet / radar: {transect id: [position per month]}; yearly: {transect id:
+    the PLANET_YEAR yearly radar position}. Transects in `skip` (Phase 14 reference transects, blind) are left out.
+    {'per_month': [{month, dry, n_planet, ...diff_stats}], 'dry': diff_stats, 'monsoon': diff_stats,
+     'yearly': diff_stats of (median Planet dry-season position - yearly position)}."""
+    ridx = {m: i for i, m in enumerate(radar_months)}
+    per_month, dry, wet, yr = [], [], [], []
+    for mi, m in enumerate(months):
+        diffs, n_planet = [], 0
+        for tid, row in planet.items():
+            p = row[mi] if mi < len(row) else None
+            if tid in skip or p is None:
+                continue
+            n_planet += 1
+            rrow = radar.get(tid) or []
+            r = rrow[ridx[m]] if m in ridx and ridx[m] < len(rrow) else None
+            if r is not None:
+                diffs.append(p - r)
+        (dry if is_dry_month(m) else wet).extend(diffs)
+        per_month.append({"month": m, "dry": is_dry_month(m), "n_planet": n_planet, **diff_stats(diffs)})
+    if yearly:
+        dry_idx = [i for i, m in enumerate(months) if is_dry_month(m)]
+        for tid, row in planet.items():
+            y = yearly.get(tid)
+            pm = median([row[i] for i in dry_idx if i < len(row) and row[i] is not None])
+            if tid not in skip and y is not None and pm is not None:
+                yr.append(pm - y)
+    return {"per_month": per_month, "dry": diff_stats(dry), "monsoon": diff_stats(wet), "yearly": diff_stats(yr)}
+
+
+def build_planet(transects: dict, months: list[str] | None = None, log=print) -> dict:
+    """Planet shoreline positions on the Phase 11 transects. {'months', 'dates', 'positions': {id: [m]},
+    'status_counts', 'method'}."""
+    from . import planet as pl
+    from .ee_engine import _ee
+    ee = _ee()
+    months = months or pl.available_months(ee)
+    if not months:
+        raise RuntimeError(f"no Planet months in {pl.PLANET_COLLECTION}")
+    by_month = {d[:7]: d for d in pl.collection(ee).aggregate_array("date").getInfo()}
+    bands = [f"p_{m.replace('-', '_')}" for m in months]
+    stack = ee.Image.cat([pl.water_image(ee, m).unmask(255).toByte().rename(b) for m, b in zip(months, bands)])
+    offsets = planet_offsets()
+    points = [(f["id"], i, lon, lat) for f in transects["features"] for i, (lon, lat) in enumerate(transect_points(f, offsets))]
+    log(f"{len(months)} Planet months, {len(transects['features'])} transects, {len(points)} sample points")
+    profiles = sample_profiles(ee, stack, points, bands, log, scale=pl.NATIVE_SCALE)
+    positions, counts = {}, {}
+    for f in transects["features"]:
+        prof = profiles.get(f["id"], {})
+        row = []
+        for b in bands:
+            res = shoreline_position([prof.get(b, {}).get(i) for i in range(len(offsets))], offsets)
+            counts[res["status"]] = counts.get(res["status"], 0) + 1
+            row.append(res["pos"])
+        positions[f["id"]] = row
+    return {"months": months, "dates": [by_month.get(m) for m in months], "positions": positions,
+            "status_counts": counts, "method": PLANET_METHOD}
+
+
+PLANET_METHOD = {
+    "imagery": "PlanetScope 8-band surface reflectance harmonised to Sentinel-2, one clear day per month, 3 m (agents/planet.py, D12)",
+    "water": "NDWI (green, NIR) > 0 on Planet's UDM2 clear pixels; cloud / haze / no data is no data",
+    "position": f"as Phase 11 on the same transects, samples every {PLANET_STEP_M} m read at 3 m: landward edge of the "
+                f"sea-connected water ({LAND_RUN} land samples in a row)",
+    "tide": "one day per month is one tide level (several m range, D11): positions are compared, not fitted for rates",
+    "compare_month": "Planet minus the Phase 11 monthly radar position, same transect and month (seaward +); dry months "
+                     "(Oct-Mar) and monsoon months (Apr-Sep) apart",
+    "compare_yearly": f"median Planet position over the dry-season months minus the {PLANET_YEAR} yearly (tide-averaged) radar position",
+    "blind": "the Phase 14 reference transects and their neighbours are left out of the comparison and hidden in the app",
+}
+
+
+def planet_outputs(result: dict, transects: dict, out_dir: Path | None = None) -> dict:
+    """Write planet.json (months, dates, positions, comparison with the radar) and planet_lines.geojson."""
+    out_dir = out_dir or SHORELINE_DIR
+    pos = load("positions.json", out_dir) or {"months": [], "positions": {}}
+    years = load("years.json", out_dir)
+    yearly = None
+    if years:
+        labels = [s[0] for s in years["seasons"]]
+        if PLANET_YEAR in labels:
+            yi = labels.index(PLANET_YEAR)
+            yearly = {tid: row[yi] for tid, row in years["positions"].items()}
+    skip = hidden_transects(transects)
+    compare = planet_compare(result["months"], result["positions"], pos["months"], pos["positions"], yearly, skip)
+    feats = []
+    for i, m in enumerate(result["months"]):
+        runs = season_lines(transects["features"], result["positions"], i)
+        if runs:
+            feats.append({"type": "Feature", "properties": {"month": m, "date": result["dates"][i], "kind": "planet"},
+                          "geometry": {"type": "MultiLineString", "coordinates": [[list(p) for p in r] for r in runs]}})
+    out = {**result, "compare": compare, "attribution": "Imagery © Planet Labs PBC"}
+    (out_dir / "planet.json").write_text(json.dumps(out))
+    (out_dir / "planet_lines.geojson").write_text(json.dumps({"type": "FeatureCollection", "features": feats}))
+    return {"months": result["months"], "lines": len(feats), "status_counts": result["status_counts"],
+            "dry": compare["dry"], "monsoon": compare["monsoon"], "yearly": compare["yearly"]}
 
 
 # ---------- Phase 14 blind lock ----------

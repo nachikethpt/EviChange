@@ -4,10 +4,13 @@
 // Uses app.js's map, $, esc, alertBox, openPanel/renderPanel/closePanel and state; renderMonthlyPanel() is called from renderPanel().
 
 const MONTHLY_LAYERS = { class: 'Land cover (Dynamic World)', water: 'Water (Sentinel-1 radar)', clear: 'Clear-sky share',
-                         water_change: 'Water change', class_change: 'Land-cover change' };
+                         water_change: 'Water change', class_change: 'Land-cover change',
+                         planet_rgb: 'Planet 3 m image', planet_water: 'Planet 3 m water' };
 const MONTHLY_LAYER_HELP = { class: 'Only months Dynamic World saw clearly (about Oct–Mar); other months are gaps.',
   water: 'Radar sees through cloud, so every month has a water mask.', clear: 'How much of the area was seen without cloud.',
-  water_change: 'Water gained / lost against the chosen month.', class_change: 'Pixels whose class differs from the chosen month (clear months only).' };
+  water_change: 'Water gained / lost against the chosen month.', class_change: 'Pixels whose class differs from the chosen month (clear months only).',
+  planet_rgb: 'One clear PlanetScope day per month, Oct 2024 – Sep 2025 (Feb 2025 missing): fills the monsoon months Dynamic World can\'t see. Cloud is a gap. Imagery © Planet Labs PBC.',
+  planet_water: 'Water from the Planet day (NDWI > 0), 3 m. One day is one tide level. Imagery © Planet Labs PBC.' };
 const DW_COLORS = { water: '#419bdf', trees: '#397d49', grass: '#88b053', flooded_vegetation: '#7a87c6', crops: '#e49635',
                     shrub_and_scrub: '#dfc35a', built: '#c4281b', bare: '#a59b8f', snow_and_ice: '#b39fe1' };
 const mon = { summary: null, months: [], idx: 0, layer: 'class', vs: 'base', on: false, region: null, regionId: null,
@@ -40,12 +43,15 @@ async function monthlyShow(i) {
   const ch = $('#monChart'); if (ch) ch.innerHTML = monChart();
   monSetMsg('Loading…');
   try {
-    const url = `/api/monthly/layer?month=${month}&layer=${mon.layer}${mon.layer.endsWith('_change') ? `&vs=${mon.vs}` : ''}`;
+    const url = mon.layer.startsWith('planet_')
+      ? `/api/planet/layer?month=${month}&kind=${mon.layer.slice(7)}`
+      : `/api/monthly/layer?month=${month}&layer=${mon.layer}${mon.layer.endsWith('_change') ? `&vs=${mon.vs}` : ''}`;
     const t = await monGet(url);
+    for (let k = 0; k < 600 && !map.style?._loaded; k++) await new Promise(r => setTimeout(r, 100));   // addSource throws mid-load
     if (req !== mon.req) return;                       // a newer month was asked for meanwhile
     monRemoveLayer();
-    map.addSource('mon-raster', { type: 'raster', tiles: t.tiles, tileSize: 256 });
-    map.addLayer({ id: 'mon-raster', type: 'raster', source: 'mon-raster', paint: { 'raster-opacity': 0.75 } },
+    map.addSource('mon-raster', { type: 'raster', tiles: t.tiles, tileSize: 256, ...(t.attribution ? { attribution: t.attribution } : {}) });
+    map.addLayer({ id: 'mon-raster', type: 'raster', source: 'mon-raster', paint: { 'raster-opacity': mon.layer === 'planet_rgb' ? 1 : 0.75 } },
                  map.getLayer('shore-tr') ? 'shore-tr' : undefined);
     mon.on = true; monSetMsg('');
   } catch (err) {

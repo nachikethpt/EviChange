@@ -109,6 +109,28 @@ def water_image(ee: Any, month: str, threshold: float = NDWI_WATER) -> Any:
     return indices(ee, month_image(ee, month)).select("NDWI").gt(threshold).rename("water")
 
 
+TILE_KINDS = ("rgb", "nir", "water")
+
+
+def tile_layer(month: str, kind: str, aoi: dict | None = None) -> dict:
+    """XYZ tiles of one Planet month for the map: true colour (rgb), NIR false colour (nir) or NDWI water
+    (water, blue; land transparent). Cloud and no data are transparent, so a gap shows as a gap."""
+    from .ee_engine import _ee
+    if kind not in TILE_KINDS:
+        raise ValueError(f"kind must be one of {TILE_KINDS}")
+    ee = _ee()
+    img = month_image(ee, month)
+    if kind == "water":
+        vis_img = water_image(ee, month).selfMask().visualize(palette=["2563eb"])
+    else:
+        bands, lo, hi = CHIP_VIS[kind]
+        vis_img = img.visualize(bands=bands, min=lo, max=hi)
+    if aoi:
+        vis_img = vis_img.clip(ee.Geometry(aoi))
+    map_id = vis_img.getMapId({})
+    return {"tiles": [map_id["tile_fetcher"].url_format], "month": month, "kind": kind, "attribution": ATTRIBUTION}
+
+
 def region_chips(month: str, bbox: tuple[float, float, float, float]) -> dict[str, bytes]:
     """Planet chips around a region for the Geo-VLM check: true colour + NIR false colour (no SWIR),
     same framing as ee_engine.region_chips(). Keys: rgb, nir."""
@@ -127,3 +149,19 @@ def region_chips(month: str, bbox: tuple[float, float, float, float]) -> dict[st
         with urllib.request.urlopen(url, timeout=120) as resp:
             chips[kind] = resp.read()
     return chips
+
+
+def window_month(window: list[str], months: list[str]) -> str | None:
+    """The last Planet month starting inside a date window [start, end) (ISO dates), or None."""
+    start, end = window
+    inside = [m for m in months if start[:7] <= m and f"{m}-01" < end]
+    return inside[-1] if inside else None
+
+
+def pair_chips(before_month: str, after_month: str, bbox: tuple[float, float, float, float]) -> dict[str, bytes]:
+    """Before / after Planet chips for the Geo-VLM check, keyed like ee_engine.region_chips():
+    before_rgb, after_rgb, before_nir, after_nir."""
+    out = {}
+    for when, month in (("before", before_month), ("after", after_month)):
+        out.update({f"{when}_{kind}": png for kind, png in region_chips(month, bbox).items()})
+    return out
