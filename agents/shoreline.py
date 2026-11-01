@@ -797,12 +797,52 @@ def years_outputs(result: dict, transects: dict, out_dir: Path | None = None) ->
 # (the monsoon months have no clear Sentinel-2, so this is their only optical check), and (2) a 3 m check
 # of the tide-averaged yearly 2024-25 shoreline against the median of the Planet dry-season months.
 PLANET_STEP_M = 5               # m between samples (Planet pixels are 3 m)
+PLANET_LAND_RUN = 6             # land samples in a row that end the sea: 30 m, as the radar's 3 x 10 m
+PLANET_MIN_VALID = 0.8          # share of a profile's samples that must be clear, else no position
+PLANET_ENDPOINT_MONTHS = 2      # Planet positions needed in each end quarter to corroborate a radar trend
 PLANET_YEAR = "2024-25"         # the yearly (dry-season) shoreline the Planet dry months are compared with
 CHECK_WITHIN_M = (20, 30)       # report the share of differences within these
 
 
 def planet_offsets() -> list[float]:
     return profile_offsets(step=PLANET_STEP_M)
+
+
+def planet_position(values: list[int | None], offsets: list[float]) -> dict:
+    """shoreline_position() for a Planet day, with two cloud checks (from the closed PR #67): no position when
+    under PLANET_MIN_VALID of the profile is clear, nor when a cloud / no-data sample lies between
+    LANDWARD_CHECK_M landward of the edge and the sea end (the walk would have bridged the cloud)."""
+    valid = sum(v in (0, 1) for v in values) / max(1, len(offsets))
+    if valid < PLANET_MIN_VALID:
+        return {"pos": None, "agreement": None, "status": "cloudy"}
+    res = shoreline_position(values, offsets, land_run=PLANET_LAND_RUN)
+    if res["pos"] is not None and any(v not in (0, 1) for o, v in zip(offsets, values) if o >= res["pos"] - LANDWARD_CHECK_M):
+        return {"pos": None, "agreement": None, "status": "cloud_gap"}
+    return res
+
+
+def planet_corroboration(months: list[str], planet: list[float | None], radar_months: list[str], stats: dict) -> dict:
+    """Does Planet back a significant radar trend? The median Planet position in the radar series' first and
+    last quarters (PLANET_ENDPOINT_MONTHS each at least) must move the trend's way by OPT_MIN_SHIFT_M (as the
+    Sentinel-2 confirmation). Status: confirmed / not_confirmed / pending_coverage (Planet doesn't cover an
+    end quarter yet) / tidal_uncertainty / no_radar_trend. Directional only: single days, no tide correction."""
+    qs = quarters(radar_months)
+    ends = [qs[0], qs[-1]] if len(qs) >= 2 else []
+    by_month = dict(zip(months, planet))
+    samples = [[by_month[m] for m in q if by_month.get(m) is not None] for q in ends]
+    meds = [median(v) if len(v) >= PLANET_ENDPOINT_MONTHS else None for v in samples]
+    trend = stats.get("trend", "too_few")
+    out = {"radar_trend": trend, "end_quarters": [[q[0], q[-1]] for q in ends], "n": [len(v) for v in samples],
+           "positions_m": meds, "shift_m": None}
+    if trend not in ("advancing", "retreating"):
+        return {**out, "status": "no_radar_trend"}
+    if len(meds) < 2 or None in meds:
+        return {**out, "status": "pending_coverage"}
+    conf = confirm(trend, meds[0], meds[1])
+    out["shift_m"] = conf["opt_shift"]
+    if stats.get("tidal"):
+        return {**out, "status": "tidal_uncertainty"}
+    return {**out, "status": "confirmed" if conf["change"] == trend else "not_confirmed"}
 
 
 def is_dry_month(month: str) -> bool:
@@ -881,7 +921,7 @@ def build_planet(transects: dict, months: list[str] | None = None, log=print) ->
         prof = profiles.get(f["id"], {})
         row = []
         for b in bands:
-            res = shoreline_position([prof.get(b, {}).get(i) for i in range(len(offsets))], offsets)
+            res = planet_position([prof.get(b, {}).get(i) for i in range(len(offsets))], offsets)
             counts[res["status"]] = counts.get(res["status"], 0) + 1
             row.append(res["pos"])
         positions[f["id"]] = row
@@ -893,7 +933,13 @@ PLANET_METHOD = {
     "imagery": "PlanetScope 8-band surface reflectance harmonised to Sentinel-2, one clear day per month, 3 m (agents/planet.py, D12)",
     "water": "NDWI (green, NIR) > 0 on Planet's UDM2 clear pixels; cloud / haze / no data is no data",
     "position": f"as Phase 11 on the same transects, samples every {PLANET_STEP_M} m read at 3 m: landward edge of the "
-                f"sea-connected water ({LAND_RUN} land samples in a row)",
+                f"sea-connected water ({PLANET_LAND_RUN * PLANET_STEP_M} m of land in a row); none when under "
+                f"{PLANET_MIN_VALID:.0%} of the profile is clear or a cloud gap lies between {LANDWARD_CHECK_M} m landward "
+                "of the edge and the sea end",
+    "corroboration": f"median Planet position in the radar series' first and last quarters (>= {PLANET_ENDPOINT_MONTHS} months "
+                     f"each) moving the significant radar trend's way by >= {OPT_MIN_SHIFT_M} m; pending until Planet "
+                     "covers both end quarters; withheld on tidal flats",
+    "lines": "never bridged across a transect without a position (clouds, hidden transects)",
     "tide": "one day per month is one tide level (several m range, D11): positions are compared, not fitted for rates",
     "compare_month": "Planet minus the Phase 11 monthly radar position, same transect and month (seaward +); dry months "
                      "(Oct-Mar) and monsoon months (Apr-Sep) apart",
@@ -915,17 +961,23 @@ def planet_outputs(result: dict, transects: dict, out_dir: Path | None = None) -
             yearly = {tid: row[yi] for tid, row in years["positions"].items()}
     skip = hidden_transects(transects)
     compare = planet_compare(result["months"], result["positions"], pos["months"], pos["positions"], yearly, skip)
+    corrob = {f["id"]: planet_corroboration(result["months"], result["positions"][f["id"]], pos["months"], f["properties"])
+              for f in transects["features"] if f["id"] not in skip and f["id"] in result["positions"]}
+    compare["corroboration"] = {}
+    for c in corrob.values():
+        compare["corroboration"][c["status"]] = compare["corroboration"].get(c["status"], 0) + 1
     feats = []
     for i, m in enumerate(result["months"]):
-        runs = season_lines(transects["features"], result["positions"], i)
+        runs = season_lines(transects["features"], result["positions"], i, max_gap=0)
         if runs:
             feats.append({"type": "Feature", "properties": {"month": m, "date": result["dates"][i], "kind": "planet"},
                           "geometry": {"type": "MultiLineString", "coordinates": [[list(p) for p in r] for r in runs]}})
-    out = {**result, "compare": compare, "attribution": "Imagery © Planet Labs PBC"}
+    out = {**result, "compare": compare, "corroboration": corrob, "attribution": "Imagery © Planet Labs PBC"}
     (out_dir / "planet.json").write_text(json.dumps(out))
     (out_dir / "planet_lines.geojson").write_text(json.dumps({"type": "FeatureCollection", "features": feats}))
     return {"months": result["months"], "lines": len(feats), "status_counts": result["status_counts"],
-            "dry": compare["dry"], "monsoon": compare["monsoon"], "yearly": compare["yearly"]}
+            "dry": compare["dry"], "monsoon": compare["monsoon"], "yearly": compare["yearly"],
+            "corroboration": compare["corroboration"]}
 
 
 # ---------- Phase 14 blind lock ----------

@@ -204,6 +204,15 @@ or searched area, never from coordinates the model writes (D7).
 **Evaluation.** None. Like D5 and D7, the assistant is a tool capability, not a reported result.
 Its prompts are separate from the frozen Phase-4 report prompts.
 
+**As implemented (Phase 7c VLM side, 2026-11-01).** `agents/assistant_plan.py`, `POST /api/assistant/plan`: when
+the keyword parser doesn't understand a request that looks like a tool action (`ACTION_HINT`: buffer, clip, colour,
+export, NDVI, layer, ...), the Geo-VLM gets the request, the layer names and the step schema, and answers
+`{"steps": [...]}` or `{"search": true}`. Each step is checked on the server (known action, required fields, sane
+values; one bad step and nothing runs) and again in the browser against the layers that exist
+(`checkModelSteps` → `validateStep`), then runs exactly like a parsed step, with "read by the Geo-VLM" on the
+chain. No model, a search, or an unusable answer: the chat goes on to the change search as before. Nothing starts
+an Earth Engine run. Prompt `assistplan_v1`; not part of the Phase 4 evaluation.
+
 ## D10 — Specific land-cover classes from Dynamic World (2026-10-08; implemented 2026-10-20)
 
 **Decision.** Change regions get land-cover classes from Google Dynamic World V1
@@ -483,6 +492,16 @@ delivered) are wired into the shoreline, the monthly maps and the Geo-VLM check:
   window, `vlmcheck_v1_planet`, the prompt names PlanetScope). Only where both windows hold a Planet month, so not
   for the QN detector windows (2018-19, 2022-23); the Phase 4 evaluation stays on Sentinel-2 (D19).
 
+- *Cloud checks and corroboration (2026-11-01, from the closed public #67):* a Planet position needs at least
+  80 % of its profile clear and no cloud between 100 m landward of the edge and the sea end, with 30 m of land to
+  end the sea (as the radar), and Planet lines are never bridged over a missing transect. Rerun: 3,377 of 8,085
+  transect-months give a position; vs the monthly radar, dry months median 32.5 m
+  (39% within 20 m), monsoon 32.5 m (36%);
+  vs the 2024-25 yearly line 22.5 m (49%). Corroboration of a
+  significant radar trend: the median Planet position in the radar series' first and last quarters (2 months each)
+  must move the trend's way by 20 m; all 26 significant trends are *pending* until the
+  year-2 Planet months cover Jul – Sep 2026.
+
 ## D13 — Extended evaluation: classes, shoreline and coastal buildings (2026-10-08, proposed)
 
 **Decision.** The new outputs are also evaluated, not only shown, using the same two-axis design
@@ -598,6 +617,29 @@ provisional, set before any site result exists). The change window runs from the
 the modal break month (a look is clear when ≥ 50 % of the box is unmasked) to that month. `--sites` refuses
 to run until all 30 sites have a Phase 14 (d) label, so the labels stay blind; development regions can be
 run any time. The output's `windows` is the `--ccdc` input of `scripts/phase14_report.py`.
+
+**As implemented (Phase 10b, 2026-11-01).** `ccdc.ee_regions()` / `scripts/make_ccdc_regions.py` run CCDC (Earth
+Engine defaults, Sentinel-2 SR from 2018, the D14 bands) for the 482 detector regions that are not locked at a
+labelled site (22 are, blind to Phase 14 d), 25 regions per request, at 10 m. Per region and period, the first
+break of every pixel goes into a month histogram (`data/quangninh/ccdc_regions.json`): the share of pixels that
+break, the most common break month, and the mean break magnitude of NDVI / NDBI / MNDWI over the breaking pixels.
+Two periods: **detection**, between the detector's windows (2019-04 – 2023-03: when the detected change happened),
+and **monitoring**, the D14 period (Oct 2024 – Sep 2026). A region is dated when at least half its pixels break
+(LASTING_SHARE, still provisional), and the break **matches the detector** when every index the detector counts
+(|d| > 0.1) breaks the same way; a break the other way is another event, and the region stays undated.
+QN: the median region has 2% of its pixels breaking in the detection period. 19 of 482
+regions are dated: 15 with a break matching the detected change, 3 the other way. Matching breaks by
+year: 2020: 2, 2021: 5, 2022: 8. In the monitoring period 40 regions break again. So most detector regions are not a clean
+break in CCDC's sense (subtle, gradual or seasonal-looking differences between two dry seasons), which is the D14
+evaluation figure "share of detector regions CCDC calls seasonal rather than lasting"; the parameters stay at the
+defaults (no labels yet say otherwise).
+- *App:* the region card says when the change happened (or that CCDC found no break, or one the other way) and
+  draws, on request, the region's mean index on every clear look since 2018 (the index that moved most at the
+  detector), a one-harmonic seasonal curve fitted before and after the break month, and the change window
+  ([last clear look before the break, break month], `ccdc.series_result`); series are fetched from Earth Engine on
+  first view and kept in `data/quangninh/ccdc_series/` (not committed). The curve is a fit to the region mean,
+  not CCDC's per-pixel model. Find changes reads dates: "after June 2021", "since 2020", "before 2022",
+  "in 2021", "between 2020 and 2022" filter on the matching break months (detection or monitoring).
 
 ## D15 — Choosing the Geo-VLM model and image set before the freeze (2026-10-23; decided 2026-10-24)
 
