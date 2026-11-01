@@ -53,6 +53,48 @@
       <input class="adj-note" placeholder="note (optional, e.g. R3 area)" data-item="${item.item_id}" data-field="note" value="${esc(j.note)}">`;
   }
 
+  // Pass 2: the evidence as tables, so a claim can be checked field by field (same data as the raw JSON).
+  const num = (v, d = 2) => (v === null || v === undefined ? '—' : (v > 0 ? '+' : '') + Number(v).toFixed(d));
+  const dir = (v, up, down) => (v === null || v === undefined ? '' : v > 0 ? up : v < 0 ? down : 'no change');
+  const table = (head, rows) => `<table class="adj-tbl"><thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  const topShares = (f) => Object.entries(f || {}).sort((a, b) => b[1] - a[1]).slice(0, 3)
+    .map(([k, v]) => `${esc(k)} ${Math.round(v * 100)}%`).join(', ');
+  function evidenceView(ev) {
+    const regions = ev.regions || [], transects = ev.transects || [], strips = ev.coastal_strips || [];
+    const total = regions.reduce((s, r) => s + (r.area_ha || 0), 0);
+    const dates = (ev.dates || []).map((d) => d.join(' → ')).join('  vs  ');
+    let html = `<div class="adj-ev-sum">
+      <span><b>Dates</b> ${esc(dates)}</span>
+      <span><b>Changed share of box</b> ${Math.round((ev.change_frac || 0) * 100)}%</span>
+      <span><b>Regions</b> ${regions.length}${regions.length ? ` · <b>total</b> ${total.toFixed(2)} ha` : ' (detector found no change)'}</span>
+      <span><b>Transects</b> ${transects.length} · <b>coastal strips</b> ${strips.length}</span></div>`;
+    if (regions.length) {
+      html += `<div class="adj-ev-h">Change regions in the box</div>` + table(
+        ['id', 'area ha (in box)', 'whole region ha', 'where', 'dNDVI (vegetation)', 'dNDBI (built / bare)', 'dMNDWI (water)', 'class before → after', 'conf'],
+        regions.map((r) => [esc(r.id), (r.area_ha ?? 0).toFixed(2), r.area_ha_whole_region != null ? Number(r.area_ha_whole_region).toFixed(2) : '—', esc(r.location),
+          `${num(r.dNDVI)} <small>${dir(r.dNDVI, 'more veg', 'less veg')}</small>`,
+          `${num(r.dNDBI)} <small>${dir(r.dNDBI, 'more built/bare', 'less built/bare')}</small>`,
+          `${num(r.dMNDWI)} <small>${dir(r.dMNDWI, 'more water', 'less water')}</small>`,
+          `${esc(r.class_before)} → ${esc(r.class_after)}<br><small>before: ${topShares(r.class_frac_before)}<br>after: ${topShares(r.class_frac_after)}</small>`,
+          r.mean_conf != null ? Number(r.mean_conf).toFixed(2) : '—']));
+    }
+    if (transects.length) {
+      html += `<div class="adj-ev-h">Shoreline transects</div>` + table(
+        ['id', 'where', 'shoreline', 'net movement m', 'rate m/yr'],
+        transects.map((t) => [esc(t.id), esc(t.location), esc(t.change), num(t.nsm, 0), num(t.lrr, 1)]));
+    }
+    if (strips.length) {
+      html += `<div class="adj-ev-h">Built area near the shore</div>` + table(
+        ['strip (m from shore)', 'where', 'built ha before', 'built ha after', 'change ha'],
+        strips.map((c) => [esc(c.strip), esc(c.location), Number(c.built_ha_before).toFixed(2), Number(c.built_ha_after).toFixed(2),
+          num(c.built_ha_after - c.built_ha_before)]));
+    }
+    return html + `<div class="adj-ev-note">Numbers count as supported within about 25 % of the evidence value.</div>`;
+  }
+  // numbers in a claim, bold, so they are easy to match against the tables
+  const markNumbers = (html) => html.replace(/(?<![\w.#])([+−-]?\d+(?:\.\d+)?\s?(?:%|ha|hectares|km²|m\/yr|m)?)(?![^<]*>)/g, '<b class="adj-num">$1</b>');
+
   function render() {
     const { sites, index, pass, source } = state;
     if (!sites.length) { $('site').innerHTML = '<p class="adj-empty">No claims in these reports.</p>'; return; }
@@ -66,11 +108,13 @@
           <figcaption>${esc(c.replace('.png', '').replace('_', ' · '))}</figcaption></figure>`).join('')
       : '<p class="adj-empty">No cached chips for this box (they are made when a model run renders them).</p>';
     const label = site.label ? `<div><b>Ground-truth label</b>: change ${esc(site.label.change_occurred)}${site.label.change_types?.length ? ` (${site.label.change_types.map(esc).join(', ')})` : ''}, confidence ${esc(site.label.confidence)}${site.label.notes ? ` — ${esc(site.label.notes)}` : ''}</div>` : '';
-    const evidence = pass === 2 && site.evidence ? `<details open><summary><b>Evidence</b> the system had (judge support against this only)</summary><pre>${esc(JSON.stringify(site.evidence, null, 1))}</pre></details>` : '';
+    const evidence = pass === 2 && site.evidence ? `<div class="adj-ev"><b>Evidence</b> the system had (judge support against this only)
+      ${evidenceView(site.evidence)}
+      <details><summary>raw JSON</summary><pre>${esc(JSON.stringify(site.evidence, null, 1))}</pre></details></div>` : '';
     const items = site.items.map((it) => {
       const j = site.judgements[it.item_id] || {};
       return `<div class="adj-item ${j[field(pass)] ? 'done' : ''}" id="item-${it.item_id}">
-        <div class="adj-text"><span class="adj-level">${esc(it.level)}</span>${esc(it.text)}</div>${choices(it, j, pass)}</div>`;
+        <div class="adj-text"><span class="adj-level">${esc(it.level)}</span>${pass === 2 ? markNumbers(esc(it.text)) : esc(it.text)}</div>${choices(it, j, pass)}</div>`;
     }).join('');
     $('site').innerHTML = `<section class="adj-site">
       <div class="adj-sticky">
