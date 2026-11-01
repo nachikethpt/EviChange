@@ -33,12 +33,22 @@
     .adj-chips img { width: 100%; image-rendering: pixelated; border-radius: 4px; border: 1px solid var(--border); display: block; }
     .adj-chips figcaption { font-size: 11px; color: var(--muted); text-align: center; }
     /* chips + label stay in view while scrolling the claims */
-    .adj-sticky { position: sticky; top: -16px; z-index: 2; background: var(--surface); margin: 0 -12px 10px; padding: 16px 12px 2px;
+    .adj-sticky { position: sticky; top: -16px; z-index: 2; background: linear-gradient(var(--surface), var(--surface)), var(--bg); margin: 0 -12px 10px; padding: 16px 12px 2px;
                   border-bottom: 1px solid var(--border); }
     .adj-sticky .adj-chips { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; margin-bottom: 6px; }
     .adj-sticky .adj-chips img { max-height: 26vh; object-fit: contain; }
     .adj-sticky .adj-ref { margin-bottom: 6px; }
     .adj-sticky .adj-site-head { margin-bottom: 6px; }
+    /* pass 2: evidence as tables */
+    .adj-ev { max-height: 45vh; overflow: auto; font-size: 12px; }
+    .adj-ev-sum { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 6px 0; }
+    .adj-ev-h { font-weight: 600; margin: 8px 0 4px; color: var(--muted); }
+    .adj-tbl { border-collapse: collapse; width: 100%; }
+    .adj-tbl th, .adj-tbl td { border: 1px solid var(--border); padding: 3px 6px; text-align: left; vertical-align: top; }
+    .adj-tbl th { background: var(--bg); font-weight: 600; }
+    .adj-tbl small { color: var(--muted); }
+    .adj-ev-note { color: var(--muted); margin-top: 6px; }
+    .adj-num { color: var(--accent); }
     .adj-ref { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 10px; }
     .adj-ref pre { max-height: 220px; overflow: auto; font-size: 11px; background: var(--bg); padding: 8px; border-radius: 6px; margin: 0; }
     .adj-item { border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 8px; }
@@ -82,6 +92,6 @@
     </details>
     <div id="site"><p class="adj-empty">Choose the reports, your name and the pass, then Start.</p></div>
   </main>
-  <script src="/static/adjudicate.js?v=5"></script>
+  <script src="/static/adjudicate.js?v=7"></script>
 </body>
 </html>
