@@ -11,6 +11,13 @@ shoreline literature review for the paper (brief: `docs/briefs/shoreline_literat
 week 4 (≈125 h).
 Defaults: this repo is canonical; Qwen2.5-VL-7B-Instruct for every reported run.
 
+**2026-11-01 implementation update:** Phase 13c's first deliverable adds the delivered Planet
+months to the monthly map (RGB, NIR, NDVI, NDWI; acquisition dates, clear share and gaps).
+See `briefs/phase13c_planet_monthly.md` for the repository review, validation and remaining
+shoreline / Geo-VLM wiring. Phase 13c remains in progress; human adjudication and Phase 14
+reference labels remain on the evaluation's critical path. The 30-site runner and all 90
+reports for the three main conditions are already present in `main`.
+
 **Rev 2 changes (2026-09-26):** (1) no OSCD. Imagery comes from Earth Engine for
 Quang Ninh, and the ground truth is a self-labelled set of ~30 sites. (2) The app and
 backend accept any AOI + date range and run the Earth Engine analysis on demand. Only

@@ -87,3 +87,58 @@ def test_available_months_is_empty_without_collection():
         def ImageCollection(self, _):
             raise RuntimeError("asset not found")
     assert planet.available_months(Broken()) == []
+
+
+def test_month_catalog_reads_metadata_and_preserves_gaps():
+    class Value:
+        def __init__(self, value):
+            self.value = value
+
+        def getInfo(self):
+            return self.value
+
+    class Rows(Value):
+        def map(self, fn):
+            return Value([fn(row) for row in self.value])
+
+    class Image:
+        def __init__(self, row):
+            self.row = row
+
+        def toDictionary(self, keys):
+            return {k: self.row[k] for k in keys if k in self.row}
+
+    class Collection:
+        def size(self):
+            return Value(2)
+
+        def toList(self, count):
+            assert count == 2
+            return Rows([{"month": "2025-03", "date": "2025-03-12", "clear_share": 0.6},
+                         {"month": "2025-01", "date": "2025-01-03", "clear_share": 0.9}])
+
+    class EE:
+        def ImageCollection(self, name):
+            assert name == planet.PLANET_COLLECTION
+            return Collection()
+
+    EE.Image = Image
+    catalog = planet.month_catalog(EE())
+    assert [m["month"] for m in catalog["months"]] == ["2025-01", "2025-03"]
+    assert catalog["months"][0]["date"] == "2025-01-03"
+    assert catalog["months"][0]["asset_id"] == planet.asset_id("2025-01")
+
+
+def test_empty_month_catalog_does_not_call_to_list_zero():
+    class Empty:
+        def size(self):
+            return self
+
+        def getInfo(self):
+            return 0
+
+    class EE:
+        def ImageCollection(self, _):
+            return Empty()
+
+    assert planet.month_catalog(EE())["months"] == []

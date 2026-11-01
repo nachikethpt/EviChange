@@ -29,6 +29,11 @@ NDWI_WATER = 0.0                   # NDWI above this is water (McFeeters); the s
 SOURCE = "planetscope_8b_sr_harmonized"
 ATTRIBUTION = "Imagery © Planet Labs PBC (PlanetScope, Education and Research programme)"
 CHIP_VIS = {"rgb": (["red", "green", "blue"], 0, 0.3), "nir": (["nir", "red", "green"], 0, 0.45)}   # no SWIR on Planet
+LAYERS = ("rgb", "nir", "ndvi", "ndwi")
+INDEX_VIS = {
+    "ndvi": {"min": -1, "max": 1, "palette": ["8c510a", "f6e8c3", "01665e"]},
+    "ndwi": {"min": -1, "max": 1, "palette": ["a6611a", "f5f5f5", "018571"]},
+}
 
 _MONTH = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
 
@@ -89,6 +94,49 @@ def available_months(ee: Any) -> list[str]:
     except Exception:          # collection not created / not shared with this project yet
         return []
     return sorted(set(months))
+
+
+def month_catalog(ee: Any) -> dict:
+    """Delivered mosaics and acquisition metadata, read from EE, never inferred from orders.
+
+    Unlike available_months(), access/authentication errors propagate: an unavailable collection
+    must not be presented as a successful query with no delivered imagery.
+    """
+    col = collection(ee)
+    # toList(0) is invalid in EE, so handle an empty (but accessible) collection explicitly.
+    count = col.size().getInfo()
+    rows = (col.toList(count).map(lambda im: ee.Image(im).toDictionary(
+        ["month", "date", "clear_share"])).getInfo() if count else [])
+    months = []
+    for row in rows:
+        month = check_month(row.get("month"))
+        months.append({"month": month, "date": row.get("date"), "clear_share": row.get("clear_share"),
+                       "asset_id": asset_id(month)})
+    return {"months": sorted(months, key=lambda r: r["month"]), "collection": PLANET_COLLECTION,
+            "source": SOURCE, "scale_m": NATIVE_SCALE, "attribution": ATTRIBUTION}
+
+
+def tile_layer(aoi: dict, month: str, layer: str) -> dict:
+    """Clear-masked Planet monthly imagery / indices as XYZ tiles, clipped to the study AOI.
+
+    Planet is an additional visual source. It does not fill Dynamic World class labels or alter
+    the frozen Sentinel-2 evidence used in the report evaluation.
+    """
+    check_month(month)
+    if layer not in LAYERS:
+        raise ValueError(f"layer must be one of {LAYERS}")
+    from .ee_engine import _ee
+    ee = _ee()
+    image = month_image(ee, month)
+    if layer in CHIP_VIS:
+        bands, lo, hi = CHIP_VIS[layer]
+        vis = {"bands": bands, "min": lo, "max": hi}
+    else:
+        image = indices(ee, image).select(layer.upper())
+        vis = INDEX_VIS[layer]
+    map_id = image.clip(ee.Geometry(aoi)).getMapId(vis)
+    return {"tiles": [map_id["tile_fetcher"].url_format], **vis,
+            "source": SOURCE, "scale_m": NATIVE_SCALE, "attribution": ATTRIBUTION}
 
 
 def month_image(ee: Any, month: str) -> Any:

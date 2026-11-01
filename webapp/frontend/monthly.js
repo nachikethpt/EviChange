@@ -4,14 +4,20 @@
 // Uses app.js's map, $, esc, alertBox, openPanel/renderPanel/closePanel and state; renderMonthlyPanel() is called from renderPanel().
 
 const MONTHLY_LAYERS = { class: 'Land cover (Dynamic World)', water: 'Water (Sentinel-1 radar)', clear: 'Clear-sky share',
-                         water_change: 'Water change', class_change: 'Land-cover change' };
+                         water_change: 'Water change', class_change: 'Land-cover change',
+                         planet_rgb: 'Planet · true colour (3 m)', planet_nir: 'Planet · NIR false colour (3 m)',
+                         planet_ndvi: 'Planet · NDVI (3 m)', planet_ndwi: 'Planet · NDWI (3 m)' };
 const MONTHLY_LAYER_HELP = { class: 'Only months Dynamic World saw clearly (about Oct–Mar); other months are gaps.',
   water: 'Radar sees through cloud, so every month has a water mask.', clear: 'How much of the area was seen without cloud.',
-  water_change: 'Water gained / lost against the chosen month.', class_change: 'Pixels whose class differs from the chosen month (clear months only).' };
+  water_change: 'Water gained / lost against the chosen month.', class_change: 'Pixels whose class differs from the chosen month (clear months only).',
+  planet_rgb: 'One acquisition day per delivered month; cloud and haze are gaps. Use the sharper imagery to inspect cloudy-season changes.',
+  planet_nir: 'Vegetation appears red; water is dark. Only clear pixels from the delivered month are shown.',
+  planet_ndvi: 'Vegetation index from Planet red and NIR bands (−1 to +1); only clear pixels are shown.',
+  planet_ndwi: 'Water index from Planet green and NIR bands (−1 to +1). Single-day water extent varies with the tide.' };
 const DW_COLORS = { water: '#419bdf', trees: '#397d49', grass: '#88b053', flooded_vegetation: '#7a87c6', crops: '#e49635',
                     shrub_and_scrub: '#dfc35a', built: '#c4281b', bare: '#a59b8f', snow_and_ice: '#b39fe1' };
 const mon = { summary: null, months: [], idx: 0, layer: 'class', vs: 'base', on: false, region: null, regionId: null,
-              coast: null, coastLoaded: false, strips: false, patches: false, req: 0, msg: '' };
+              coast: null, coastLoaded: false, strips: false, patches: false, req: 0, timer: null, msg: '' };
 
 const monGet = async url => { const r = await fetch(url); if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText); return r.json(); };
 const monLabel = m => m ? new Date(`${m}-15`).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : '–';
@@ -34,20 +40,27 @@ function monRemoveLayer() {
 }
 
 async function monthlyShow(i) {
+  clearTimeout(mon.timer);
   mon.idx = i;
   const month = mon.months[i], req = ++mon.req;
   const lab = $('#monLabel'); if (lab) lab.textContent = monLabel(month);
   const ch = $('#monChart'); if (ch) ch.innerHTML = monChart();
+  monRemoveLayer(); mon.on = false;                  // never leave the previous month's imagery under a new date
   monSetMsg('Loading…');
   try {
-    const url = `/api/monthly/layer?month=${month}&layer=${mon.layer}${mon.layer.endsWith('_change') ? `&vs=${mon.vs}` : ''}`;
+    const isPlanet = mon.layer.startsWith('planet_');
+    const url = isPlanet ? `/api/planet/layer?month=${month}&layer=${mon.layer.slice(7)}` :
+      `/api/monthly/layer?month=${month}&layer=${mon.layer}${mon.layer.endsWith('_change') ? `&vs=${mon.vs}` : ''}`;
     const t = await monGet(url);
     if (req !== mon.req) return;                       // a newer month was asked for meanwhile
     monRemoveLayer();
-    map.addSource('mon-raster', { type: 'raster', tiles: t.tiles, tileSize: 256 });
+    map.addSource('mon-raster', { type: 'raster', tiles: t.tiles, tileSize: 256,
+                                ...(t.attribution ? { attribution: esc(t.attribution) } : {}) });
     map.addLayer({ id: 'mon-raster', type: 'raster', source: 'mon-raster', paint: { 'raster-opacity': 0.75 } },
                  map.getLayer('shore-tr') ? 'shore-tr' : undefined);
-    mon.on = true; monSetMsg('');
+    mon.on = true;
+    monSetMsg(isPlanet ? `Planet · ${t.scale_m} m · acquired ${t.date || 'date unavailable'} · clear ${
+      t.clear_share == null ? 'share unavailable' : `${Math.round(t.clear_share * 100)}%`}. ${t.attribution}` : '');
   } catch (err) {
     if (req !== mon.req) return;
     monRemoveLayer(); mon.on = false;
@@ -160,12 +173,12 @@ function renderMonthlyPanel(body) {
     <button class="btn" id="monHide">Hide monthly layers</button>`;
   $('#monLayer').onchange = e => { mon.layer = e.target.value; renderPanel(); monthlyShow(mon.idx); };
   body.querySelectorAll('[data-vs]').forEach(b => b.onclick = () => { mon.vs = b.dataset.vs; renderPanel(); monthlyShow(mon.idx); });
-  let t = null;
   $('#monSlider').oninput = e => { const i = +e.target.value; mon.idx = i; $('#monLabel').textContent = monLabel(mon.months[i]); $('#monChart').innerHTML = monChart();
-                                   clearTimeout(t); t = setTimeout(() => monthlyShow(i), 250); };     // one tile request when the slider rests
+    mon.req++; monRemoveLayer(); mon.on = false; monSetMsg('Loading…');
+    clearTimeout(mon.timer); mon.timer = setTimeout(() => monthlyShow(i), 250); };     // one tile request when the slider rests
   const s = $('#monStrips'); if (s) s.onchange = e => monCoastToggle('strips', e.target.checked);
   const p = $('#monPatches'); if (p) p.onchange = e => monCoastToggle('patches', e.target.checked);
-  $('#monHide').onclick = () => { mon.req++; monRemoveLayer(); mon.on = false;
+  $('#monHide').onclick = () => { clearTimeout(mon.timer); mon.req++; monRemoveLayer(); mon.on = false;
     ['coast-strips', 'coast-patches'].forEach(id => map.getLayer(id) && map.removeLayer(id)); ['coast-strips', 'coast-patches'].forEach(id => map.getSource(id) && map.removeSource(id));
     mon.strips = mon.patches = false; closePanel(); };
   if (mon.on === false && !mon.msg) monthlyShow(mon.idx);

@@ -36,7 +36,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from agents import coastal, ee_engine, landcover, monthly, search_spec, shoreline, ungated, vlm_check
+from agents import coastal, ee_engine, landcover, monthly, planet, search_spec, shoreline, ungated, vlm_check
 from agents.gpt_client import GPTClient
 from agents.vlm_client import VLMClient, VLMUnavailable
 from agents.graph import run_pipeline
@@ -219,6 +219,56 @@ def monthly_layer(month: str, layer: str, vs: Literal["base", "prev"] = "base"):
         raise HTTPException(502, f"Earth Engine: {exc}")
     out.update(month=month, layer=layer, ref=ref_key)
     _monthly_tiles[key] = (time.time(), out)
+    return out
+
+
+# ---------- Phase 13c (D12): delivered Planet imagery on the monthly map ----------
+_planet_catalog_cache: dict = {}
+_planet_tiles: dict = {}
+
+
+def _planet_catalog() -> dict:
+    hit = _planet_catalog_cache.get(planet.PLANET_COLLECTION)
+    if hit and time.time() - hit[0] < INDEX_TILE_TTL_S:
+        return hit[1]
+    try:
+        catalog = planet.month_catalog(ee_engine._ee())
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc))
+    except Exception as exc:
+        raise HTTPException(502, f"Earth Engine: {exc}")
+    _planet_catalog_cache[planet.PLANET_COLLECTION] = (time.time(), catalog)
+    return catalog
+
+
+@app.get("/api/planet/months")
+def planet_months():
+    """Available Planet mosaics, acquisition dates and clear shares (not an order ledger)."""
+    return _planet_catalog()
+
+
+@app.get("/api/planet/layer")
+def planet_layer(month: str, layer: str = "rgb"):
+    """3 m imagery / NDVI / NDWI for one delivered month; missing months remain gaps."""
+    if not _MONTH_RE.fullmatch(month) or layer not in planet.LAYERS:
+        raise HTTPException(400, f"month must be YYYY-MM, layer one of {planet.LAYERS}")
+    catalog = _planet_catalog()
+    row = next((r for r in catalog["months"] if r["month"] == month), None)
+    if row is None:
+        raise HTTPException(404, f"no Planet mosaic in {month}: shown as a gap")
+    aoi = load_study_config()["aoi"]
+    key = (catalog["collection"], json.dumps(aoi, sort_keys=True), month, layer, row["asset_id"], row["date"])
+    hit = _planet_tiles.get(key)
+    if hit and time.time() - hit[0] < INDEX_TILE_TTL_S:
+        return hit[1]
+    try:
+        out = planet.tile_layer(aoi, month, layer)
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc))
+    except Exception as exc:
+        raise HTTPException(502, f"Earth Engine: {exc}")
+    out.update(month=month, layer=layer, date=row["date"], clear_share=row["clear_share"], asset_id=row["asset_id"])
+    _planet_tiles[key] = (time.time(), out)
     return out
 
 
