@@ -58,9 +58,13 @@ if they are open to the sea; otherwise use the outer sea edge.</li>
 (all land or all water), choose "no edge". Never look at the EviChange map's shoreline layer while doing this.</li>
 </ol>
 {''.join(rows)}
-<p><button onclick="save()">Save</button> <span id="n"></span></p>
+<p><button onclick="save()">Save</button> <span id="n"></span>
+<label class="muted" style="margin-left:12px">Load a saved file: <input type="file" accept=".json" onchange="load(this.files[0])"></label></p>
+<p class="muted">Every answer is also kept in this browser as you type, so closing the tab loses nothing (same browser only).
+Press Save to get the file for the import.</p>
 <script>
-function save() {{
+const KEY = 'evichange-ge-' + {json.dumps(labeller)};
+function answers() {{
   const out = [];
   document.querySelectorAll('section[data-n]').forEach(sec => {{
     const n = +sec.dataset.n, note = sec.querySelector(`input[name="n_${{n}}"]`).value;
@@ -71,7 +75,25 @@ function save() {{
                  confidence: v('c') || null, notes: note || null}});
     }}
   }});
-  document.getElementById('n').textContent = out.length + ' of {n_refs * len(labels14.GE_SEASONS)} answers';
+  return out;
+}}
+function fill(list) {{
+  for (const r of list) {{
+    const sec = document.querySelector(`section[data-n="${{r.n}}"]`); if (!sec) continue;
+    const set = (k, v) => {{ const el = sec.querySelector(`[name="${{k}}_${{r.n}}_${{r.season}}"]`); if (el && v !== null && v !== undefined) el.value = v; }};
+    set('st', r.status); set('m', r.drawn_m); set('d', r.month); set('c', r.confidence);
+    if (r.notes) sec.querySelector(`input[name="n_${{r.n}}"]`).value = r.notes;
+  }}
+  count();
+}}
+function count() {{ document.getElementById('n').textContent = answers().length + ' of {n_refs * len(labels14.GE_SEASONS)} answers'; }}
+function keep() {{ try {{ localStorage.setItem(KEY, JSON.stringify(answers())); }} catch (e) {{}} count(); }}
+function load(file) {{ if (!file) return; file.text().then(t => {{ fill(JSON.parse(t).answers || []); keep(); }}); }}
+document.addEventListener('input', keep); document.addEventListener('change', keep);
+try {{ fill(JSON.parse(localStorage.getItem(KEY) || '[]')); }} catch (e) {{}}
+function save() {{
+  const out = answers();
+  count();
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify({{labeller: {json.dumps(labeller)}, answers: out}}, null, 1)], {{type: 'application/json'}}));
   a.download = '{html.escape(title.replace(' ', '_'))}.json'; a.click();
