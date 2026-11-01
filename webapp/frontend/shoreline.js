@@ -21,13 +21,16 @@ function shoreEnsureLayers() {
   map.addLayer({ id: 'shore-ref', type: 'line', source: 'shore-ref', paint: {
     'line-color': '#e2e8f0', 'line-width': 1.5, 'line-dasharray': [2, 2], 'line-opacity': 0.8 } });
   map.addLayer({ id: 'shore-cur', type: 'line', source: 'shore-cur', paint: { 'line-color': '#22d3ee', 'line-width': 2.5 } });
+  // the transect whose chart is open
+  map.addLayer({ id: 'shore-sel', type: 'line', source: 'shore-tr', filter: ['==', ['get', 'id'], ''], paint: {
+    'line-color': '#facc15', 'line-width': 6, 'line-opacity': 0.95 } });
   map.on('click', 'shore-tr', e => { const f = e.features[0]; if (f) shoreSelect(f.properties.id); });
   map.on('mouseenter', 'shore-tr', () => { map.getCanvas().style.cursor = 'pointer'; });
   map.on('mouseleave', 'shore-tr', () => { map.getCanvas().style.cursor = ''; });
 }
 
 function shoreSetVisible(on) {
-  ['shore-tr', 'shore-ref', 'shore-cur'].forEach(id => {
+  ['shore-tr', 'shore-ref', 'shore-cur', 'shore-sel'].forEach(id => {
     if (!map.getLayer(id)) return;
     map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
     if (on) map.moveLayer(id);                      // above the change regions and the other Contents layers
@@ -37,6 +40,7 @@ function shoreSetVisible(on) {
 async function shoreLoad(mode) {
   shoreStop();
   shore.mode = mode; shore.tid = null; shore.detail = null;
+  if (map.getLayer('shore-sel')) map.setFilter('shore-sel', ['==', ['get', 'id'], '']);
   const get = async url => { const r = await fetch(url); if (!r.ok) throw new Error((await r.json()).detail || r.statusText); return r.json(); };
   try {
     if (mode === 'years') {
@@ -91,6 +95,7 @@ function shoreStop() {
 
 async function shoreSelect(tid) {
   shore.tid = tid; shore.detail = null;
+  if (map.getLayer('shore-sel')) map.setFilter('shore-sel', ['==', ['get', 'id'], tid || '']);
   if (state.panel !== 'shoreline') openPanel('shoreline'); else renderPanel();
   try { shore.detail = await (await fetch(`/api/shoreline/transects/${encodeURIComponent(tid)}`)).json(); }
   catch (err) { shore.detail = { error: err.message }; }
