@@ -73,11 +73,11 @@
         <div class="adj-text"><span class="adj-level">${esc(it.level)}</span>${esc(it.text)}</div>${choices(it, j, pass)}</div>`;
     }).join('');
     $('site').innerHTML = `<section class="adj-site">
+      <div class="adj-sticky">
       <div class="adj-site-head"><h2>Site ${index + 1} of ${sites.length}</h2>
         <button class="adj-btn" id="prev" ${index === 0 ? 'disabled' : ''}>← Previous</button>
         <button class="adj-btn" id="next" ${index === sites.length - 1 ? 'disabled' : ''}>Next →</button>
         <button class="adj-btn" id="open">Next unfinished</button></div>
-      <div class="adj-sticky">
       ${pass === 1 ? (site.chips.length ? `<div class="adj-chips">${chips}</div>` : chips) : ''}
       <div class="adj-ref">${pass === 1 ? label : evidence}</div></div>
       ${items}</section>`;
