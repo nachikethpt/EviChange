@@ -34,7 +34,12 @@ VLM_TYPES = (*CHANGE_TYPES, "other")
 # Chip sets: which before/after image pairs the model sees (ee_engine.CHIP_VIS kinds, in order).
 # "rgb_swir" is the original v1 set and keeps the plain PROMPT_VERSION; the others exist to
 # compare inputs before the Phase-4 freeze. Default from VLM_CHIPS, per request via `chips`.
-CHIP_SETS = {"rgb": ("rgb",), "rgb_swir": ("rgb", "swir"), "rgb_swir_cir": ("rgb", "swir", "cir")}
+CHIP_SETS = {"rgb": ("rgb",), "rgb_swir": ("rgb", "swir"), "rgb_swir_cir": ("rgb", "swir", "cir"),
+             "planet": ("rgb", "nir")}
+# "planet" = PlanetScope 3 m chips (agents/planet.py, D12): true colour + NIR false colour (no SWIR), one clear
+# day per window; only where both windows hold a Planet month (Oct 2024 - Sep 2025 so far). Not part of the
+# Phase 4 evaluation (frozen on Sentinel-2, D19): an app option for sharper chips.
+PLANET_SETS = ("planet",)
 DEFAULT_CHIP_SET = os.environ.get("VLM_CHIPS", "rgb_swir")
 _CHIP_TEXT = {   # (label on its first image, label on the second, colour key or None)
     "rgb": ("true colour", "true colour", None),
@@ -42,10 +47,12 @@ _CHIP_TEXT = {   # (label on its first image, label on the second, colour key or
              "In SWIR false colour, vegetation is green, bare soil and rock are pink/brown, water is dark blue/black."),
     "cir": ("colour infrared (B8-B4-B3)", "colour infrared",
             "In colour infrared, vegetation is bright red, bare soil and built-up areas are grey/cyan/white, water is dark blue/black."),
+    "nir": ("near-infrared false colour (NIR-red-green)", "near-infrared false colour",
+            "In near-infrared false colour, vegetation is bright red, bare soil and built-up areas are grey/cyan/white, water is dark blue/black."),
 }
 _COUNT = {2: "two", 4: "four", 6: "six"}
 
-PROMPT = """You are checking a satellite change detection. You get {count} Sentinel-2 images of the same place:
+PROMPT = """You are checking a satellite change detection. You get {count} {sensor} images of the same place:
 {images}
 Before: {{before}}. After: {{after}}. Both dates use the same colour stretch, so colour differences are real.
 {keys}
@@ -79,7 +86,8 @@ def build_prompt(before_window: list[str], after_window: list[str], chip_set: st
     pairs = [(kind, i, when) for kind in kinds for i, when in enumerate(("BEFORE", "AFTER"))]
     labels = [f"{n}. {when}, {_CHIP_TEXT[kind][i]}" for n, (kind, i, when) in enumerate(pairs, 1)]
     keys = "".join(_CHIP_TEXT[kind][2] + "\n" for kind in kinds if _CHIP_TEXT[kind][2])
-    template = PROMPT.format(count=_COUNT[2 * len(kinds)], images="   ".join(labels), keys=keys,
+    sensor = "PlanetScope (3 m)" if chip_set in PLANET_SETS else "Sentinel-2"
+    template = PROMPT.format(count=_COUNT[2 * len(kinds)], sensor=sensor, images="   ".join(labels), keys=keys,
                              types=", ".join(VLM_TYPES))
     return template.format(before=" to ".join(before_window), after=" to ".join(after_window))
 

@@ -278,3 +278,44 @@ def test_years_api(written, monkeypatch):
     one = c.get(f"/api/shoreline/transects/{ids[0]}").json()
     assert one["yearly"] == [{"season": "2015-16", "pos": 0.0, "optical": 0.0}, {"season": "2016-17", "pos": 40.0, "optical": 35.0}]
     assert one["yearly_stats"]["change"] == "advancing"
+
+
+# ---------- Planet 3 m shoreline (Phase 13c) ----------
+def test_diff_stats_and_dry_months():
+    st = s.diff_stats([10.0, -20.0, 30.0, 5.0])
+    assert st["n"] == 4 and st["bias_m"] == 6.2 and st["mae_m"] == 16.2 and st["median_abs_m"] == 15.0
+    assert st["within_20m"] == 0.75 and st["within_30m"] == 1.0
+    assert s.diff_stats([])["rmse_m"] is None
+    assert s.is_dry_month("2024-10") and s.is_dry_month("2025-03") and not s.is_dry_month("2025-04")
+
+
+def test_planet_compare_splits_dry_and_monsoon_and_skips_blind():
+    months = ["2024-10", "2025-04"]
+    planet = {"a": [5.0, 30.0], "b": [None, 10.0], "ref": [100.0, 100.0]}
+    radar = {"a": [0.0, 0.0], "b": [0.0, None], "ref": [0.0, 0.0]}
+    out = s.planet_compare(months, planet, months, radar, yearly={"a": 1.0, "ref": 0.0}, skip={"ref"})
+    assert out["dry"]["n"] == 1 and out["dry"]["bias_m"] == 5.0          # a only: ref is blind, b has no Planet position
+    assert out["monsoon"]["n"] == 1 and out["monsoon"]["bias_m"] == 30.0  # b has Planet but no radar
+    assert out["per_month"][1]["n_planet"] == 2
+    assert out["yearly"]["n"] == 1 and out["yearly"]["bias_m"] == 4.0     # median dry Planet (5) - yearly (1)
+
+
+def test_planet_outputs_and_api(written, monkeypatch):
+    path, _ = written
+    monkeypatch.setattr(main.shoreline, "SHORELINE_DIR", path)
+    c = TestClient(main.app)
+    assert c.get("/api/shoreline/planet").status_code == 404
+    transects = json.loads((path / "transects.geojson").read_text())
+    ids = [f["id"] for f in transects["features"]]
+    result = {"months": ["2024-10", "2025-04"], "dates": ["2024-10-05", "2025-04-16"],
+              "positions": {t: [3.0, None] for t in ids}, "status_counts": {"ok": 4}, "method": s.PLANET_METHOD}
+    out = s.planet_outputs(result, transects, path)
+    assert out["lines"] == 1 and out["dry"]["n"] == len(ids) and out["monsoon"]["n"] == 0
+    summary = c.get("/api/shoreline/planet").json()
+    assert summary["months"] == ["2024-10", "2025-04"] and summary["compare"]["dry"]["n"] == len(ids)
+    assert c.get("/api/shoreline/planet/lines", params={"month": "2024-10"}).json()["features"][0]["properties"]["date"] == "2024-10-05"
+    assert c.get("/api/shoreline/planet/lines", params={"month": "2025-04"}).status_code == 404
+    one = c.get(f"/api/shoreline/transects/{ids[0]}").json()
+    assert one["planet"] == [{"month": "2024-10", "date": "2024-10-05", "pos": 3.0}, {"month": "2025-04", "date": "2025-04-16", "pos": None}]
+    assert c.get("/api/planet/layer", params={"month": "2025-02"}).status_code == 404     # no Planet image that month
+    assert c.get("/api/planet/layer", params={"month": "2024-10", "kind": "swir"}).status_code == 400

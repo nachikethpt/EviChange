@@ -87,3 +87,30 @@ def test_available_months_is_empty_without_collection():
         def ImageCollection(self, _):
             raise RuntimeError("asset not found")
     assert planet.available_months(Broken()) == []
+
+
+# ---------- Phase 13c: Planet chips for the Geo-VLM check ----------
+def test_window_month_picks_the_last_planet_month_inside_the_window():
+    months = ["2024-10", "2024-11", "2025-04", "2025-05"]
+    assert planet.window_month(["2024-10-01", "2025-01-01"], months) == "2024-11"
+    assert planet.window_month(["2025-04-01", "2025-06-01"], months) == "2025-05"
+    assert planet.window_month(["2025-05-01", "2025-05-31"], months) == "2025-05"
+    assert planet.window_month(["2018-11-01", "2019-03-31"], months) is None     # the detector's QN windows: no Planet
+
+
+def test_planet_chip_set_prompt_names_planetscope():
+    from agents import vlm_check
+    assert vlm_check.chip_keys("planet") == ["before_rgb", "after_rgb", "before_nir", "after_nir"]
+    text = vlm_check.build_prompt(["2024-10-01", "2025-01-01"], ["2025-04-01", "2025-07-01"], "planet")
+    assert "four PlanetScope (3 m) images" in text and "SWIR" not in text
+    assert vlm_check.prompt_version("planet") == "vlmcheck_v1_planet"
+
+
+def test_planet_pair_needs_planet_in_both_windows(monkeypatch):
+    from fastapi import HTTPException
+    from webapp.backend import main
+    monkeypatch.setattr(main.shoreline, "load", lambda name: {"months": ["2024-10", "2025-04"]})
+    assert main._planet_pair({"before_window": ["2024-10-01", "2024-12-01"], "after_window": ["2025-04-01", "2025-05-01"]}) == ("2024-10", "2025-04")
+    with pytest.raises(HTTPException) as err:
+        main._planet_pair({"before_window": ["2018-11-01", "2019-03-31"], "after_window": ["2022-11-01", "2023-03-31"]})
+    assert err.value.status_code == 400 and "2024-10 to 2025-04" in err.value.detail

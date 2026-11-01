@@ -36,7 +36,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from agents import coastal, ee_engine, landcover, monthly, search_spec, shoreline, ungated, vlm_check
+from agents import coastal, ee_engine, landcover, monthly, planet, search_spec, shoreline, ungated, vlm_check
 from agents.gpt_client import GPTClient
 from agents.vlm_client import VLMClient, VLMUnavailable
 from agents.graph import run_pipeline
@@ -284,6 +284,18 @@ class VLMCheckRequest(BaseModel):
     chips: Optional[str] = None          # a vlm_check.CHIP_SETS key; default VLM_CHIPS / rgb_swir
 
 
+def _planet_pair(params: dict) -> tuple[str, str]:
+    """The Planet months inside a run's before and after windows (the last one in each), for Planet chips."""
+    p = shoreline.load("planet.json")
+    months = p["months"] if p else planet.available_months(ee_engine._ee())
+    pair = (planet.window_month(params["before_window"], months), planet.window_month(params["after_window"], months))
+    if None in pair:
+        span = f"{months[0]} to {months[-1]}" if months else "none yet"
+        raise HTTPException(400, f"Planet chips need a Planet month inside both windows (Planet months: {span}); "
+                                 "use the Sentinel-2 images for this run")
+    return pair
+
+
 @app.post("/api/vlm/check")
 def vlm_check_region(req: VLMCheckRequest):
     """D7 candidate check for one region: before/after chips -> Geo-VLM -> verdict, compared with
@@ -313,8 +325,13 @@ def vlm_check_region(req: VLMCheckRequest):
         return cached
     t0 = time.time()
     try:
-        chips = ee_engine.region_chips(params["aoi"], params["before_window"], params["after_window"],
-                                       params["max_cloud_pct"], bbox, kinds=vlm_check.chip_kinds(chip_set))
+        if chip_set in vlm_check.PLANET_SETS:
+            chips = planet.pair_chips(*_planet_pair(params), bbox)
+        else:
+            chips = ee_engine.region_chips(params["aoi"], params["before_window"], params["after_window"],
+                                           params["max_cloud_pct"], bbox, kinds=vlm_check.chip_kinds(chip_set))
+    except HTTPException:
+        raise
     except RuntimeError as exc:
         raise HTTPException(503, str(exc))
     except Exception as exc:
@@ -595,6 +612,60 @@ def shoreline_years_transects(change: Optional[str] = None):
     return out
 
 
+def _planet_shore() -> dict:
+    data = shoreline.load("planet.json")
+    if data is None:
+        raise HTTPException(404, "no Planet shorelines yet: run scripts/make_shoreline_planet.py")
+    return data
+
+
+@app.get("/api/shoreline/planet")
+def shoreline_planet():
+    """The Planet 3 m shoreline run (D12, Phase 13c): months and acquisition dates, how many positions, and
+    the comparison with the radar shorelines (per month, dry vs monsoon months, and vs the 2024-25 yearly line)."""
+    p = _planet_shore()
+    return {k: p[k] for k in ("months", "dates", "status_counts", "compare", "method", "attribution")}
+
+
+@app.get("/api/shoreline/planet/lines")
+def shoreline_planet_lines(month: Optional[str] = None):
+    """One MultiLineString per Planet month (one day, one tide level); ?month=2025-06 picks one."""
+    transects = _shoreline("transects.geojson")
+    lines = shoreline.load("planet_lines.geojson")
+    if lines is None:
+        raise HTTPException(404, "no Planet shorelines yet: run scripts/make_shoreline_planet.py")
+    fc = shoreline.hide_lines(lines, transects, shoreline.hidden_transects(transects))
+    feats = [f for f in fc["features"] if month is None or f["properties"]["month"] == month]
+    if month is not None and not feats:
+        raise HTTPException(404, f"no Planet shoreline for {month}")
+    return {**fc, "features": feats}
+
+
+_planet_tiles: dict = {}
+
+
+@app.get("/api/planet/layer")
+def planet_layer(month: str, kind: str = "rgb"):
+    """XYZ tiles of one Planet month (D12): rgb (true colour), nir (NIR false colour) or water (NDWI > 0).
+    Cloud is transparent. 404 for a month with no Planet image (Feb 2025, and everything after Sep 2025 so far)."""
+    if not _MONTH_RE.match(month) or kind not in planet.TILE_KINDS:
+        raise HTTPException(400, f"month must be YYYY-MM, kind one of {planet.TILE_KINDS}")
+    p = shoreline.load("planet.json")
+    if p is not None and month not in p["months"]:
+        raise HTTPException(404, f"no Planet image for {month}")
+    hit = _planet_tiles.get((month, kind))
+    if hit and time.time() - hit[0] < INDEX_TILE_TTL_S:
+        return hit[1]
+    try:
+        out = planet.tile_layer(month, kind, load_study_config()["aoi"])
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc))
+    except Exception as exc:
+        raise HTTPException(502, f"Earth Engine: {exc}")
+    _planet_tiles[(month, kind)] = (time.time(), out)
+    return out
+
+
 @app.get("/api/shoreline/transects/{tid}")
 def shoreline_transect(tid: str):
     """One transect's positions (m from the baseline, seaward +; null = none): monthly (tide-affected)
@@ -608,14 +679,18 @@ def shoreline_transect(tid: str):
         raise HTTPException(404, f"unknown transect {tid}")
     if tid in shoreline.hidden_transects(transects):          # Phase 14 reference transect: blind until digitised
         return {**shoreline.hide_transects({"features": [feat]}, {tid})["features"][0]["properties"],
-                "geometry": feat["geometry"], "series": None, "quarterly": None, "yearly": None, "yearly_stats": None}
+                "geometry": feat["geometry"], "series": None, "quarterly": None, "yearly": None, "yearly_stats": None,
+                "planet": None}
     y = shoreline.load("years.json")
+    p = shoreline.load("planet.json")
+    planet_series = None if p is None else [{"month": m, "date": d, "pos": v} for m, d, v in
+                                            zip(p["months"], p["dates"], p["positions"].get(tid, []))]
     yearly = None if y is None else [{"season": s[0], "pos": p, "optical": o} for s, p, o in
                                      zip(y["seasons"], y["positions"].get(tid, []), y["optical"].get(tid, []))]
     return {**feat["properties"], "geometry": feat["geometry"],
             "series": [{"month": m, "pos": p} for m, p in zip(pos["months"], pos["positions"][tid])],
             "quarterly": [{"quarter": q, "pos": p} for q, p in zip(pos.get("quarters", []), pos.get("quarter_positions", {}).get(tid, []))],
-            "yearly": yearly, "yearly_stats": None if y is None else y["transects"].get(tid)}
+            "yearly": yearly, "yearly_stats": None if y is None else y["transects"].get(tid), "planet": planet_series}
 
 
 # ---------- Phase 12 (D11): buildings near the shoreline ----------

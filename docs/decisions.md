@@ -461,6 +461,28 @@ once the mosaics are in Earth Engine. **Feb 2025 is skipped for now** (refused o
 delivered months go in first, and rerunning the notebook in November adds February alone.
 Neither the scenes nor the mosaics are committed to either repository (licence).
 
+**As implemented (Phase 13c, 2026-11-01).** The 11 Planet months (Oct 2024 – Sep 2025, Feb 2025 not
+delivered) are wired into the shoreline, the monthly maps and the Geo-VLM check:
+- *Shoreline (Phase 11):* `shoreline.build_planet()` / `scripts/make_shoreline_planet.py` read each Planet day's
+  water (NDWI > 0 on clear pixels) on the 735 Phase 11 transects, every 5 m at 3 m, with the same position rule
+  (`planet.json`, `planet_lines.geojson`). One day is one tide level, so the positions are compared with the radar,
+  never fitted for rates. QN: 3,942 of 8,085 transect-months give a position (1,867 unclear, 1,499 all land,
+  348 all water, 429 no data). Against the monthly radar shoreline on the same transect and month: dry months
+  (Oct–Mar) median |difference| 32.5 m, 38 % within 20 m (1,754 pairs); monsoon months (Apr–Sep) 37.5 m, 33 %
+  (1,257). Against the tide-averaged 2024-25 yearly shoreline, the median of the Planet dry-season months differs
+  by a median 22.5 m, 48 % within 20 m (415 transects). The monthly bias swings with the tide of the Planet day
+  (−71 m on 19 Dec 2024, +74 m on 1 Jun 2025, Planet minus radar), so single Planet days don't sharpen a rate; they
+  are a 3 m check of where the radar line sits, and the only optical look in the monsoon months. The Phase 14
+  reference transects and their neighbours are left out of the comparison and hidden in the app (blind).
+  Optical confirmation after Mar 2026 still waits for the year-2 Planet months (November / December quota).
+- *Monthly maps (Phase 10):* "Planet 3 m image" and "Planet 3 m water" layers on the month slider
+  (`/api/planet/layer`), filling the monsoon months Dynamic World can't see; cloud shows as a gap.
+- *App:* the Shoreline panel's monthly mode draws the month's Planet shoreline (pink) and, on request, the Planet
+  image under it, with the comparison above; the transect chart adds the Planet positions.
+- *Geo-VLM check:* image set `planet` (true colour + NIR false colour from the last Planet month inside each
+  window, `vlmcheck_v1_planet`, the prompt names PlanetScope). Only where both windows hold a Planet month, so not
+  for the QN detector windows (2018-19, 2022-23); the Phase 4 evaluation stays on Sentinel-2 (D19).
+
 ## D13 — Extended evaluation: classes, shoreline and coastal buildings (2026-10-08, proposed)
 
 **Decision.** The new outputs are also evaluated, not only shown, using the same two-axis design
