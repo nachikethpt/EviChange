@@ -57,8 +57,12 @@
     const { sites, index, pass, source } = state;
     if (!sites.length) { $('site').innerHTML = '<p class="adj-empty">No claims in these reports.</p>'; return; }
     const site = sites[index];
+    // before / after pairs side by side: before_cir, after_cir, before_rgb, ...
+    const when = (c) => (c.startsWith('before') ? 0 : 1);
+    const band = (c) => c.replace(/^(before|after)_/, '');
+    const ordered = [...site.chips].sort((a, b) => band(a).localeCompare(band(b)) || when(a) - when(b));
     const chips = site.chips.length
-      ? site.chips.map((c) => `<figure><img loading="lazy" alt="${esc(c)}" src="/api/adjudicate/${source}/chip/${encodeURIComponent(site.site_id)}/${encodeURIComponent(c)}">
+      ? ordered.map((c) => `<figure><img loading="lazy" alt="${esc(c)}" src="/api/adjudicate/${source}/chip/${encodeURIComponent(site.site_id)}/${encodeURIComponent(c)}">
           <figcaption>${esc(c.replace('.png', '').replace('_', ' · '))}</figcaption></figure>`).join('')
       : '<p class="adj-empty">No cached chips for this box (they are made when a model run renders them).</p>';
     const label = site.label ? `<div><b>Ground-truth label</b>: change ${esc(site.label.change_occurred)}${site.label.change_types?.length ? ` (${site.label.change_types.map(esc).join(', ')})` : ''}, confidence ${esc(site.label.confidence)}${site.label.notes ? ` — ${esc(site.label.notes)}` : ''}</div>` : '';
@@ -73,8 +77,9 @@
         <button class="adj-btn" id="prev" ${index === 0 ? 'disabled' : ''}>← Previous</button>
         <button class="adj-btn" id="next" ${index === sites.length - 1 ? 'disabled' : ''}>Next →</button>
         <button class="adj-btn" id="open">Next unfinished</button></div>
+      <div class="adj-sticky">
       ${pass === 1 ? (site.chips.length ? `<div class="adj-chips">${chips}</div>` : chips) : ''}
-      <div class="adj-ref">${pass === 1 ? label : evidence}</div>
+      <div class="adj-ref">${pass === 1 ? label : evidence}</div></div>
       ${items}</section>`;
     $('prev').onclick = () => go(index - 1);
     $('next').onclick = () => go(index + 1);
