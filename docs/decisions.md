@@ -483,7 +483,7 @@ delivered) are wired into the shoreline, the monthly maps and the Geo-VLM check:
   (−71 m on 19 Dec 2024, +74 m on 1 Jun 2025, Planet minus radar), so single Planet days don't sharpen a rate; they
   are a 3 m check of where the radar line sits, and the only optical look in the monsoon months. The Phase 14
   reference transects and their neighbours are left out of the comparison and hidden in the app (blind).
-  Optical confirmation after Mar 2026 still waits for the year-2 Planet months (November / December quota).
+  Optical confirmation after Mar 2026 waited for the year-2 Planet months; they are in since 2026-11-02 (below).
 - *Monthly maps (Phase 10):* "Planet 3 m image" and "Planet 3 m water" layers on the month slider
   (`/api/planet/layer`), filling the monsoon months Dynamic World can't see; cloud shows as a gap.
 - *App:* the Shoreline panel's monthly mode draws the month's Planet shoreline (pink) and, on request, the Planet
@@ -501,6 +501,15 @@ delivered) are wired into the shoreline, the monthly maps and the Geo-VLM check:
   significant radar trend: the median Planet position in the radar series' first and last quarters (2 months each)
   must move the trend's way by 20 m; all 26 significant trends are *pending* until the
   year-2 Planet months cover Jul – Sep 2026.
+- *Year-2 rerun (2026-11-02):* all 23 delivered months in Earth Engine (Oct 2024 – Sep 2026; Jul 2026 not
+  ordered, one day covers 32 % of the AOI). 6,541 of 16,905 transect-months give a position; vs the monthly
+  radar, dry months median 32.5 m (40 % within 20 m, 3,134 pairs), monsoon 32.5 m (38 %, 1,895); vs the 2024-25
+  yearly line 22.5 m (48 %, 391 transects). Of the 26 significant radar trends: **3 confirmed** (t0352, t0500,
+  t0714, all advancing, 20–123 m), **9 not confirmed** (8 advancing with Planet shifts of −15 to +3 m; t0362
+  retreating while Planet moves 145 m seaward), **3 tidal uncertainty** (flats) and **11 still pending**: a
+  cloud or no position in an end quarter, and without July the last quarter has only Aug and Sep 2026, so
+  both must be clear. Apr – Jun 2026 are clipped to the transect corridor and mostly cloudy (15, 193 and 3
+  pairs); April's median of 432 m on 15 pairs is one bad day, not read on its own.
 
 - *Clipped orders (2026-11-01):* to finish within days instead of waiting for December's quota, the orders that
   didn't fit went on November's quota clipped to the area that uses them (`scripts/planet_clip_plans.py`): Apr – Jun
