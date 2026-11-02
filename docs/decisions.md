@@ -593,6 +593,13 @@ the share within 20 / 30 m, overall and per season. Google Earth imagery is only
   inter-rater agreement.
 - *Planet (b)* stays for the recent dates when its months arrive: a 3 m check on 2024–26 and a
   cross-check of the Google Earth tracing.
+- *Scored by the image's season (2026-11-02, P2):* Google Earth often has no image inside a season, and
+  labellers then use the nearest one, sometimes from the season before (e.g. Feb 2016 entered for 2016-17).
+  Each tracing is scored against the yearly shoreline of the dry season its image is from
+  (`shoreline_reference_ge.image_season`): Oct – Mar images by their own season; Apr – Sep images by the
+  entered season when within its 6-month margin, otherwise the season just ended (Apr – Jun) or about to
+  start (Jul – Sep). The labels keep what was entered; the score reports how many moved
+  (`scored_in_another_season`). The yearly shorelines cover every season 2015-16 to 2025-26.
 
 ## D14 — Time series analysis with CCDC (2026-10-11, proposed)
 
