@@ -41,7 +41,8 @@ optical confirmation and a reference check, Quang Ninh, Vietnam (2015–2026)*
 6. Monthly mode (24 months) for comparison: tidal spread, quarterly rates.
 7. **Accuracy:** 30 reference transects (seeded, spread along the coast), traced blind on Google Earth for 4 dry
    seasons (2016-17, 2019-20, 2022-23, 2025-26). Metrics: bias, RMSE, MAE, share within 20 / 30 m. A second
-   labeller for agreement **[TBD: P1?]**. Planet 3 m check for 2024–26 **[TBD]**.
+   labeller for agreement **[TBD: P1?]**. Planet 3 m check for 2024–26: 23 months, median 32.5 m from the monthly radar line, 22.5 m from the 2024-25
+   yearly line; 3 of 26 monthly trends confirmed, 9 not, 11 pending (D12, 2026-11-02).
 8. Coastal buildings: built-up area in the 0–200 m and 200–500 m strips (Phase 12) as context for reclamation.
 
 ## 4. Results
@@ -83,4 +84,4 @@ against the transect statistics. Either a short section here or the separate pap
 1. Trace the 30 reference transects on Google Earth (`shoreline_ge_p2.html` + `.kml`), then
    `scripts/shoreline_reference_ge.py --score`.
 2. Show this outline to the professor; decide Section 6.
-3. Planet months for the 3 m check (`notebooks/EviChange_planet_to_ee.ipynb`).
+3. ~~Planet months for the 3 m check~~ done 2026-11-02 (all 23 months, D12).
