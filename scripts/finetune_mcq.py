@@ -42,12 +42,11 @@ import vlm_batch                               # noqa: E402
 
 LABEL_DIR = ROOT / "data" / "quangninh" / "ft_labels_v2"
 ASSIGNED = ROOT / "data" / "quangninh" / "ft_assigned_v2.json"
-COVERS = ("water", "dense_vegetation", "sparse_vegetation", "crops", "bare", "built")
-COVER_TEXT = {"water": "water (sea, rivers, ponds; aquaculture: fish / shrimp ponds, floating cages)", "dense_vegetation": "dense vegetation (forest, mangrove)",
-              "sparse_vegetation": "sparse vegetation (scrub, grass)", "crops": "crops / fields (not fish ponds)",
-              "bare": "bare ground (soil, rock, sand, mine, fill)", "built": "built-up (buildings, roads, concrete)"}
+from agents.cover_check import COVER_TEXT, COVERS   # noqa: E402  (the labels and the 4b cover task share them)
+
 VEG = {"dense_vegetation", "sparse_vegetation", "crops"}
 CALIB_N, SEED, SHEET_SIZE = 40, 23, 50
+GATE_KAPPA = 0.5   # D17: training needs this agreement on calib2 (on the main cover since 2026-11-02)
 GRID = 5        # the cell rule: the box as GRID x GRID cells; a cover counts if it is the most of >= GRID cells
 CELL_RULE = (f"<b>Cell rule.</b> Picture the box as a {GRID} &times; {GRID} grid ({GRID * GRID} cells; the .kml draws it in "
              f"Google Earth Pro). Give each cell to the cover that fills most of it. Tick a cover if it has at least {GRID} "
@@ -332,6 +331,10 @@ def main(argv: list[str] | None = None) -> None:
                     if a["n"]:
                         print(f"{name}, P2 vs {other}: both labelled {a['n']}: change / no change {a['change']}; "
                               f"main cover per date {a['main_cover']}")
+                        if name == "calib2":
+                            k = a["main_cover"].get("kappa")
+                            print(f"  gate (D17 main-cover target, 2026-11-02: main cover kappa >= {GATE_KAPPA}): "
+                                  f"{'passed' if k is not None and k >= GATE_KAPPA else 'not passed'}")
         return
     if args.review:
         mine = {who: read_labels(who) for who in ("P2", "P3")}

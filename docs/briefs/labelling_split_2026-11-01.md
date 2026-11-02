@@ -16,7 +16,7 @@ label (c)). The write-up states who labelled what.
 | 14 (c) coastal cells built / not built, 30 cells | **P3** | none (P1 built Phase 12; stated as a limit) | ≈ 1 h |
 | 14 (d) month of change on the Planet months, 30 sites | **P1** | P3 | P1 ≈ 1.5 h, P3 ≈ 0.5 h |
 | 4b held-out set, 80 D15 boxes (scheme v2) | **P1** | — | ≈ 3 h |
-| 4b training boxes (scheme v2), after calib2 passes κ ≥ 0.5 | **P3** | — | ≈ 5 h |
+| 4b training boxes (scheme v2) | **P3** | — | ≈ 5 h |
 
 About 9 h each. P1's earlier third-labeller brief (`phase14_p1_third_labeller.md`) is replaced by this one.
 
@@ -45,7 +45,9 @@ python scripts/shoreline_reference_ge.py --page --labeller P1     # P3: --labell
 Open `shoreline_ge_<you>.kml` in Google Earth Pro and `shoreline_ge_<you>.html` in a browser. The page
 explains each step and keeps your answers as you type; press **Save** at the end for `shoreline_ge_<you>.json`.
 
-**4b** — after P2's `calib2` is in and κ ≥ 0.5 (`python scripts/finetune_mcq.py --kappa`):
+**4b** — can start now: `calib2` passed on the main cover (κ 0.82, 2026-11-02, D17 "Main-cover target").
+The model learns the **main cover** at each date, so the main cover matters most: pick it carefully. Still
+tick the other covers and use "can't tell" only when the image really hides the box.
 
 ```bash
 python scripts/finetune_mcq.py --sheet --set holdout --labeller P1    # P1: the 80 held-out boxes
