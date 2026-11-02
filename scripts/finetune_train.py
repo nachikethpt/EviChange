@@ -9,7 +9,8 @@ adapters on the language model's attention and MLP layers are trained (the visio
 Data: data/finetune/{task}_{train,holdout}.jsonl and chips.zip from scripts/finetune_build.py, unzipped into --data.
 Training masks the prompt: the loss is only on the answer tokens. Greedy decoding at eval, as the server.
 `eval` writes predictions_{task}_{name}.jsonl next to the adapter (or in --data for the baseline) and, for
-the check, prints balanced accuracy against the held-out hand labels (the D15 measure).
+the check, prints balanced accuracy against the held-out hand labels (the D15 measure); for the cover task (the
+4b target since 2026-11-02, D17), main-cover accuracy per date and the balanced accuracy of the derived change.
 """
 from __future__ import annotations
 
@@ -48,14 +49,29 @@ def balanced_accuracy(pairs: list[tuple[str, str]]) -> dict:
     return {"n": len(pairs), "on_change": hc, "on_no_change": hn, "balanced": bal}
 
 
+def cover_scores(rows: list[tuple[dict, dict]]) -> dict:
+    """rows = (target {"before", "after"}, parsed answer): main-cover accuracy per date ("cant_tell" counts as a
+    miss) and the balanced accuracy of the change derived from the two covers."""
+    from agents import cover_check
+    dates = [(t[w], a[w]) for t, a in rows for w in cover_check.DATES]
+    acc = sum(x == y for x, y in dates) / len(dates) if dates else None
+    pairs = [(cover_check.derived_change(t), cover_check.derived_change(a)) for t, a in rows]
+    return {"main_cover_accuracy": acc, "derived_change": balanced_accuracy(pairs)}
+
+
 def score(task: str, examples: list[dict], predictions: dict[str, str]) -> dict:
-    """Parse each prediction with the parser the app and evaluation use; for the check, balanced accuracy."""
-    from agents import gated, vlm_check
+    """Parse each prediction with the parser the app and evaluation use; for the check, balanced accuracy;
+    for the cover task, main-cover accuracy and the derived change."""
+    from agents import cover_check, gated, vlm_check
     out = {"n": len(examples), "parse_failures": 0}
-    pairs = []
+    pairs, covers = [], []
     for ex in examples:
         text = predictions.get(ex["id"], "")
-        if task == "check":
+        if task == "cover":
+            ans = cover_check.parse_answer(text)
+            out["parse_failures"] += not ans["parse_ok"]
+            covers.append((json.loads(ex["target"]), ans))
+        elif task == "check":
             ans = vlm_check.parse_answer(text)
             out["parse_failures"] += not ans["parse_ok"]
             pairs.append((json.loads(ex["target"])["verdict"], ans["verdict"]))
@@ -64,6 +80,8 @@ def score(task: str, examples: list[dict], predictions: dict[str, str]) -> dict:
             out["parse_failures"] += not ok
     if task == "check":
         out.update(balanced_accuracy(pairs))
+    if task == "cover":
+        out.update(cover_scores(covers))
     return out
 
 
@@ -171,7 +189,7 @@ def evaluate(args) -> None:
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("cmd", choices=("train", "eval"))
-    ap.add_argument("--task", choices=("check", "gated"), required=True)
+    ap.add_argument("--task", choices=("cover", "check", "gated"), required=True)
     ap.add_argument("--data", type=Path, required=True)
     ap.add_argument("--base", default=BASE_MODEL)
     ap.add_argument("--out", default="/content/drive/MyDrive/evichange_ft")

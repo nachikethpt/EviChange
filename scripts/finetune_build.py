@@ -1,6 +1,6 @@
-r"""Turn the hand labels into fine-tuning examples (Phase 4b, D17) for both tasks, and bundle the chips.
+r"""Turn the hand labels into fine-tuning examples (Phase 4b, D17) for the three tasks, and bundle the chips.
 
-    python scripts\finetune_build.py            # data/finetune/{check,gated}_{train,holdout}.jsonl + chips.zip
+    python scripts\finetune_build.py            # data/finetune/{cover,check,gated}_{train,holdout}.jsonl + chips.zip
     python scripts\finetune_build.py --stats    # counts only
 
 Each example is {"id", "split", "images": [chip paths inside chips.zip], "prompt", "target"}: the exact
@@ -8,11 +8,15 @@ prompt the model gets at test time (agents/vlm_check.py, agents/gated.py, image 
 answer it should give. Upload chips.zip and the .jsonl files to Drive for notebooks/EviChange_finetune.ipynb.
 
 Targets:
+- cover (the 4b training target since 2026-11-02, D17): {"before", "after"} = the main cover per date from the
+  v2 per-date labels (scripts/finetune_mcq.py, cell rule); boxes with "can't tell" or no main cover at a date are
+  left out. Change is derived from it (agents/cover_check.derived_change), never asked.
 - check: {"verdict", "change_types"} = the hand label ("other" kept as a type).
 - gated: built per box from the box evidence (agents/site_evidence.py) and the hand label. A claim is
   kept only when it is in the evidence AND agrees with the label; everything else becomes an
   abstention with the reason. Causes, legality and the future are always abstentions.
 "Unsure" labels are left out. Train = the D17 training boxes; holdout = the 80 D15 boxes.
+check and gated use the first-scheme labels (data/quangninh/ft_labels/), kept as a comparison.
 """
 from __future__ import annotations
 
@@ -28,8 +32,9 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import finetune_data as fd                                  # noqa: E402
+import finetune_mcq                                         # noqa: E402
 import vlm_batch                                            # noqa: E402
-from agents import gated, site_evidence, vlm_check          # noqa: E402
+from agents import cover_check, gated, site_evidence, vlm_check  # noqa: E402
 from agents.schema import CHANGE_TYPES, region_change_types  # noqa: E402
 
 OUT = ROOT / "data" / "finetune"
@@ -91,25 +96,49 @@ def check_target(label: dict) -> dict:
     return {"verdict": label["verdict"], "change_types": label["types"] if label["verdict"] == "change" else []}
 
 
+def _boxes(fc: dict) -> list[dict]:
+    train = json.loads(fd.BOXES.read_text(encoding="utf-8"))["boxes"]
+    return [{**b, "split": "train"} for b in train] + [{**b, "split": "holdout"} for b in fd.holdout_items(fc)]
+
+
+def _chips(params: dict, box: tuple, files: dict[str, Path]) -> list[str]:
+    """The box's chip names inside chips.zip (added to `files`), in the order the prompt lists them."""
+    folder = vlm_batch.chip_dir(params, box)
+    names = []
+    for key in vlm_check.chip_keys(CHIP_SET):
+        name = f"{folder.name}/{key}.png"
+        files[name] = folder / f"{key}.png"
+        names.append(name)
+    return names
+
+
+def build_cover(labels: dict[str, dict]) -> tuple[list[dict], dict[str, Path]]:
+    """(cover examples, {zip name: chip file}) from the v2 per-date labels {box id: {"before", "after"}}."""
+    fc = json.loads(vlm_batch.REGIONS.read_text(encoding="utf-8"))
+    params = vlm_batch.analysis_params(fc)
+    prompt = cover_check.build_prompt(params["before_window"], params["after_window"], CHIP_SET)
+    rows, files = [], {}
+    for b in _boxes(fc):
+        tgt = cover_check.target(labels.get(b["id"]) or {})
+        if tgt is None:
+            continue
+        rows.append({"id": b["id"], "split": b["split"], "images": _chips(params, tuple(b["box"]), files),
+                     "prompt": prompt, "target": json.dumps(tgt)})
+    return rows, files
+
+
 def build(labels: dict[str, dict]) -> tuple[list[dict], list[dict], dict[str, Path]]:
     """(check examples, gated examples, {zip name: chip file})."""
     fc = json.loads(vlm_batch.REGIONS.read_text(encoding="utf-8"))
     params = vlm_batch.analysis_params(fc)
     meta = fc.get("metadata") or {}
-    train = json.loads(fd.BOXES.read_text(encoding="utf-8"))["boxes"]
-    boxes = [{**b, "split": "train"} for b in train] + [{**b, "split": "holdout"} for b in fd.holdout_items(fc)]
     check, gate, files = [], [], {}
-    for b in boxes:
+    for b in _boxes(fc):
         lab = labels.get(b["id"])
         if not lab or lab["verdict"] == "unsure":
             continue
         box = tuple(b["box"])
-        folder = vlm_batch.chip_dir(params, box)
-        names = []
-        for key in vlm_check.chip_keys(CHIP_SET):
-            name = f"{folder.name}/{key}.png"
-            files[name] = folder / f"{key}.png"
-            names.append(name)
+        names = _chips(params, box, files)
         ev = site_evidence.site_evidence(box, fc["features"], params["before_window"], params["after_window"],
                                          source=meta.get("code_version", "regions"), pair_id=f"ft:{b['id']}")
         base = {"id": b["id"], "split": b["split"], "images": names}
@@ -127,24 +156,29 @@ def main(argv: list[str] | None = None) -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     labels = fd.read_labels()
     check, gate, files = build(labels)
+    cover, cover_files = build_cover(finetune_mcq.read_labels())
+    files.update(cover_files)
     for split in ("train", "holdout"):
+        rows = [c for c in cover if c["split"] == split]
+        v = Counter(cover_check.derived_change(json.loads(c["target"])) for c in rows)
+        print(f"{split}: {len(rows)} cover examples ({v['change']} with a different main cover, {v['no_change']} the same)")
         rows = [c for c in check if c["split"] == split]
         v = Counter(json.loads(c["target"])["verdict"] for c in rows)
-        print(f"{split}: {len(rows)} examples per task ({v['change']} change, {v['no_change']} no change)")
+        print(f"{split}: {len(rows)} check / gated examples, first-scheme labels ({v['change']} change, {v['no_change']} no change)")
     if args.stats:
         return
     missing = [n for n, p in files.items() if not p.exists()]
     if missing:
         raise SystemExit(f"{len(missing)} chips missing (run finetune_data.py --render): {missing[:3]}")
     OUT.mkdir(parents=True, exist_ok=True)
-    for task, rows in (("check", check), ("gated", gate)):
+    for task, rows in (("cover", cover), ("check", check), ("gated", gate)):
         for split in ("train", "holdout"):
             path = OUT / f"{task}_{split}.jsonl"
             path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows if r["split"] == split), encoding="utf-8")
     with zipfile.ZipFile(OUT / "chips.zip", "w", zipfile.ZIP_STORED) as z:
         for name, path in sorted(files.items()):
             z.write(path, name)
-    print(f"-> {OUT} (check/gated train + holdout .jsonl, chips.zip with {len(files)} images)")
+    print(f"-> {OUT} (cover/check/gated train + holdout .jsonl, chips.zip with {len(files)} images)")
 
 
 if __name__ == "__main__":

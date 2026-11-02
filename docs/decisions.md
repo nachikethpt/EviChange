@@ -921,6 +921,20 @@ weights stay frozen):
   4. *Second labeller changed (2026-10-28, P2):* **P1 labels calib2 instead of P3.** κ on calib2 is
      P2 vs P1. P1 did not take part in round 1 or the review, so P1 learns the cell rule from the
      page only. Limit: round 1 and round 2 measure different pairs of labellers.
+- *Calibration round 2 result (2026-11-02): change not passed, main cover passed.* P2 and P1 on the 40 calib2
+  boxes under the cell rule: main cover per date κ **0.82** (86 % agree, 74 dates), derived change κ **0.37**
+  (68 %, 34 boxes). The cell rule did not fix change: most of the 24 boxes derived differently differ in a
+  smaller cover one labeller ticked at one date (e.g. sparse vegetation in 2018 only). Change from the main
+  cover alone agrees 88 % but κ 0.28, because almost no box changes its main cover. Four of P2's boxes are
+  incomplete (no main cover at a date, or "can't tell" with covers); they drop out of κ.
+- *Main-cover target (decided 2026-11-02, P2):* the 4b adapter learns what labellers agree on, the **main
+  cover of the box at each date** (`agents/cover_check.py`, `covercheck_v1`, task `cover` in
+  `scripts/finetune_build.py` / `finetune_train.py`). Change is derived (the two main covers differ), never
+  asked. The gate is the main-cover κ on calib2 (≥ 0.5: passed, `finetune_mcq.py --kappa`). Held out: the
+  80 D15 boxes, first labeller P1; scored on main-cover accuracy per date and the balanced accuracy of the
+  derived change. The `check` and `gated` adapters stay on the first-scheme labels, as a comparison only.
+  Limit, stated in the write-up: labellers don't agree on change at this box size (κ 0.40 and 0.37 in two
+  rounds), so a derived change is only as good as the main cover, and small-cover change is not learned.
 
 **Limits.**
 - Two labellers, one of whom (P2) built the system; P2 labelled most of the boxes.

@@ -13,7 +13,7 @@ import finetune_build as fb  # noqa: E402
 import finetune_data as fd  # noqa: E402
 import finetune_train as ft  # noqa: E402
 import vlm_batch as vb  # noqa: E402
-from agents import gated, vlm_check  # noqa: E402
+from agents import cover_check, gated, vlm_check  # noqa: E402
 from webapp.backend.report import build_report  # noqa: E402
 
 
@@ -128,6 +128,44 @@ def test_check_target():
     assert fb.check_target({"verdict": "change", "types": ["other"]}) == {"verdict": "change", "change_types": ["other"]}
     assert fb.check_target({"verdict": "no_change", "types": ["other"]}) == {"verdict": "no_change", "change_types": []}
 
+
+
+# ---------- the main-cover task (D17, 2026-11-02) ----------
+def test_cover_target_needs_a_main_cover_at_both_dates():
+    lab = {"before": {"covers": ["water", "bare"], "main": "water", "cant_tell": False},
+           "after": {"covers": ["bare"], "main": "bare", "cant_tell": False}}
+    assert cover_check.target(lab) == {"before": "water", "after": "bare"}
+    assert cover_check.target({**lab, "after": {"covers": ["bare"], "main": None, "cant_tell": False}}) is None
+    assert cover_check.target({**lab, "before": {"covers": [], "main": "water", "cant_tell": True}}) is None
+    assert cover_check.target({"before": lab["before"]}) is None
+
+
+def test_cover_prompt_lists_every_cover_and_the_chips_like_the_check():
+    p = cover_check.build_prompt(["2018-11-01", "2019-02-28"], ["2022-11-01", "2023-02-28"])
+    assert all(f'"{c}"' in p for c in (*cover_check.COVERS, "cant_tell"))
+    assert "Before: 2018-11-01 to 2019-02-28" in p and "yellow box" in p
+    check = vlm_check.build_prompt(["2018-11-01", "2019-02-28"], ["2022-11-01", "2023-02-28"])
+    assert p.splitlines()[1] == check.splitlines()[1]          # the same image list as the region check
+    assert "{" in p and "{{" not in p
+
+
+def test_cover_answers_parse_and_derive_change():
+    ans = cover_check.parse_answer('Sure: {"before": "water", "after": "built"}')
+    assert ans == {"before": "water", "after": "built", "parse_ok": True}
+    assert cover_check.derived_change(ans) == "change"
+    assert cover_check.derived_change({"before": "bare", "after": "bare"}) == "no_change"
+    assert cover_check.derived_change({"before": "cant_tell", "after": "bare"}) == "unsure"
+    for bad in ("", "no json", '{"before": "forest", "after": "bare"}', '{"before": "bare"}'):
+        assert cover_check.parse_answer(bad) == {"before": "cant_tell", "after": "cant_tell", "parse_ok": False}
+
+
+def test_cover_scoring():
+    rows = [{"id": "a", "target": json.dumps({"before": "water", "after": "built"})},
+            {"id": "b", "target": json.dumps({"before": "bare", "after": "bare"})}]
+    preds = {"a": '{"before": "water", "after": "built"}', "b": '{"before": "bare", "after": "cant_tell"}'}
+    s = ft.score("cover", rows, preds)
+    assert s["parse_failures"] == 0 and s["main_cover_accuracy"] == 0.75
+    assert s["derived_change"]["on_change"] == 1.0 and s["derived_change"]["on_no_change"] == 0.0
 
 # ---------- training script, GPU-free parts ----------
 def test_lora_targets_skip_the_vision_encoder():
