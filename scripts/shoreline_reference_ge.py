@@ -122,26 +122,47 @@ def to_records(saved: dict, refs: list[dict], labeller: str) -> list[dict]:
     return out
 
 
+def image_season(season: str, month: str) -> str:
+    """The dry season the traced image belongs to (D13, 2026-11-02). An image from Oct - Mar is scored against
+    that dry season, whatever season it was entered under (a Feb 2016 image entered for 2016-17 is 2015-16's
+    shoreline). Apr - Sep: the entered season when the image is within its 6-month margin, otherwise the season
+    just ended (Apr - Jun) or about to start (Jul - Sep)."""
+    y, m = int(month[:4]), int(month[5:7])
+    if m >= 10:
+        return f"{y}-{(y + 1) % 100:02d}"
+    if m <= 3:
+        return f"{y - 1}-{y % 100:02d}"
+    start = int(season[:4])
+    if f"{start}-04" <= month <= f"{start + 1}-09":
+        return season
+    return f"{y - 1}-{y % 100:02d}" if m <= 6 else f"{y}-{(y + 1) % 100:02d}"
+
+
 def score(records: list[dict], years: dict) -> dict:
-    """Yearly shoreline position minus the traced one (m, seaward +) where both exist."""
+    """Yearly shoreline position minus the traced one (m, seaward +) where both exist, each tracing scored
+    against the season of its image (image_season)."""
     labels = [s[0] for s in years["seasons"]]
-    errs, by_season, missing = [], {}, 0
+    errs, by_season, missing, moved = [], {}, 0, 0
     for r in records:
-        if r["status"] != "edge" or r.get("season") not in labels:
+        if r["status"] != "edge":
             continue
-        model = (years["positions"].get(r["transect_id"]) or [None] * len(labels))[labels.index(r["season"])]
+        season = image_season(r["season"], r["month"]) if r.get("season") else None
+        if season not in labels:
+            continue
+        moved += season != r["season"]
+        model = (years["positions"].get(r["transect_id"]) or [None] * len(labels))[labels.index(season)]
         if model is None:
             missing += 1
             continue
         e = model - r["pos_m"]
         errs.append(e)
-        by_season.setdefault(r["season"], []).append(e)
+        by_season.setdefault(season, []).append(e)
     stats = lambda v: {"n": len(v), "bias_m": round(sum(v) / len(v), 1), "rmse_m": round(math.sqrt(sum(x * x for x in v) / len(v)), 1),
                        "mae_m": round(sum(map(abs, v)) / len(v), 1),
                        "within_20m": round(sum(abs(x) <= 20 for x in v) / len(v), 2),
                        "within_30m": round(sum(abs(x) <= 30 for x in v) / len(v), 2)} if v else {"n": 0}
     return {"all": stats(errs), "by_season": {s: stats(v) for s, v in sorted(by_season.items())},
-            "traced_but_no_model_position": missing}
+            "traced_but_no_model_position": missing, "scored_in_another_season": moved}
 
 
 def main() -> None:

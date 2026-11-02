@@ -182,3 +182,16 @@ def test_ge_records_validate_and_score():
     years = {"seasons": [["2016-17", "2016-10-01", "2017-04-01"]], "positions": {refs[0]["transect_id"]: [25.0]}}
     sc = ge.score(recs, years)
     assert sc["all"] == {"n": 1, "bias_m": 15.0, "rmse_m": 15.0, "mae_m": 15.0, "within_20m": 1.0, "within_30m": 1.0}
+    feb = {**recs[0], "month": "2016-02"}                       # entered for 2016-17, image from 2015-16
+    years2 = {"seasons": [["2015-16", "", ""], ["2016-17", "", ""]], "positions": {refs[0]["transect_id"]: [40.0, 25.0]}}
+    sc2 = ge.score([feb], years2)
+    assert sc2["by_season"] == {"2015-16": sc2["all"]} and sc2["all"]["bias_m"] == 30.0 and sc2["scored_in_another_season"] == 1
+
+
+def test_ge_image_season():
+    f = _ge().image_season
+    assert f("2016-17", "2016-12") == "2016-17" and f("2016-17", "2017-03") == "2016-17"
+    assert f("2016-17", "2016-02") == "2015-16" and f("2016-17", "2015-11") == "2015-16"
+    assert f("2022-23", "2023-10") == "2023-24"
+    assert f("2016-17", "2016-07") == "2016-17" and f("2016-17", "2017-09") == "2016-17"   # inside the 6-month margin
+    assert f("2016-17", "2018-04") == "2017-18" and f("2016-17", "2018-08") == "2018-19"
