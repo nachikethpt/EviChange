@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import results_tables as rt  # noqa: E402
 from eval import metrics  # noqa: E402
 
-RATES = {"template": 0.15, "ungated": 0.5, "gated": 0.2, "ungated_gpt": 0.4}
+RATES = {"template": 0.15, "ungated": 0.5, "gated": 0.2, "ungated_gpt": 0.4, "gated_ft": 0.1}
 
 
 def synthetic(tmp: Path, conds=tuple(RATES)) -> tuple[Path, Path]:
@@ -33,13 +33,13 @@ def synthetic(tmp: Path, conds=tuple(RATES)) -> tuple[Path, Path]:
 
 
 def test_all_outputs(tmp_path):
-    cp, rp = synthetic(tmp_path)
+    cp, rp = synthetic(tmp_path, conds=("template", "ungated", "gated", "ungated_gpt"))
     out = tmp_path / "results"
     rep = rt.write_all(cp, rp, out, reps=200)
     md = (out / "results.md").read_text(encoding="utf-8")
     for n in range(1, 9):
         assert f"## Table {n}." in md
-    assert md.count("| Gated (Qwen) |") >= 5 and "Gated (Qwen) − Ungated (Qwen)" in md and "secondary (D16, Holm)" in md
+    assert md.count("| Gated (Qwen) |") >= 5 and "Gated (Qwen) − Ungated (Qwen)" in md and "secondary S1 (D16, Holm)" in md and "secondary S2" not in md
     assert "sensitivity: detected stratum only" in md and "Pratt p" in md and "wrongly rejected" in md
     tex = (out / "table_main.tex").read_text(encoding="utf-8")
     assert tex.startswith(r"\begin{tabular}{lrrrrrr}") and r"\%" in tex and "%" not in tex.replace(r"\%", "")
@@ -62,3 +62,19 @@ def test_without_a_comparison(tmp_path):
 def test_formatting():
     assert rt.pct((0.123, 0.041, 0.2)) == "12.3 % [4.1, 20.0]" and rt.pct((None, None, None)) == "n/a"
     assert rt.p(0.0004) == "< 0.001" and rt.p(None) == "n/a" and rt.num(None) == "n/a"
+
+
+def test_secondary_family_is_holm_adjusted_together(tmp_path):
+    """Analysis plan section 7: S1 (gated vs ungated_gpt) and S2 (gated_ft vs gated) are one Holm family."""
+    cp, rp = synthetic(tmp_path)
+    out = tmp_path / "ft"
+    rep = rt.write_all(cp, rp, out, reps=200)
+    s1, s2 = rep["comparisons"]["secondary_d16"], rep["comparisons"]["secondary_d17"]
+    assert (s2["a"], s2["b"]) == ("gated_ft", "gated")
+    raw = {"s1": s1["rate_wilcoxon"][1], "s2": s2["rate_wilcoxon"][1]}
+    assert metrics.holm_adjust(raw) == {"s1": s1["rate_wilcoxon_p_holm"], "s2": s2["rate_wilcoxon_p_holm"]}
+    assert min(s1["rate_wilcoxon_p_holm"], s2["rate_wilcoxon_p_holm"]) == min(1.0, 2 * min(raw.values()))
+    md = (out / "results.md").read_text(encoding="utf-8")
+    assert "secondary S2 (D17, Holm)" in md and "Gated (fine-tuned) − Gated (Qwen)" in md
+    row = next(ln for ln in md.splitlines() if "secondary S1" in ln).split("|")
+    assert "Holm" in row[5] and "Holm" not in row[7]          # the Holm p sits with the Wilcoxon p it adjusts
