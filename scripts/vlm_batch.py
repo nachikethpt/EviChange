@@ -176,6 +176,10 @@ def chip_dir(params: dict, box: tuple) -> Path:
     return CHIP_DIR / key
 
 
+# every Sentinel-2 chip kind; the Planet sets render through agents/planet.py (S2 has no "nir" chip)
+S2_KINDS = tuple(dict.fromkeys(k for name, s in vlm_check.CHIP_SETS.items() if name not in vlm_check.PLANET_SETS for k in s))
+
+
 def chips_for(params: dict, box: tuple, kinds: tuple[str, ...], render=None) -> dict[str, bytes]:
     """before_<kind> / after_<kind> PNGs, from the cache or rendered once (all kinds needed later too)."""
     folder = chip_dir(params, box)
@@ -183,7 +187,7 @@ def chips_for(params: dict, box: tuple, kinds: tuple[str, ...], render=None) -> 
     if not all((folder / f"{name}.png").exists() for name in want):
         if render is None:
             from agents.ee_engine import region_chips as render
-        all_kinds = tuple(dict.fromkeys(k for s in vlm_check.CHIP_SETS.values() for k in s))
+        all_kinds = S2_KINDS
         chips = render(params["aoi"], params["before_window"], params["after_window"], params["max_cloud_pct"],
                        box, kinds=all_kinds)
         folder.mkdir(parents=True, exist_ok=True)
@@ -292,7 +296,7 @@ def main(argv: list[str] | None = None) -> None:
     ids = control_ids if args.controls_only else sample["ids"][:args.limit] + control_ids
     if args.render_only:
         params, by_id = analysis_params(fc), {f["properties"]["id"]: f for f in fc["features"]}
-        all_kinds = tuple(dict.fromkeys(k for s in vlm_check.CHIP_SETS.values() for k in s))
+        all_kinds = S2_KINDS
         for n, rid in enumerate(ids, 1):
             t0 = time.time()
             try:

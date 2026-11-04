@@ -52,6 +52,7 @@ def test_chips_rendered_once_then_cached(tmp_path, monkeypatch):
     again = vb.chips_for(params, (1, 2, 3, 4), ("rgb", "swir", "cir"), render)
     assert first == {"before_rgb": b"beforergb", "after_rgb": b"afterrgb"}
     assert again["after_cir"] == b"aftercir" and len(calls) == 1        # every kind rendered on the first call
+    assert calls[0] == ("rgb", "swir", "cir")                           # Sentinel-2 kinds only, never Planet's "nir"
 
 
 class FakeVLM:
