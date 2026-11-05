@@ -137,7 +137,7 @@ def run(vlm, arms: list[str], limit: int | None = None, log_path: Path | None = 
         arm_model = model if arm != "template" else None
         for box in boxes:
             n += 1
-            ev = box_evidence(fc, box)
+            ev = box.get("evidence") or box_evidence(fc, box)     # report_sites: frozen evidence
             key = report_key(arm, box["id"], arm_model, CHIP_SET, evidence_tag(ev))
             if key in done_keys:
                 counts["skipped"] += 1
