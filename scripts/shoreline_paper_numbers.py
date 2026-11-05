@@ -86,6 +86,29 @@ def threshold_sensitivity(years: dict) -> dict:
     return out
 
 
+STEP_SHARE = 0.5                     # a change is a "step" when one season-to-season jump is >= this share of |NSM|
+
+
+def magnitude_agreement(years: dict) -> dict:
+    """Confirmed changes: the optical shift as a share of the radar's net movement. Confirmation checks only
+    the direction and a 20 m minimum, so this shows how often the two disagree on size."""
+    r = sorted(abs(st["opt_shift"]) / abs(st["nsm"]) for st in years["transects"].values()
+               if st["change"] in ("advancing", "retreating") and st.get("nsm") and st.get("opt_shift") is not None)
+    return {"n": len(r), "median_ratio": round(statistics.median(r), 2) if r else None,
+            "optical_under_half_of_radar": sum(x < 0.5 for x in r), "optical_under_quarter_of_radar": sum(x < 0.25 for x in r)}
+
+
+def step_changes(years: dict, share: float = STEP_SHARE) -> dict:
+    """Confirmed changes where the largest jump between consecutive seasons with a position is at least `share`
+    of |NSM|: an event (reclamation, port works) rather than a steady trend, which a linear rate misdescribes."""
+    def max_jump(series):
+        q = [v for v in series if v is not None]
+        return max((abs(b - a) for a, b in zip(q, q[1:])), default=0.0)
+    rows = [(tid, st) for tid, st in years["transects"].items() if st["change"] in ("advancing", "retreating") and st.get("nsm")]
+    steps = sum(max_jump(years["positions"][tid]) >= share * abs(st["nsm"]) for tid, st in rows)
+    return {"confirmed": len(rows), "step_like": steps, "share": share}
+
+
 def rates(years: dict) -> dict:
     out = {}
     for kind in ("advancing", "retreating"):
@@ -131,6 +154,7 @@ def compute() -> dict:
             "coast_by_change": coast_by_change(years), "rates": rates(years),
             "too_few": too_few_breakdown(years), "unconfirmed": unconfirmed_breakdown(years),
             "optical_threshold": threshold_sensitivity(years),
+            "magnitude_agreement": magnitude_agreement(years), "step_changes": step_changes(years),
             "planet_vs_monthly_by_tidal": planet_by_tidal(planet, monthly, transects, shoreline.hidden_transects(transects))}
 
 
@@ -142,6 +166,10 @@ def markdown(n: dict) -> str:
                                          f"|NSM| median {v['abs_nsm_median']} m" for k, v in n["rates"].items())]
     lines += ["", "Too few seasons: " + ", ".join(f"{k} {v}" for k, v in n["too_few"].items())]
     lines += ["Unconfirmed radar trends: " + ", ".join(f"{k} {v}" for k, v in n["unconfirmed"].items())]
+    ma, sc = n["magnitude_agreement"], n["step_changes"]
+    lines += [f"Confirmed changes: optical shift / radar NSM median {ma['median_ratio']} (n={ma['n']}), under half "
+              f"{ma['optical_under_half_of_radar']}, under a quarter {ma['optical_under_quarter_of_radar']}; "
+              f"step-like (one jump >= {sc['share']:.0%} of |NSM|) {sc['step_like']} of {sc['confirmed']}"]
     lines += ["", "| Optical threshold | Advancing | Retreating | Unconfirmed |", "|---|---:|---:|---:|"]
     lines += [f"| {k} | {v['advancing']} | {v['retreating']} | {v['unconfirmed']} |" for k, v in n["optical_threshold"].items()]
     lines += ["", "| Planet − monthly radar | n | Bias, m | Median abs, m | RMSE, m | Within 20 m | Over 100 m |", "|---|---:|---:|---:|---:|---:|---:|"]

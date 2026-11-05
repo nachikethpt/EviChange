@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 334" width="720" height="334" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="12">
+<rect width="100%" height="100%" fill="#fcfcfb"/>
+<text x="16" y="22" font-size="14" font-weight="600" fill="#0b0b0b">Transect t0133: advancing, +41.1 m/yr (95 % CI ±33.1)</text>
+<line x1="64" x2="680" y1="239.2" y2="239.2" stroke="#e4e3df"/>
+<text x="56" y="243.2" text-anchor="end" fill="#52514e">-200</text>
+<line x1="64" x2="680" y1="170.2" y2="170.2" stroke="#e4e3df"/>
+<text x="56" y="174.2" text-anchor="end" fill="#52514e">-100</text>
+<line x1="64" x2="680" y1="101.2" y2="101.2" stroke="#0b0b0b"/>
+<text x="56" y="105.2" text-anchor="end" fill="#52514e">0</text>
+<text x="64.0" y="320" text-anchor="middle" fill="#52514e">2015-16</text>
+<text x="187.2" y="320" text-anchor="middle" fill="#52514e">2017-18</text>
+<text x="310.4" y="320" text-anchor="middle" fill="#52514e">2019-20</text>
+<text x="433.6" y="320" text-anchor="middle" fill="#52514e">2021-22</text>
+<text x="556.8" y="320" text-anchor="middle" fill="#52514e">2023-24</text>
+<text x="680.0" y="320" text-anchor="middle" fill="#52514e">2025-26</text>
+<text x="14" y="184.0" fill="#52514e" transform="rotate(-90 14 184.0)" text-anchor="middle">m from the baseline, seaward +</text>
+<polyline points="248.8,277.1 310.4,284.0 372.0,104.7 433.6,84.0 495.2,84.0 556.8,84.0 618.4,90.9 680.0,84.0" fill="none" stroke="#2a78d6" stroke-width="2"/>
+<circle cx="248.8" cy="277.1" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>2018-19, radar: -255 m</title></circle>
+<circle cx="310.4" cy="284.0" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>2019-20, radar: -265 m</title></circle>
+<circle cx="372.0" cy="104.7" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>2020-21, radar: -5 m</title></circle>
+<circle cx="433.6" cy="84.0" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>2021-22, radar: +25 m</title></circle>
+<circle cx="495.2" cy="84.0" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>2022-23, radar: +25 m</title></circle>
+<circle cx="556.8" cy="84.0" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>2023-24, radar: +25 m</title></circle>
+<circle cx="618.4" cy="90.9" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>2024-25, radar: +15 m</title></circle>
+<circle cx="680.0" cy="84.0" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>2025-26, radar: +25 m</title></circle>
+<line x1="64" y1="44" x2="86" y2="44" stroke="#2a78d6" stroke-width="2"/>
+<text x="92" y="48" fill="#52514e">radar, tide-averaged per dry season</text>
+<polyline points="248.8,284.0 310.4,118.5 372.0,104.7 433.6,118.5 495.2,90.9 556.8,118.5 618.4,104.7 680.0,118.5" fill="none" stroke="#eb6834" stroke-width="2"/>
+<circle cx="248.8" cy="284.0" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"><title>2018-19, optical: -265 m</title></circle>
+<circle cx="310.4" cy="118.5" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"><title>2019-20, optical: -25 m</title></circle>
+<circle cx="372.0" cy="104.7" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"><title>2020-21, optical: -5 m</title></circle>
+<circle cx="433.6" cy="118.5" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"><title>2021-22, optical: -25 m</title></circle>
+<circle cx="495.2" cy="90.9" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"><title>2022-23, optical: +15 m</title></circle>
+<circle cx="556.8" cy="118.5" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"><title>2023-24, optical: -25 m</title></circle>
+<circle cx="618.4" cy="104.7" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"><title>2024-25, optical: -5 m</title></circle>
+<circle cx="680.0" cy="118.5" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"><title>2025-26, optical: -25 m</title></circle>
+<line x1="369" y1="44" x2="391" y2="44" stroke="#eb6834" stroke-width="2"/>
+<text x="397" y="48" fill="#52514e">optical (Sentinel-2 MNDWI)</text>
+</svg>

@@ -32,6 +32,16 @@ def test_breakdowns():
     assert spn.coast_by_change(YEARS)["too_few"] == {"transects": 4, "km": 0.4}
 
 
+def test_magnitude_and_steps():
+    years = {"positions": {"s": [0, 0, 0, 100, 100, 100], "g": [0, 20, 40, 60, 80, 100]},
+             "transects": {"s": {"change": "advancing", "nsm": 100.0, "opt_shift": 30.0},
+                           "g": {"change": "advancing", "nsm": 100.0, "opt_shift": 110.0},
+                           "u": {"change": "unconfirmed", "nsm": 50.0, "opt_shift": -40.0}}}
+    assert spn.magnitude_agreement(years) == {"n": 2, "median_ratio": 0.7, "optical_under_half_of_radar": 1,
+                                              "optical_under_quarter_of_radar": 0}
+    assert spn.step_changes(years) == {"confirmed": 2, "step_like": 1, "share": 0.5}     # the step, not the steady trend
+
+
 def test_median_of_an_even_count_is_the_middle_mean():
     years = {"transects": {str(i): {"change": "retreating", "lrr": v, "nsm": v} for i, v in enumerate([-46.4, -20.0, -7.0, -2.7])}}
     assert spn.rates(years)["retreating"]["lrr_median"] == -13.5

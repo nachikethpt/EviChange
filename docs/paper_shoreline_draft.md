@@ -198,8 +198,14 @@ Accretion dominates: 34 confirmed advancing transects against 4 retreating, whic
 accretion-dominated change reported for Cam Pha (Duong Thi Loi et al. 2021, [V]) and with artificial coasts
 being Vietnam's fastest-accreting (Lappe et al. 2022, [V]). Each transect stands for 100 m of baseline, so about
 3.4 km of coast advanced and 0.4 km retreated, against 44.6 km stable. The advancing transects moved a median
-90 m over the decade (|NSM|). **[TBD: rates per stretch (Ha Long, Hon Gai, Cam Pha port, Cam Pha town) once the
-stretches are drawn; a map figure (Fig. 1) with the transects coloured by change.]**
+90 m over the decade (|NSM|). Figure 1 maps the calls; the changes cluster in a few short stretches rather than
+spreading along the coast. **[TBD: rates per stretch (Ha Long, Hon Gai, Cam Pha port, Cam Pha town) once the
+stretches are drawn.]**
+
+**Figure 1** (`docs/figures/figure_shoreline_map.svg`, `scripts/shoreline_figures.py`). The 735 transects coloured
+by their ten-year change call. The 81 Phase 14 reference transects and their neighbours are drawn without a call
+until the reference shorelines are in (blind labelling), so the figure's counts are lower than Table 1's; rerun
+the script after the unlock.
 
 Of the 206 *too few* transects, 155 never have a position in any season: the seaward end is not open water
 (narrow channels, island shores, pond walls), or the land / water edge is not clear enough on the transect.
@@ -209,11 +215,33 @@ the 206 mostly mark coast the method cannot read. **[TBD: map them; check the 15
 
 ### 4.2 Case studies
 
-**[TBD: 2–3 transects, none of them a reference transect or a neighbour.]** Candidates: the fastest advancing
-stretch (up to +41 m/yr), with radar and optical position series (Fig. 3) and Google Earth / Planet images
-before and after; one of the 4 retreating transects; one *unconfirmed* transect where radar and optical
-disagree, to show why the confirmation matters. Interpretations (port reclamation, spoil, aquaculture) are
-stated as interpretation of the imagery, not measured.
+Three transects, chosen by rule rather than by eye, none a reference transect or a neighbour: the fastest
+advancing, the fastest retreating, and the unconfirmed trend whose optical shoreline moved most the other way
+(Figure 3).
+
+**t0133, fastest advancing (+41.1 m/yr, 95 % CI ±33.1).** The radar shoreline sits about 260 m landward of the
+baseline in 2018-19 and 2019-20, then about 270 m further seaward from 2020-21 on, and stays there. The optical
+shoreline shows the same jump a season earlier. This is one event, not a trend: the linear rate spreads a single
+step over the decade, and its wide interval says so. NSM (+280 m) and the season of the step describe it better.
+**[TBD: confirm on Google Earth / Planet what was built there around 2019–2021.]**
+
+**t0333, fastest retreating (−46.4 m/yr, ±37.2).** The radar puts the shoreline at +445 m and +385 m in 2016-17
+and 2017-18, near the transect's seaward end, then at about −15 m from 2018-19 on. The optical shoreline moved
+only from −25 m to −85 m. The transect is a tidal flat in the monthly mode. The early radar positions are most
+likely the flat read as land at mid-tide, not a shore that later eroded by 430 m: the call passes the optical
+check because the check tests the direction and a 20 m minimum, not the size (§ 5.4).
+
+**t0503, unconfirmed (radar +28.2 m/yr).** The radar shoreline moves about 215 m seaward over the decade, while
+the optical shoreline moves 100 m *landward*. The rule sets it aside, as intended. **[TBD: what the imagery
+shows there.]**
+
+These cases generalise. Across the 38 confirmed changes, a single season-to-season jump accounts for at least
+half the net movement in **37**: change on this coast comes as steps. The optical shift is a median 1.12 times
+the radar's net movement, and in only 4 of the 38 is it under half, so t0333's mismatch is the exception
+(`scripts/shoreline_paper_numbers.py`).
+
+**Figure 3** (`docs/figures/figure_case_t0133.svg`, `…t0333.svg`, `…t0503.svg`). Radar (tide-averaged) and optical
+positions per dry season; a season without a position is a gap.
 
 ### 4.3 Accuracy against reference shorelines (RQ2)
 
@@ -236,8 +264,11 @@ pairs), which is the case for tide-averaging: single days, even at 3 m, do not g
 Wide flats explain much of the tail. On the transects the monthly mode flags *tidal* (monthly positions spread
 more than 100 m), Planet and radar differ by a median 112.5 m and 54 % of pairs are more than 100 m apart
 (609 pairs); elsewhere the median is 27.5 m and 16 % are over 100 m (4,420 pairs). The remaining tail off the
-flats is not explained yet. **[TBD: candidates are pond walls, moored barges and Planet days with haze the UDM2
-mask misses; look at the largest differences outside the reference transects.]**
+flats is not explained yet (Figure 4). **[TBD: candidates are pond walls, moored barges and Planet days with haze
+the UDM2 mask misses; look at the largest differences outside the reference transects.]**
+
+**Figure 4** (`docs/figures/figure_planet_error.svg`). Share of transect-months whose Planet and radar shorelines
+lie within a given distance, tidal-flat transects apart (reference transects left out).
 
 **Reference tracings, 2016–2026.** **[TBD: bias, RMSE, MAE and within 20 / 30 m, overall and per season, from
 `scripts/shoreline_reference_ge.py --score`; how many tracings were scored in another season than entered;
@@ -277,8 +308,16 @@ noise between seasons, cover threshold); relate the 2018–2023 growth to the ad
 
 The confirmed changes are almost all seaward, at rates up to about 40 m/yr, which on this coast points to
 reclamation, port works and spoil rather than natural accretion. That is an interpretation of the imagery and
-the literature (Nguyen et al. 2022, [V]; Vu et al. 2024, [V]), not something the method measures. Retreat is
-rare (4 transects) and slow except at one stretch. **[TBD after § 4.2.]**
+the literature (Nguyen et al. 2022, [V]; Vu et al. 2024, [V]), not something the method measures. The shape of
+the change supports it: 37 of the 38 confirmed changes are steps, one season's jump making up most of the net
+movement, which is what building out a quay or filling a pond does and not what sediment supply does. Retreat is
+rare (4 transects), and the fastest of it is more likely a tidal-flat artefact than erosion (§ 4.2).
+
+**Steps, not trends.** DSAS-style rates (LRR, Himmelstoss et al. 2021, [PK]) assume steady movement. On a coast
+that changes in steps they are the wrong headline: t0133's +41 m/yr is one 270 m step, and its wide CI is the
+fit saying so. The paper therefore reports NSM with the season of the largest step, and the rate only as the
+test that a change happened (its CI excluding zero). **[TBD: decide with the professor whether to add the step
+season to the outputs (`shoreline.build_years`).]**
 
 ### 5.2 Tide-averaging and its limits
 
@@ -305,6 +344,11 @@ shoreline moved 15 m is unconfirmed even if the radar trend is real. The counts 
 threshold: at 10 m, 36 advancing and 4 retreating are confirmed; at 30 m, 30 and 3 (against 34 and 4 at 20 m).
 The 15 trends the optical line contradicts stay unconfirmed at any threshold.
 
+The rule checks direction, not size. t0333 passes with a radar net movement of 430 m and an optical one of 60 m
+(§ 4.2). Four of the 38 confirmed changes have an optical shift under half the radar's. A size check (for
+example, optical shift at least half of |NSM|) would set those 4 aside; it is not applied here because it was not
+part of the method when the results were produced, and it is reported as a sensitivity instead.
+
 ### 5.5 Limitations
 
 - One area, one period; nothing is claimed beyond it.
@@ -329,11 +373,15 @@ from the 30-site evaluation (`docs/paper_draft.md` § 4.7); otherwise it is one 
 
 ## Figures and tables
 
-1. Study area with the 735 transects coloured by change, 2015–2026 (the app's Shoreline panel, exported).
-2. Yearly shorelines at 2–3 stretches (the slider's lines) over Google Earth / Planet imagery.
-3. Radar and optical position series for the case-study transects.
-4. Accuracy: extracted versus traced position, per season (scatter, 1:1 line).
-5. Table 1 (change counts and rates), Table 2 (Planet comparison), Table 3 (reference accuracy **[TBD]**),
+Figures are static SVG from `scripts/shoreline_figures.py` (`docs/figures/`); rerun it at the paper's commit.
+
+1. **Done:** the 735 transects coloured by change, 2015–2026 (`figure_shoreline_map.svg`).
+2. **[TBD]** Yearly shorelines at 2–3 stretches over Google Earth / Planet imagery (needs the imagery; Planet
+   can't be redistributed, so screenshots under its licence terms or Google Earth with attribution).
+3. **Done:** radar and optical position series for the three case transects (`figure_case_*.svg`).
+4. **Done:** Planet vs radar distance, tidal flats apart (`figure_planet_error.svg`).
+5. **[TBD]** Accuracy against the reference tracings, per season (scatter, 1:1 line), after Phase 14 (b).
+6. Table 1 (change counts and rates), Table 2 (Planet comparison), Table 3 (reference accuracy **[TBD]**),
    Table 4 (monthly vs yearly).
 
 ## References (to be completed from the literature review)
