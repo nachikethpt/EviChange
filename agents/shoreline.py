@@ -651,9 +651,11 @@ def windows_file(before_window: list[str], after_window: list[str], out_dir: Pat
 
 
 def evidence_transects(box: tuple, transects: dict, stats: dict) -> list[dict]:
-    """Evidence transects (schema.TRANSECT_FIELDS) for a box: every transect whose line crosses the box,
-    its location = where its inside part's middle falls in the box's 3 x 3 grid. A transect the
-    window run has no statistics for is left out."""
+    """Evidence transects (schema.TRANSECT_FIELDS) for a box: every transect whose shoreline (its before
+    or after position) lies inside the box, its location = where those positions' middle falls in the
+    box's 3 x 3 grid. A transect is 800 m long (LAND_M + SEA_M), so its line can cross a box whose
+    shoreline is outside it (2026-11-05: 43 of the 65 transects in the 30-site run); such a box has no
+    shoreline to describe, so the transect is left out. So is one the window run has no statistics for."""
     from .site_evidence import where_in_box
     w, s, e, n = box
     out = []
@@ -661,12 +663,11 @@ def evidence_transects(box: tuple, transects: dict, stats: dict) -> list[dict]:
         st = stats.get(f["id"])
         if st is None:
             continue
-        (x0, y0), (x1, y1) = f["geometry"]["coordinates"]
-        inside = [(x0 + (x1 - x0) * k / 50, y0 + (y1 - y0) * k / 50) for k in range(51)]
-        inside = [p for p in inside if w <= p[0] <= e and s <= p[1] <= n]
+        pts = [position_point(f, st[k]) for k in ("pos_before", "pos_after") if st.get(k) is not None]
+        inside = [p for p in pts if w <= p[0] <= e and s <= p[1] <= n]
         if not inside:
             continue
-        mid = inside[len(inside) // 2]
+        mid = (sum(p[0] for p in inside) / len(inside), sum(p[1] for p in inside) / len(inside))
         out.append({"id": f["id"], "location": where_in_box(*mid, box), "change": st["change"],
                     "nsm": st["nsm"], "lrr": st["lrr"], "ci95": st["ci95"]})
     return out

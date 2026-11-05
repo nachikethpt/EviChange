@@ -36,7 +36,25 @@ def site_boxes() -> tuple[dict, list[dict]]:
         ring = site["outline"]["coordinates"][0]
         box = (min(p[0] for p in ring), min(p[1] for p in ring), max(p[0] for p in ring), max(p[1] for p in ring))
         boxes.append({"id": site["site_id"], "stratum": "site", "box": box})
+    frozen = frozen_evidence()
+    for b in boxes:
+        if b["id"] in frozen:
+            b["evidence"] = frozen[b["id"]]
     return fc, boxes
+
+
+def frozen_evidence(log_path: Path = LOG) -> dict[str, dict]:
+    """{site id: the evidence its first logged report was verified against}. Every later report on a site
+    (a rerun, or the gated_ft arm) uses the same evidence as the first run, so a later change to the evidence
+    code (e.g. the in-box transect rule, analysis_plan.md section 10, 2026-11-05) never makes the
+    conditions differ. A site with no logged report gets fresh evidence."""
+    out: dict[str, dict] = {}
+    if log_path.exists():
+        for line in log_path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                r = json.loads(line)
+                out.setdefault(r["box_id"], r["evidence"])
+    return out
 
 
 def main(argv: list[str] | None = None) -> None:

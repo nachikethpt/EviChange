@@ -340,3 +340,45 @@ def test_planet_corroboration():
     assert s.planet_corroboration(months, [0.0, None, 30.0, 34.0], radar_months, adv)["status"] == "pending_coverage"
     assert s.planet_corroboration(months, [0.0, 4.0, 30.0, 34.0], radar_months, {**adv, "tidal": True})["status"] == "tidal_uncertainty"
     assert s.planet_corroboration(months, [0.0, 4.0, 30.0, 34.0], radar_months, {"trend": "stable"})["status"] == "no_radar_trend"
+
+
+# ---------- evidence ----------
+def _transect(tid="t1", lon0=107.30, lat0=21.00, lon1=107.30, lat1=21.0072):
+    # ~800 m south -> north, as LAND_M + SEA_M; position 0 (the baseline) is 300 m from the start
+    return {"type": "FeatureCollection", "features": [
+        {"type": "Feature", "id": tid, "geometry": {"type": "LineString", "coordinates": [[lon0, lat0], [lon1, lat1]]}}]}
+
+
+def _stats(before, after):
+    return {"t1": {"pos_before": before, "pos_after": after, "nsm": 0.0, "lrr": 0.0, "ci95": None, "change": "stable"}}
+
+
+def test_evidence_transects_needs_the_shoreline_inside_the_box():
+    tr = _transect()
+    lat_shore = 21.0 + 0.0072 * 300 / 800                  # the baseline, where pos 0 falls
+    # the box covers the landward 100 m of the line only: the line crosses it, the shoreline doesn't
+    land_box = (107.299, 21.0, 107.301, 21.0009)
+    assert s.evidence_transects(land_box, tr, _stats(0.0, 10.0)) == []
+    # a box around the baseline keeps it
+    shore_box = (107.299, lat_shore - 0.0005, 107.301, lat_shore + 0.0005)
+    ev = s.evidence_transects(shore_box, tr, _stats(0.0, 10.0))
+    assert [e["id"] for e in ev] == ["t1"]
+    # only one of the two positions inside is enough
+    assert s.evidence_transects(shore_box, tr, _stats(0.0, 400.0))
+    # no position at all: no shoreline to describe
+    assert s.evidence_transects(shore_box, tr, _stats(None, None)) == []
+
+
+def test_report_sites_reuses_the_logged_evidence(tmp_path):
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    import report_sites
+    log = tmp_path / "reports_sites.jsonl"
+    log.write_text("\n".join(json.dumps(r) for r in [
+        {"box_id": "s01", "evidence": {"transects": [{"id": "t1"}]}},
+        {"box_id": "s01", "evidence": {"transects": []}},          # a later record never replaces the first
+        {"box_id": "s02", "evidence": {"transects": []}}]) + "\n", encoding="utf-8")
+    ev = report_sites.frozen_evidence(log)
+    assert ev == {"s01": {"transects": [{"id": "t1"}]}, "s02": {"transects": []}}
+    assert report_sites.frozen_evidence(tmp_path / "missing.jsonl") == {}
