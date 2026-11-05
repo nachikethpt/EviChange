@@ -7,9 +7,10 @@ evidence (agents/site_evidence.py: regions cut to the box, locations relative to
 answers with JSON; items that break the claim schema are dropped and counted (parse failures,
 evaluation metric 8), never repaired.
 
-Prompt is a draft (v1): develop it on boxes outside the 30 labelled sites (scripts/report_dev.py) and
-freeze it with the other Phase-4 prompts. The web app's report panel still uses the rule-based
-stand-in in webapp/backend/report.py until the freeze.
+Prompt frozen 2026-10-27 at gated_report_v6 (D19), after development on boxes outside the 30 labelled
+sites (scripts/report_dev.py); scripts/report_sites.py runs it on the sites. Any change to it now is a
+deviation (docs/analysis_plan.md section 10). The web app's report panel uses the rule-based stand-in in
+webapp/backend/report.py.
 """
 from __future__ import annotations
 
