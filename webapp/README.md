@@ -1,7 +1,11 @@
 # EviChange GIS — starter web app
 
 A web GIS (in the style of ArcGIS Online's Map Viewer, with our own design) plus the EviChange AI change report.
-**Everything on the map right now is DEMO data** placed near the Cam Pha mines in Quang Ninh. No AI model is connected yet.
+Without a pipeline run or an import the map shows built-in **demo** regions near the Cam Pha mines; the shoreline,
+monthly and coastal panels read the committed Quang Ninh outputs in `data/quangninh/`. Geo-VLM features need the
+Colab model server (`VLM_URL`); index and monthly image layers need an Earth Engine login (`EVICHANGE_ENGINE=ee`).
+The AI-report panel uses the rule-based stand-ins in `backend/report.py`; the frozen prompts (D19) run on the study
+sites with `scripts/report_sites.py`.
 
 ## How to start it
 
@@ -32,6 +36,10 @@ Run it from the **repo root** (it imports the shared `agents/schema.py` and
 | 🏷 Land cover (D10) | Region cards show the Dynamic World class before → after with class-share bars; list rows show the transition; Find changes understands "trees to built", "from forest", "became water"; ⚙ Symbology → Unique on `class_before` / `class_after` uses Dynamic World's colours. Hidden on regions mostly inside the 30 labelled sites (22 regions) until the Phase 14 labels exist. `python scripts/add_landcover.py` adds the classes to an existing regions file. |
 | 🛰 Geo-VLM check (in 🔎 Find changes) | Sends up to 20 regions, one at a time, to Qwen2.5-VL with before/after chips; shows whether the model sees change and how that compares with the detector; flags "no change" regions on the map. Needs `VLM_URL` + `VLM_TOKEN` from `notebooks/EviChange_vlm_server.ipynb` (Colab GPU). An **Images** menu picks the chips sent (true colour / + SWIR / + colour infrared; default from `VLM_CHIPS`, else true colour + SWIR). Every answer is saved to `data/vlm_checks.jsonl` (survives restarts; `python scripts/vlm_compare.py` compares models and image sets). The 30 labelled sites are skipped. |
 | ✦ AI report | Template / Ungated / Gated / Compare, confidence threshold slider, verdicts (supported / unsupported / uncertain), abstentions |
+| ▶ Run pipeline | Draw, search or use the map view as the AOI, pick the before / after windows, run the analysis on Earth Engine; run list with open / reuse / delete |
+| 〰 Shoreline | Yearly (dry seasons 2015-16 … 2025-26) or monthly (2024-10 … 2026-09) shorelines on a slider with Play; transects coloured by confirmed change; click one for its position series (radar, optical, Planet). Phase 14 reference transects stay hidden |
+| 🗓 Monthly | Month slider over Dynamic World class, Sentinel-1 water, clear share and Planet 3 m layers; water and clear-share charts; one region's months on click; coastal strips and new built patches |
+| /adjudicate | The blinded claim adjudication page (Phase 5, D18): pass 1 truth, pass 2 support, second-adjudicator share |
 
 Map imagery needs internet. Sentinel-2 cloudless mosaics © EOX IT Services (CC BY-NC-SA 4.0 for 2018 and later: fine for research, keep the attribution).
 
