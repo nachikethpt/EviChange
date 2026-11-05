@@ -299,8 +299,21 @@ yearly one to say *whether* the coast moved.
 Between the dry seasons 2024-25 and 2025-26, the built area changed by −21.1 ha in the 0–200 m strip and
 −16.6 ha in the 200–500 m strip, with 20 and 17 new built patches (25.6 ha and 33.2 ha). Over the detector's
 windows, 2018-19 to 2022-23, built area grew from 130.2 to 219.6 ha (0–200 m) and from 339.7 to 477.4 ha
-(200–500 m) (Phase 12). **[TBD: reconcile the year-on-year decrease with the new patches (Dynamic World class
-noise between seasons, cover threshold); relate the 2018–2023 growth to the advancing stretches.]**
+(200–500 m) (Phase 12).
+
+The year-on-year decrease is not a loss of buildings. In the 0–200 m strip, 41.6 ha became built and 62.7 ha
+stopped being built between the two seasons, a turnover of 104 ha against 268 ha built; the 25.6 ha of new
+patches are the contiguous part (≥ 0.5 ha) of the 41.6 ha gained. Turnover of that size in one year is Dynamic
+World switching pixels between *built* and *bare*, the classes it confuses most on this coast (D10): month to
+month, the strip's built area ranges from 22 to 339 ha over the 14 clear months (coefficient of variation 0.50).
+A net change of −21 ha is inside that noise and is not read as change.
+
+The longer window is a different matter. From 2018-19 to 2022-23 built area grew by 69 % (0–200 m) and 41 %
+(200–500 m). Open Buildings Temporal, which detects building footprints rather than land cover and is
+independent of Dynamic World, shows the same order: +29 % and +20 % from 2018 to 2022, and +82 % and +45 % over
+2016–2023 (14.2 → 25.7 ha and 47.4 → 68.7 ha, presence ≥ 0.5). Both records put the faster growth in the strip
+nearest the sea. Dynamic World's areas are about seven times larger because its *built* class also covers paved
+yards, stockpiles and port surfaces. **[TBD: whether the growth sits behind the advancing stretches of § 4.1.]**
 
 ## 5. Discussion
 
