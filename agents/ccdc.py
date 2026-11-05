@@ -103,7 +103,9 @@ def ee_site(ee: Any, box: tuple[float, float, float, float]) -> tuple[list[float
     first = in_win.arraySlice(0, 0, 1).arrayProject([0]).arrayFlatten([["tbreak"]])
     has_model = ccdc.select("tStart").arrayLength(0).gt(0).rename("model")
     stats = ee.Image.cat([first, has_model]).reduceRegion(
-        reducer=ee.Reducer.toList().forEach(["tbreak"]).combine(ee.Reducer.sum().forEach(["model"]), sharedInputs=False),
+        # both unweighted: EE can't combine toList (unweighted) with a weighted sum; a pixel counts whole
+        reducer=ee.Reducer.toList().forEach(["tbreak"]).combine(ee.Reducer.sum().unweighted().forEach(["model"]),
+                                                                sharedInputs=False),
         geometry=geometry, scale=SCALE_M, maxPixels=1e8).getInfo()
     clear = col.map(lambda img: img.set("clear", img.select("nir").mask().reduceRegion(
         ee.Reducer.mean(), geometry, SCALE_M).get("nir")))
