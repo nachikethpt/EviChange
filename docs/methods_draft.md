@@ -71,6 +71,7 @@ differ in what else they get and in how claims are formed.
 | **ungated** (primary comparison) | Qwen2.5-VL-7B-Instruct **[TBD: D15 addendum rule]** | none | free text (3–6 sentences); a separate text-only Qwen pass splits it into claims without judging them (`claim_extract_v1`) |
 | **gated** (system) | same model | box evidence as JSON | JSON claims; each must name its level and type, the region it is about and the evidence fields it rests on, and cause, purpose, legality and the future go to an `abstain` list (`gated_report_v0` **[TBD: frozen version]**) |
 | **ungated_gpt** (secondary, D16) | GPT **[TBD: model name]** | none | as ungated, with the same Qwen extractor |
+| **gated_ft** (secondary, D17; only if fine-tuning reaches the 30 sites) | Qwen2.5-VL-7B with LoRA adapters (Phase 4b) | box evidence as JSON | as gated |
 
 Claims follow one schema (`agents/schema.py`). A claim has a level: L1 presence, L2 extent or location, L3 change type
 or land cover, L4 cause, intent or forecast. It also has a type and optional structured fields. Model output that breaks
