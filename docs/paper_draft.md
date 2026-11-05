@@ -7,7 +7,8 @@
 - **Results:** a skeleton. Every number comes from `scripts/results_tables.py` (Tables 1–7, Figure 1) once the 30 sites
   are adjudicated, so no result is written here before it exists.
 
-**[TBD]** marks decisions still open before the Phase 4 freeze.
+**[TBD]** marks what is still open. The prompts were frozen on 2026-10-27 (D19) and the 30 sites run on
+2026-10-29; § 4.1 needs only the Phase 3 labels, so it is filled now (2026-11-05).
 
 ## Abstract (skeleton)
 
@@ -81,10 +82,22 @@ See `docs/methods_draft.md`.
 ## 4. Results (skeleton: fill from `docs/results/` after adjudication)
 
 ### 4.1 Ground truth and detector
-- Detector precision **[Table 7]**, background change rate **[Table 7]**.
-- The Phase 3 labels already show 8 of 10 background sites labelled as changed. The detector misses lasting change
-  away from its regions, so the background stratum is not a "no change" control (`eval_audit.md`, finding 1).
-- Label agreement: κ **[0.63, CI]** on 10 sites; change types identical on 3 of 10.
+
+These numbers use only the Phase 3 labels, made before any claim existed (`eval.metrics.detector_scores`,
+`label_agreement`; Table 7 reproduces them).
+
+The labeller saw change at 16 of the 20 detected sites (3 no, 1 unsure), a detector precision of **84 %** (95 % Wilson
+CI 62–94 %, n = 19 with the unsure site left out). The background sites were drawn at least 200 m from any
+detection, yet the labeller saw change at **8 of 10** (80 %, CI 49–94 %). The detector misses lasting change away from
+its regions, so the background stratum is not a "no change" control (`eval_audit.md`, finding 1). It tests something
+narrower: whether a condition invents change where the evidence holds none, and whether it reports change the
+evidence does not record (missed change, Table 4).
+
+A second labeller labelled 10 of the sites: `change_occurred` agrees on 9 of 10 (Cohen's κ 0.63, site-bootstrap 95 %
+CI 0.00–1.00; Gwet's AC1 0.88), and the sets of change types are identical on only 3 of 10. With ten sites the κ
+interval spans the whole range, so the agreement is a pilot check. Whether change happened is labelled consistently;
+what kind of change it was is not. Truth is therefore judged claim by claim against the label *and* the chips, and
+change-type recall (Table 4) is read with this disagreement in mind.
 
 ### 4.2 Hallucination before and after the gate (primary result)
 - Table 1 and Figure 1: hallucination and post-gate hallucination per condition.
