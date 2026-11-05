@@ -6,8 +6,11 @@
 // Uses app.js's map, $, esc and alertBox; renderShorelinePanel() is called from renderPanel().
 
 const SHORE_COLORS = { advancing: '#22c55e', retreating: '#ef4444', stable: '#94a3b8', unconfirmed: '#f59e0b', too_few: '#475569' };
+// legend only: Phase 14 reference transects and their neighbours have no statistics until the reference shorelines are in
+const SHORE_LEGEND = { ...SHORE_COLORS, hidden: '#475569' };
 const SHORE_TEXT = { advancing: 'advancing (land gained)', retreating: 'retreating (sea moved in)', stable: 'stable',
-                     unconfirmed: 'radar moved, optical did not confirm', too_few: 'too few positions' };
+                     unconfirmed: 'radar moved, optical did not confirm', too_few: 'too few positions',
+                     hidden: 'hidden until the Phase 14 reference shorelines are in' };
 const shore = { mode: 'years', labels: [], lines: [], transects: null, idx: 0, ref: true, timer: null,
                 tid: null, detail: null, loaded: null,
                 planet: null, planetLines: [], planetOn: true, planetImg: false, imgReq: 0 };
@@ -215,7 +218,7 @@ function shoreChart() {
 function renderShorelinePanel(body) {
   if (shore.loaded !== shore.mode) { body.innerHTML = '<p class="muted">Loading shorelines…</p>'; shoreLoad(shore.mode); return; }
   const counts = {};
-  (shore.transects?.features || []).forEach(f => { const c = f.properties.change ?? 'too_few'; counts[c] = (counts[c] || 0) + 1; });
+  (shore.transects?.features || []).forEach(f => { const c = f.properties.hidden ? 'hidden' : (f.properties.change ?? 'too_few'); counts[c] = (counts[c] || 0) + 1; });
   const n = shore.labels.length;
   body.innerHTML = `
     <div class="section seg"><button data-m="years" class="${shore.mode === 'years' ? 'on' : ''}">Yearly 2015–2026</button>
@@ -227,8 +230,8 @@ function renderShorelinePanel(body) {
       <label style="margin-left:8px"><input type="checkbox" id="shRef" ${shore.ref ? 'checked' : ''}> show the first ${shore.mode === 'years' ? 'season' : 'month'} (dashed)</label></div>`
       : '<p class="muted">No shorelines to show.</p>'}
     <div class="section"><div class="pane-subtitle">Transects, by change ${shore.mode === 'years' ? 'over the ten dry seasons' : 'over the 24 months'}</div>
-      ${Object.keys(SHORE_COLORS).filter(k => counts[k]).map(k =>
-        `<div><span style="display:inline-block;width:18px;height:3px;background:${SHORE_COLORS[k]};vertical-align:middle;margin-right:6px"></span>${esc(SHORE_TEXT[k])}: <b>${counts[k]}</b></div>`).join('')}
+      ${Object.keys(SHORE_LEGEND).filter(k => counts[k]).map(k =>
+        `<div><span style="display:inline-block;width:18px;height:3px;background:${SHORE_LEGEND[k]};vertical-align:middle;margin-right:6px"></span>${esc(SHORE_TEXT[k])}: <b>${counts[k]}</b></div>`).join('')}
       <p class="muted">${shore.mode === 'years' ? 'Each season is one tide-averaged radar shoreline (Sentinel-1, Oct–Mar); a change needs a rate whose 95 % CI excludes 0, confirmed by the optical shoreline.'
         : 'Monthly lines move with the tide (several m); the rate comes from the tide-averaged quarters.'}</p></div>
     ${shore.mode === 'months' && shore.planet && !shore.planet.error ? `<div class="section"><div class="pane-subtitle">Planet 3 m (one clear day a month, Oct 2024 – Sep 2025)</div>

@@ -213,3 +213,9 @@ def test_cli_agreement_and_consensus(tmp_path, capsys):
     adj.main([str(paths["reports.jsonl"]), str(paths["first.jsonl"]), str(paths["claims.jsonl"]), str(paths["runs.jsonl"]), str(paths["cons.jsonl"])])
     rows = [json.loads(l) for l in paths["claims.jsonl"].read_text().splitlines()]
     assert len(rows) == 6 and sum(r["truth"] == "false" for r in rows) == 1
+
+
+def test_gated_ft_reports_reach_the_adjudication():
+    """D17's fine-tuned arm is an evaluation condition: its reports are queued and joined like the others."""
+    ft = {**REPORTS[0], "arm": "gated_ft"}
+    assert any(it["condition"] == "gated_ft" for it in adj.build_items(REPORTS + [ft]).values())

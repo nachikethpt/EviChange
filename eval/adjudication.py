@@ -28,7 +28,7 @@ import re
 import sys
 from pathlib import Path
 
-from agents.schema import LOCATIONS, REPORT_CONDITIONS
+from agents.schema import EVAL_CONDITIONS, LOCATIONS
 
 from .metrics import BOOT_REPS, SEED, SUPPORTS, TRUTHS, agreement_bootstrap, cohen_kappa, gwet_ac1, read_jsonl, wilson
 
@@ -75,7 +75,7 @@ def latest_reports(records: list[dict]) -> list[dict]:
     out: dict[tuple, dict] = {}
     for rec in records:
         out[(rec["box_id"], rec["arm"])] = rec
-    return [r for r in out.values() if r["arm"] in REPORT_CONDITIONS]
+    return [r for r in out.values() if r["arm"] in EVAL_CONDITIONS]
 
 
 def build_items(records: list[dict]) -> dict[str, dict]:
@@ -269,6 +269,9 @@ def main(argv: list[str]) -> None:
     for path, rows in ((argv[2], claims), (argv[3], runs)):
         Path(path).write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
     print(f"{len(claims)} adjudicated claims, {len(runs)} runs")
+    unjudged = len(build_items(reports)) - len(claims)
+    if unjudged:
+        print(f"WARNING: {unjudged} claims are not judged on both axes and are left out; finish them before the results")
 
 
 if __name__ == "__main__":

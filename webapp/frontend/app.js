@@ -1016,7 +1016,7 @@ function renderPanel() {
     body.innerHTML = `
       ${state.liveData
         ? '<div class="demo-banner" style="background:var(--ok-bg);color:var(--ok);border-color:#bbe5c7;">Live data — from the multi-agent pipeline or Person 1\'s real export.</div>'
-        : '<div class="demo-banner">DEMO data — run <code>run_and_publish.py</code> (agent pipeline) or <code>import_geojson.py</code> (an Earth Engine export) to see real data here. The report arms use the rule-based stand-ins in <code>backend/report.py</code> until the Phase 4 prompts are frozen.</div>'}
+        : '<div class="demo-banner">DEMO data — run <code>run_and_publish.py</code> (agent pipeline) or <code>import_geojson.py</code> (an Earth Engine export) to see real data here. The report arms here use the rule-based stand-ins in <code>backend/report.py</code>; the frozen Geo-VLM prompts (D19) run on the study sites with <code>scripts/report_sites.py</code>.</div>'}
       <div class="section"><div class="pane-subtitle">Selected change regions</div>
         <div class="chips">${ids.length ? ids.map(i => `<span class="chip">${esc(i)}</span>`).join('') : '<span class="muted">none</span>'}</div>
         <p class="muted">Click a coloured region on the map (Shift+click to add more) or use ✎ Draw area.</p>

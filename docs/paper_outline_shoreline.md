@@ -81,6 +81,8 @@ against the transect statistics. Either a short section here or the separate pap
 
 ## Next steps
 
+**Full draft:** `docs/paper_shoreline_draft.md` (2026-11-04), from this outline with the current numbers.
+
 1. Trace the 30 reference transects on Google Earth (`shoreline_ge_p2.html` + `.kml`), then
    `scripts/shoreline_reference_ge.py --score`.
 2. Show this outline to the professor; decide Section 6.

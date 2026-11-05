@@ -7,8 +7,9 @@ Both ungated arms use this module unchanged, so they differ only in the model th
 The extractor is always the Geo-VLM (VLMClient, text only) with its own prompt, so extraction
 errors fall on both arms the same way. It copies statements, it never judges them.
 
-Prompts are drafts (v0): develop them on QN regions outside the 30 labelled sites and freeze
-them with the other Phase-4 prompts. The chips are the ones vlm_check renders (yellow box).
+Prompts frozen 2026-10-27 (D19): ungated_report_v1, claim_extract_v5, claim_parse_v2, developed on QN
+boxes outside the 30 labelled sites. Any change to them now is a deviation (docs/analysis_plan.md
+section 10). The chips are the ones vlm_check renders (yellow box).
 """
 from __future__ import annotations
 

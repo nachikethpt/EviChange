@@ -28,7 +28,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Callable, Iterable
 
-from agents.schema import CLAIM_TYPES, REPORT_CONDITIONS
+from agents.schema import CLAIM_TYPES, EVAL_CONDITIONS
 from agents.verifier import claimed_change_types
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -235,8 +235,8 @@ def passed(claim: dict) -> bool:
 
 def check_claim(claim: dict) -> list[str]:
     errs = [f"missing '{f}'" for f in ("site_id", "condition", "truth", "support") if f not in claim]
-    if claim.get("condition") not in REPORT_CONDITIONS:
-        errs.append(f"condition must be one of {REPORT_CONDITIONS}")
+    if claim.get("condition") not in EVAL_CONDITIONS:
+        errs.append(f"condition must be one of {EVAL_CONDITIONS}")
     if "truth" in claim and claim["truth"] not in TRUTHS:
         errs.append(f"truth must be one of {TRUTHS}")
     if "support" in claim and claim["support"] not in SUPPORTS:
@@ -512,7 +512,8 @@ def load_phase3(labeler_file: str = "labels_v1.jsonl") -> tuple[dict[str, dict],
 def report(claims: list[dict], runs: list[dict], labels: dict[str, dict], key: dict[str, dict],
            reps: int = BOOT_REPS, labels2: dict[str, dict] | None = None) -> dict:
     """All per-condition metrics, pooled and per stratum (detected / random), plus the pre-specified
-    comparisons: gated vs ungated (primary) and gated vs ungated_gpt (secondary, D16, Holm-adjusted).
+    comparisons: gated vs ungated (primary), and the secondary family, Holm-adjusted together (analysis plan
+    section 7): S1 gated vs ungated_gpt (D16) and S2 gated_ft vs gated (D17), each only when both arms ran.
 
     Claims tagged about_detector (D18 rule 2) are left out of metrics 1-5 and counted instead, per
     condition and stratum. The sensitivity analyses of the analysis plan (section 7) are reported
@@ -531,7 +532,7 @@ def report(claims: list[dict], runs: list[dict], labels: dict[str, dict], key: d
         runs_by_cond[r["condition"]].append(r)
     origin = lambda s: key.get(s, {}).get("origin")
     out: dict = {"detector": detector_scores(labels, key), "conditions": {}, "comparisons": {}}
-    for cond in REPORT_CONDITIONS:
+    for cond in EVAL_CONDITIONS:
         if cond not in runs_by_cond:
             continue
         sites = [r["site_id"] for r in runs_by_cond[cond]]
@@ -565,8 +566,10 @@ def report(claims: list[dict], runs: list[dict], labels: dict[str, dict], key: d
         out["comparisons"]["primary_pre_gate"] = compare("gated", "ungated", by_cond, only_passed=False)           # metric 1
         out["comparisons"]["primary_detected_only"] = compare("gated", "ungated", by_cond, lambda s: origin(s) == "detected")
         out["comparisons"]["primary_with_about_detector"] = compare("gated", "ungated", by_cond_all)
-    if "gated" in runs_by_cond and "ungated_gpt" in runs_by_cond:
-        secondary = {"secondary_d16": compare("gated", "ungated_gpt", by_cond)}
+    secondary = {name: compare(a, b, by_cond) for name, a, b in
+                 (("secondary_d16", "gated", "ungated_gpt"), ("secondary_d17", "gated_ft", "gated"))
+                 if a in runs_by_cond and b in runs_by_cond}
+    if secondary:
         adjusted = holm_adjust({k: (v["rate_wilcoxon"] or (None, None))[1] for k, v in secondary.items()})
         for k, v in secondary.items():
             v["rate_wilcoxon_p_holm"] = adjusted[k]

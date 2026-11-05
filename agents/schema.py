@@ -28,6 +28,7 @@ CONF_MIN = 0.2    # detections with mean_conf below this only support "uncertain
 
 CONDITIONS = ("template", "ungated", "gated")
 REPORT_CONDITIONS = (*CONDITIONS, "ungated_gpt")   # D16: GPT is a report-only comparison arm, not a pipeline run
+EVAL_CONDITIONS = (*REPORT_CONDITIONS, "gated_ft")  # D17: the fine-tuned gated arm exists only in the evaluation
 LEVELS = ("L1", "L2", "L3", "L4")
 CLAIM_TYPES = ("presence", "extent", "location", "change_type", "land_cover", "shoreline", "coastal_built", "cause", "other")
 VERDICTS = ("supported", "unsupported", "uncertain")

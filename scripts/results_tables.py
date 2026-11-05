@@ -25,10 +25,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from agents.schema import REPORT_CONDITIONS          # noqa: E402
+from agents.schema import EVAL_CONDITIONS            # noqa: E402
 from eval import metrics                             # noqa: E402
 
-NAMES = {"template": "Template", "ungated": "Ungated (Qwen)", "gated": "Gated (Qwen)", "ungated_gpt": "Ungated (GPT)"}
+NAMES = {"template": "Template", "ungated": "Ungated (Qwen)", "gated": "Gated (Qwen)", "ungated_gpt": "Ungated (GPT)",
+         "gated_ft": "Gated (fine-tuned)"}
 
 
 def pct(ci) -> str:
@@ -63,7 +64,7 @@ def md_table(head: list[str], rows: list[list[str]]) -> str:
 
 
 def conditions(rep: dict) -> list[str]:
-    return [c for c in REPORT_CONDITIONS if c in rep["conditions"]]
+    return [c for c in EVAL_CONDITIONS if c in rep["conditions"]]
 
 
 def table_main(rep: dict) -> tuple[list[str], list[list[str]]]:
@@ -115,7 +116,7 @@ def tables(rep: dict) -> str:
             rows.append([NAMES[c], t, str(r["n"]), pct(r["hallucination"]), pct(r["post_gate_hallucination"])])
     parts += ["## Table 5. By claim type", "", md_table(["Condition", "Type", "Claims", "Hallucination", "Post-gate"], rows), ""]
 
-    labels6 = {"primary": "primary", "secondary_d16": "secondary (D16, Holm)",
+    labels6 = {"primary": "primary", "secondary_d16": "secondary S1 (D16, Holm)", "secondary_d17": "secondary S2 (D17, Holm)",
                "primary_pre_gate": "before the gate (metric 1)", "primary_detected_only": "sensitivity: detected stratum only",
                "primary_with_about_detector": "sensitivity: about-detector claims included"}
     rows = []
@@ -123,8 +124,8 @@ def tables(rep: dict) -> str:
         holm = cmp.get("rate_wilcoxon_p_holm")
         rows.append([f"{NAMES[cmp['a']]} − {NAMES[cmp['b']]}", labels6.get(name, name), pct(cmp["pooled_rate_diff"]),
                      f"{cmp['a_fewer_on']} / {cmp['b_fewer_on']} / {cmp['sites'] - cmp['a_fewer_on'] - cmp['b_fewer_on']}",
-                     p((cmp["rate_wilcoxon"] or (None, None))[1]), p((cmp["rate_wilcoxon_pratt"] or (None, None))[1]),
-                     p(cmp["rate_sign"][2]) if holm is None else f"{p(cmp['rate_sign'][2])}; Holm {p(holm)}",
+                     p((cmp["rate_wilcoxon"] or (None, None))[1]) + ("" if holm is None else f"; Holm {p(holm)}"),
+                     p((cmp["rate_wilcoxon_pratt"] or (None, None))[1]), p(cmp["rate_sign"][2]),
                      f"{cmp['sites_with_rates']} ({cmp['sites_without_rates']} without a rate)", str(cmp["bootstrap_skipped"])])
     parts += ["## Table 6. Pre-specified comparisons (post-gate hallucination unless stated)", "",
               md_table(["Comparison", "", "Pooled rate difference [95 % CI]", "Sites a better / b better / tied (counts)",
