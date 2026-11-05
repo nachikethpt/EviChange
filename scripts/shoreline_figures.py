@@ -191,6 +191,46 @@ def case_figure(tid: str, years: dict, width: int = 720) -> str:
     return _svg(width, top + plot_h + 30, body, f"Transect {tid}: {st['change']}{rate}")
 
 
+def reference_figure(matched: list[tuple[str, float, float]], width: int = 760) -> str:
+    """Fig. 5: yearly (tide-averaged radar) position against the traced reference, one small panel per season,
+    with the 1:1 line and a ±20 m band. matched = shoreline_reference_ge.pairs()."""
+    seasons = sorted({s for s, _, _ in matched})
+    vals = [v for _, t, m in matched for v in (t, m)] or [0.0]
+    lo, hi = min(vals), max(vals)
+    pad_v = 0.05 * (hi - lo or 1)
+    lo, hi = lo - pad_v, hi + pad_v
+    gap, top, size = 18, 64, (width - 32 - 18 * (max(len(seasons), 1) - 1)) / max(len(seasons), 1)
+    body = []
+    for k, season in enumerate(seasons):
+        x0 = 16 + k * (size + gap)
+        sx = lambda v: x0 + size * (v - lo) / (hi - lo)
+        sy = lambda v: top + size * (hi - v) / (hi - lo)
+        pts = [(t, m) for s, t, m in matched if s == season]
+        errs = [m - t for t, m in pts]
+        rmse = math.sqrt(sum(e * e for e in errs) / len(errs))
+        bias = sum(errs) / len(errs)
+        body.append(f'<rect x="{x0}" y="{top}" width="{size:.1f}" height="{size:.1f}" fill="none" stroke="{GRID}"/>')
+        step = 10 ** math.floor(math.log10(hi - lo)) if hi > lo else 10
+        step /= 2 if (hi - lo) / step < 4 else 1          # at least about four ticks per panel
+        t = math.ceil(lo / step) * step
+        while t <= hi:                                   # ticks on both axes, labelled on x only (the axes match)
+            body.append(f'<line x1="{sx(t):.1f}" x2="{sx(t):.1f}" y1="{top + size:.1f}" y2="{top + size + 4:.1f}" stroke="{MUTED}"/>')
+            body.append(f'<line x1="{x0 - 4}" x2="{x0}" y1="{sy(t):.1f}" y2="{sy(t):.1f}" stroke="{MUTED}"/>')
+            body.append(f'<text x="{sx(t):.1f}" y="{top + size + 14:.1f}" text-anchor="middle" font-size="10" fill="{MUTED}">{t:.0f}</text>')
+            t += step
+        band = f"{sx(lo):.1f},{sy(lo + 20):.1f} {sx(hi - 20):.1f},{sy(hi):.1f} {sx(hi):.1f},{sy(hi):.1f} {sx(hi):.1f},{sy(hi - 20):.1f} {sx(lo + 20):.1f},{sy(lo):.1f} {sx(lo):.1f},{sy(lo):.1f}"
+        body.append(f'<polygon points="{band}" fill="{GRID}" opacity="0.6"><title>within ±20 m</title></polygon>')
+        body.append(f'<line x1="{sx(lo):.1f}" y1="{sy(lo):.1f}" x2="{sx(hi):.1f}" y2="{sy(hi):.1f}" stroke="{MUTED}" stroke-width="1"/>')
+        for t, m in pts:
+            body.append(f'<circle cx="{sx(t):.1f}" cy="{sy(m):.1f}" r="4" fill="{ADVANCING}" stroke="{SURFACE}" stroke-width="2">'
+                        f'<title>{season}: traced {t:+.0f} m, extracted {m:+.0f} m</title></circle>')
+        body.append(f'<text x="{x0}" y="{top - 8}" font-weight="600" fill="{INK}">{season}</text>')
+        body.append(f'<text x="{x0}" y="{top + size + 30:.1f}" fill="{MUTED}">n {len(pts)} · bias {bias:+.0f} m · RMSE {rmse:.0f} m</text>')
+    body.append(f'<text x="16" y="{top + size + 50:.1f}" fill="{MUTED}">x: traced on Google Earth; y: tide-averaged radar; m from '
+                f'the baseline, seaward +; grey band: within ±20 m of 1:1</text>')
+    return _svg(width, int(top + size + 62), body, "Extracted against traced reference shorelines, per dry season")
+
+
 def planet_groups(hidden: set[str]) -> dict[str, list[float]]:
     planet, monthly, transects = _load("planet.json"), _load("positions.json"), _load("transects.geojson")
     tidal = {f["id"]: bool(f["properties"].get("tidal")) for f in transects["features"]}
@@ -216,6 +256,14 @@ def write_all(out: Path, cases: list[str]) -> list[Path]:
     files = {"figure_shoreline_map.svg": map_figure(transects, years, hidden, _load("baseline.geojson")),
              "figure_planet_error.svg": planet_error_figure(planet_groups(hidden)),
              **{f"figure_case_{c}.svg": case_figure(c, years) for c in cases}}
+    # Fig. 5 plots extracted positions AT the reference transects, so it exists only once they are unlocked:
+    # made earlier, it would show a labeller still tracing what they must not see (D13 blindness).
+    if shoreline.REFERENCE_TRANSECTS_UNLOCKED:
+        from agents import labels14
+        import shoreline_reference_ge as ge
+        recs = [r for f in sorted(labels14.LABELS_DIR.glob("shoreline_ge_*.jsonl")) for r in labels14.load_labels(f, "shoreline")]
+        if recs:
+            files["figure_reference_accuracy.svg"] = reference_figure(ge.pairs(recs, years)[0])
     for name, svg in files.items():
         (out / name).write_text(svg, encoding="utf-8")
     return [out / n for n in files]

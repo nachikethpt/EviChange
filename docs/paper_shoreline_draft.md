@@ -407,7 +407,10 @@ Figures are static SVG from `scripts/shoreline_figures.py` (`docs/figures/`); re
    can't be redistributed, so screenshots under its licence terms or Google Earth with attribution).
 3. **Done:** radar and optical position series for the three case transects (`figure_case_*.svg`).
 4. **Done:** Planet vs radar distance, tidal flats apart (`figure_planet_error.svg`).
-5. **[TBD]** Accuracy against the reference tracings, per season (scatter, 1:1 line), after Phase 14 (b).
+5. **Code ready, data pending:** accuracy against the reference tracings, one panel per season with the 1:1 line
+   and a ±20 m band (`figure_reference_accuracy.svg`). The script makes it only once
+   `shoreline.REFERENCE_TRANSECTS_UNLOCKED` is set, after every labeller has traced (blindness), and uses the same
+   pairs as `scripts/shoreline_reference_ge.py --score`.
 6. Table 1 (change counts and rates), Table 2 (Planet comparison), Table 3 (reference accuracy **[TBD]**),
    Table 4 (monthly vs yearly).
 

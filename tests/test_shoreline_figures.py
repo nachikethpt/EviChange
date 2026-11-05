@@ -39,6 +39,19 @@ def test_hidden_case_is_refused(monkeypatch, tmp_path):
         sf.write_all(tmp_path, ["t0133"])
 
 
+def test_reference_figure_panels_and_stats():
+    matched = [("2016-17", 0.0, 10.0), ("2016-17", 50.0, 40.0), ("2022-23", -20.0, -20.0)]
+    svg = ET.fromstring(sf.reference_figure(matched))
+    texts = [t.text for t in svg.iter(f"{NS}text")]
+    assert "2016-17" in texts and "2022-23" in texts
+    assert "n 2 · bias +0 m · RMSE 10 m" in texts and "n 1 · bias +0 m · RMSE 0 m" in texts
+
+
+def test_reference_figure_waits_for_the_unlock(monkeypatch, tmp_path):
+    monkeypatch.setattr(sf.shoreline, "REFERENCE_TRANSECTS_UNLOCKED", False)
+    assert not any(p.name == "figure_reference_accuracy.svg" for p in sf.write_all(tmp_path, []))
+
+
 def test_committed_outputs_render(tmp_path):
     for path in sf.write_all(tmp_path, []):
         ET.fromstring(path.read_text(encoding="utf-8"))
