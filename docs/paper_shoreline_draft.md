@@ -29,8 +29,12 @@ before 2020. We map ten dry seasons of shoreline (2015-16 to 2025-26) on 735 sho
 and call a transect advancing or retreating only when (i) the linear-regression rate's 95 % confidence
 interval excludes zero and (ii) the season's Sentinel-2 optical shoreline moved the same way by at least
 20 m. Of 529 transects with enough seasons, 34 advance (median +12.0 m/yr, up to +41 m/yr), 4 retreat and 446
-are stable; 45 radar trends are not confirmed by the optical shoreline. A 24-month monthly series on the
-same transects finds only 5 confirmed changes, mostly tide. Against PlanetScope 3 m shorelines (23 months,
+are stable; 45 radar trends are not confirmed by the optical shoreline. The change comes in steps: in 37 of the
+38 confirmed changes one season's jump makes up at least half the net movement, so net movement and the season
+of the step describe this coast better than a linear rate. Built-up area (Dynamic World) grew almost four times
+faster per hectare within 300 m of the advancing shoreline than elsewhere on the coast between 2018 and 2023,
+and no faster near stable shoreline, consistent with reclamation for development. A 24-month monthly series on
+the same transects finds only 5 confirmed changes, mostly tide. Against PlanetScope 3 m shorelines (23 months,
 2024–26) the tide-averaged yearly line lies a median 22.5 m away (48 % within 20 m). Against shorelines
 traced blind on high-resolution imagery at 30 random transects for 4 seasons, the yearly shorelines have a
 bias of **[TBD]** m and RMSE of **[TBD]** m. **[TBD: one-sentence takeaway once the accuracy is known.]**
