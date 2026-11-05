@@ -1,8 +1,8 @@
 # Methods (draft)
 
 **Status:** draft written 2026-10-25 from `docs/PLAN.md`, `docs/decisions.md` (D1–D18), `docs/eval_audit.md` and
-the code. Items marked **[TBD]** depend on decisions still open before the Phase 4 freeze. Citations refer to
-`docs/related_work.md` and must be verified there before submission.
+the code; updated 2026-11-05 after the Phase 4 freeze (D19, 2026-10-27) and the 30-site run (2026-10-29). Items
+marked **[TBD]** are still open. Citations refer to `docs/related_work.md` and must be verified there before submission.
 
 ## 1. Study area and imagery
 
@@ -68,8 +68,8 @@ differ in what else they get and in how claims are formed.
 | Condition | Writer | Input besides the chips | How claims are formed |
 |---|---|---|---|
 | **template** (reference) | rules | box evidence | one claim per evidence fact: presence, total extent, region location and area, one change type per index delta beyond T_IDX |
-| **ungated** (primary comparison) | Qwen2.5-VL-7B-Instruct **[TBD: D15 addendum rule]** | none | free text (3–6 sentences); a separate text-only Qwen pass splits it into claims without judging them (`claim_extract_v1`) |
-| **gated** (system) | same model | box evidence as JSON | JSON claims; each must name its level and type, the region it is about and the evidence fields it rests on, and cause, purpose, legality and the future go to an `abstain` list (`gated_report_v0` **[TBD: frozen version]**) |
+| **ungated** (primary comparison) | Qwen2.5-VL-7B-Instruct, kept by the D15 rules (decided before any report output) | none | free text (3–6 sentences, `ungated_report_v1`); a separate text-only Qwen pass splits it into claims without judging them (`claim_extract_v5`, parser `claim_parse_v2`) |
+| **gated** (system) | same model | box evidence as JSON | 1–4 JSON claims, most informative first; each must name its level and type, the region it is about and the evidence fields it rests on, and cause, purpose, legality and the future go to an `abstain` list (`gated_report_v6`) |
 | **ungated_gpt** (secondary, D16) | GPT **[TBD: model name]** | none | as ungated, with the same Qwen extractor |
 | **gated_ft** (secondary, D17; only if fine-tuning reaches the 30 sites) | Qwen2.5-VL-7B with LoRA adapters (Phase 4b) | box evidence as JSON | as gated |
 
@@ -111,8 +111,13 @@ A second labeller labelled 10 sites. Results:
 | Measure | Value |
 |---|---|
 | `change_occurred` agreement | 9 / 10 sites |
-| Cohen's κ | 0.63 (bootstrap 95 % CI about [0, 1]) |
+| Cohen's κ | 0.63 (site-bootstrap 95 % CI 0.00 to 1.00) |
+| Gwet's AC1 (κ is unstable when one answer dominates) | 0.88 |
+| Raw agreement (Wilson 95 % CI) | 90 % (60 to 98 %) |
 | Change-type sets identical | 3 / 10 sites |
+
+Ten double-labelled sites cannot pin κ down: the interval spans the whole range, so the agreement is a pilot
+check, not a reliability estimate (`eval.metrics.label_agreement`).
 
 **[TBD: second labeller on all 30 sites, and a consensus label.]**
 
@@ -188,8 +193,10 @@ and the exact tests match SciPy.
 - Prompts were developed only on development boxes outside the 30 sites: 60 detected regions and 20 background
   controls (`scripts/report_dev.py`).
 - The model and image set were chosen there by rules written before any report output (D15).
-- Prompts, adjudication rules and thresholds are frozen by commit **[TBD: commit]** before the 30 sites are run.
-- The app blocks any model call on a labelled site until then.
+- Prompts, adjudication rules, the analysis plan and thresholds were frozen by commit `7324d79` (2026-10-27, D19);
+  the 30 sites were run two days later with those versions (`scripts/report_sites.py`, `data/reports_sites.jsonl`).
+- Until the freeze the code refused any model call on a labelled site (`vlm_check.LABELLED_SITES_UNLOCKED`); the lock
+  was lifted for the 30-site run. Every change after the freeze is logged in `docs/analysis_plan.md` § 10.
 
 **Limitations to state.**
 - The ground truth is self-labelled; the main labeller also built the system.
@@ -199,5 +206,6 @@ and the exact tests match SciPy.
 - The 0.10 threshold is not taken from the literature.
 - NDBI confuses bare soil with built-up land, and Dynamic World is weakest on its bare, shrub, grass and
   flooded-vegetation classes (Venter et al. 2022).
-- Monthly shorelines carry tide noise (Hon Gai tidal range **[TBD: cite]**). Only the 24-month trends are reported.
+- Single-date shorelines carry tide noise (Hon Gai tidal range **[TBD: cite]**). Rates come only from tide-averaged
+  composites: quarters in the 24-month series, dry seasons in the ten-year series (`docs/paper_shoreline_draft.md`).
 - The general-AOI app is a tool capability, not validated outside Quang Ninh.

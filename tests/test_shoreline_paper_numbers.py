@@ -32,6 +32,42 @@ def test_breakdowns():
     assert spn.coast_by_change(YEARS)["too_few"] == {"transects": 4, "km": 0.4}
 
 
+def test_magnitude_and_steps():
+    years = {"positions": {"s": [0, 0, 0, 100, 100, 100], "g": [0, 20, 40, 60, 80, 100]},
+             "transects": {"s": {"change": "advancing", "nsm": 100.0, "opt_shift": 30.0},
+                           "g": {"change": "advancing", "nsm": 100.0, "opt_shift": 110.0},
+                           "u": {"change": "unconfirmed", "nsm": 50.0, "opt_shift": -40.0}}}
+    assert spn.magnitude_agreement(years) == {"n": 2, "median_ratio": 0.7, "optical_under_half_of_radar": 1,
+                                              "optical_under_quarter_of_radar": 0}
+    assert spn.step_changes(years) == {"confirmed": 2, "step_like": 1, "share": 0.5}     # the step, not the steady trend
+
+
+def test_planet_tail_counts_chronic_transects():
+    planet = {"months": ["m1", "m2", "m3", "m4"], "positions": {"a": [200, 210, 190, 5], "b": [0, 150, 0, 0], "f": [400] * 4,
+                                                                   "h": [500] * 4}}
+    monthly = {"months": ["m1", "m2", "m3", "m4"], "positions": {k: [0, 0, 0, 0] for k in "abfh"}}
+    transects = {"features": [{"id": k, "properties": {"tidal": k == "f"}} for k in "abfh"]}
+    t = spn.planet_tail(planet, monthly, transects, hidden={"h"})
+    assert t == {"transects": 2, "pairs": 8, "far_pairs": 4, "far_landward": 0, "chronic_transects": 1, "far_pairs_on_chronic": 3}
+
+
+def test_built_near_change_splits_cells_by_distance():
+    # one advancing transect along lon 107.3; baseline point 300 m from its landward end
+    feats = [{"id": "a", "geometry": {"coordinates": [[107.3, 21.0], [107.3, 21.0 + 800 / 111_320]]}},
+             {"id": "h", "geometry": {"coordinates": [[107.31, 21.0], [107.31, 21.0 + 800 / 111_320]]}}]
+    years = {"transects": {"a": {"change": "advancing"}, "h": {"change": "advancing"}}}
+    cells = {"grid": {"lon0": 107.2995, "lat0": 21.0022, "step": 0.001},
+             "columns": ["strip", "cx", "cy", "land_ha", "observed_ha", "built_ha_before", "built_ha_after"],
+             "cells": [[1, 0, 0, 1.0, 1.0, 0.1, 0.6],          # ~0 m from the baseline point: near
+                       [1, 0, 20, 1.0, 1.0, 0.1, 0.2],         # ~2 km north: far
+                       [1, 10, 0, 1.0, 1.0, 0.0, 0.9]],        # next to the hidden transect only: far
+             "windows": [["2018-11-01"], ["2022-11-01"]]}
+    r = spn.built_near_change(years, {"features": feats}, cells, hidden={"h"}, radius_m=300)
+    assert r["advancing"]["transects"] == 1
+    assert r["advancing"]["near"]["growth_per_100ha_land"] == 50.0
+    assert r["advancing"]["far"]["growth_per_100ha_land"] == 50.0 and r["advancing"]["far"]["land_ha"] == 2.0
+
+
 def test_median_of_an_even_count_is_the_middle_mean():
     years = {"transects": {str(i): {"change": "retreating", "lrr": v, "nsm": v} for i, v in enumerate([-46.4, -20.0, -7.0, -2.7])}}
     assert spn.rates(years)["retreating"]["lrr_median"] == -13.5

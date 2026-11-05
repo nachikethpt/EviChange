@@ -138,11 +138,12 @@ def image_season(season: str, month: str) -> str:
     return f"{y - 1}-{y % 100:02d}" if m <= 6 else f"{y}-{(y + 1) % 100:02d}"
 
 
-def score(records: list[dict], years: dict) -> dict:
-    """Yearly shoreline position minus the traced one (m, seaward +) where both exist, each tracing scored
-    against the season of its image (image_season)."""
+def pairs(records: list[dict], years: dict) -> tuple[list[tuple[str, float, float]], int, int]:
+    """([(season, traced pos_m, yearly pos_m)], traced but no yearly position, scored in another season than
+    entered): each tracing against the season of its image (image_season). score() and the paper's accuracy
+    figure (scripts/shoreline_figures.py) both use these pairs."""
     labels = [s[0] for s in years["seasons"]]
-    errs, by_season, missing, moved = [], {}, 0, 0
+    out, missing, moved = [], 0, 0
     for r in records:
         if r["status"] != "edge":
             continue
@@ -154,7 +155,17 @@ def score(records: list[dict], years: dict) -> dict:
         if model is None:
             missing += 1
             continue
-        e = model - r["pos_m"]
+        out.append((season, r["pos_m"], model))
+    return out, missing, moved
+
+
+def score(records: list[dict], years: dict) -> dict:
+    """Yearly shoreline position minus the traced one (m, seaward +) where both exist, each tracing scored
+    against the season of its image (image_season)."""
+    matched, missing, moved = pairs(records, years)
+    errs, by_season = [], {}
+    for season, traced, model in matched:
+        e = model - traced
         errs.append(e)
         by_season.setdefault(season, []).append(e)
     stats = lambda v: {"n": len(v), "bias_m": round(sum(v) / len(v), 1), "rmse_m": round(math.sqrt(sum(x * x for x in v) / len(v)), 1),
