@@ -264,8 +264,12 @@ pairs), which is the case for tide-averaging: single days, even at 3 m, do not g
 Wide flats explain much of the tail. On the transects the monthly mode flags *tidal* (monthly positions spread
 more than 100 m), Planet and radar differ by a median 112.5 m and 54 % of pairs are more than 100 m apart
 (609 pairs); elsewhere the median is 27.5 m and 16 % are over 100 m (4,420 pairs). The remaining tail off the
-flats is not explained yet (Figure 4). **[TBD: candidates are pond walls, moored barges and Planet days with haze
-the UDM2 mask misses; look at the largest differences outside the reference transects.]**
+flats is concentrated in place, not in time (Figure 4). Of the 4,420 pairs off the flats, 708 differ by more than
+100 m; 31 of the 377 transects have a *median* difference above 100 m and hold 296 of them (42 %), while the
+months contribute evenly apart from one cloudy day (April 2026, 12 of 13 pairs). The large differences fall
+either way (387 with Planet landward, 321 seaward), so this is not an offset between the sensors but a few places
+where the two read a different edge. **[TBD: what those 31 transects cross (pond walls, piers, channels) on the
+imagery; they are a candidate exclusion list for the accuracy figures.]**
 
 **Figure 4** (`docs/figures/figure_planet_error.svg`). Share of transect-months whose Planet and radar shorelines
 lie within a given distance, tidal-flat transects apart (reference transects left out).

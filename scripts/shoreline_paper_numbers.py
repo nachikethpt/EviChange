@@ -147,15 +147,38 @@ def planet_by_tidal(planet: dict, monthly: dict, transects: dict, hidden: set[st
     return {k: _err_stats(v) for k, v in groups.items()}
 
 
+def planet_tail(planet: dict, monthly: dict, transects: dict, hidden: set[str], far_m: float = 100, min_pairs: int = 4) -> dict:
+    """Off the tidal flats, where the large (> far_m) Planet-vs-radar differences come from: transects whose
+    median difference is itself > far_m ("chronic", with >= min_pairs pairs), and how many of the large pairs
+    they hold. Hidden reference transects are left out."""
+    tidal = {f["id"]: bool(f["properties"].get("tidal")) for f in transects["features"]}
+    months = monthly["months"]
+    per: dict[str, list[float]] = {}
+    for tid, series in planet["positions"].items():
+        if tid in hidden or tidal.get(tid) or tid not in monthly["positions"]:
+            continue
+        for m, p in zip(planet["months"], series):
+            r = monthly["positions"][tid][months.index(m)] if m in months else None
+            if p is not None and r is not None:
+                per.setdefault(tid, []).append(p - r)
+    far = [d for v in per.values() for d in v if abs(d) > far_m]
+    chronic = [t for t, v in per.items() if len(v) >= min_pairs and statistics.median(abs(d) for d in v) > far_m]
+    return {"transects": len(per), "pairs": sum(map(len, per.values())), "far_pairs": len(far),
+            "far_landward": sum(d < 0 for d in far), "chronic_transects": len(chronic),
+            "far_pairs_on_chronic": sum(abs(d) > far_m for t in chronic for d in per[t])}
+
+
 def compute() -> dict:
     load = lambda name: json.loads((shoreline.SHORELINE_DIR / name).read_text(encoding="utf-8"))
     years, planet, monthly, transects = load("years.json"), load("planet.json"), load("positions.json"), load("transects.geojson")
+    hidden = shoreline.hidden_transects(transects)
     return {"seasons": [s[0] for s in years["seasons"]], "transects": len(years["transects"]),
             "coast_by_change": coast_by_change(years), "rates": rates(years),
             "too_few": too_few_breakdown(years), "unconfirmed": unconfirmed_breakdown(years),
             "optical_threshold": threshold_sensitivity(years),
             "magnitude_agreement": magnitude_agreement(years), "step_changes": step_changes(years),
-            "planet_vs_monthly_by_tidal": planet_by_tidal(planet, monthly, transects, shoreline.hidden_transects(transects))}
+            "planet_vs_monthly_by_tidal": planet_by_tidal(planet, monthly, transects, hidden),
+            "planet_tail_off_flats": planet_tail(planet, monthly, transects, hidden)}
 
 
 def markdown(n: dict) -> str:
@@ -175,6 +198,9 @@ def markdown(n: dict) -> str:
     lines += ["", "| Planet − monthly radar | n | Bias, m | Median abs, m | RMSE, m | Within 20 m | Over 100 m |", "|---|---:|---:|---:|---:|---:|---:|"]
     lines += [f"| {k} | {v['n']} | {v.get('bias_m')} | {v.get('median_abs_m')} | {v.get('rmse_m')} | {v.get('within_20m')} | {v.get('share_over_100m')} |"
               for k, v in n["planet_vs_monthly_by_tidal"].items()]
+    t = n["planet_tail_off_flats"]
+    lines += ["", f"Off the flats: {t['far_pairs']} of {t['pairs']} pairs > 100 m ({t['far_landward']} with Planet landward); "
+                  f"{t['chronic_transects']} of {t['transects']} transects have a median > 100 m and hold {t['far_pairs_on_chronic']} of them"]
     return "\n".join(lines)
 
 

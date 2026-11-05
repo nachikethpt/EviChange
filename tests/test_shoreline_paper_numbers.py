@@ -42,6 +42,15 @@ def test_magnitude_and_steps():
     assert spn.step_changes(years) == {"confirmed": 2, "step_like": 1, "share": 0.5}     # the step, not the steady trend
 
 
+def test_planet_tail_counts_chronic_transects():
+    planet = {"months": ["m1", "m2", "m3", "m4"], "positions": {"a": [200, 210, 190, 5], "b": [0, 150, 0, 0], "f": [400] * 4,
+                                                                   "h": [500] * 4}}
+    monthly = {"months": ["m1", "m2", "m3", "m4"], "positions": {k: [0, 0, 0, 0] for k in "abfh"}}
+    transects = {"features": [{"id": k, "properties": {"tidal": k == "f"}} for k in "abfh"]}
+    t = spn.planet_tail(planet, monthly, transects, hidden={"h"})
+    assert t == {"transects": 2, "pairs": 8, "far_pairs": 4, "far_landward": 0, "chronic_transects": 1, "far_pairs_on_chronic": 3}
+
+
 def test_median_of_an_even_count_is_the_middle_mean():
     years = {"transects": {str(i): {"change": "retreating", "lrr": v, "nsm": v} for i, v in enumerate([-46.4, -20.0, -7.0, -2.7])}}
     assert spn.rates(years)["retreating"]["lrr_median"] == -13.5
