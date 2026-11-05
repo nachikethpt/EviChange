@@ -317,7 +317,15 @@ The longer window is a different matter. From 2018-19 to 2022-23 built area grew
 independent of Dynamic World, shows the same order: +29 % and +20 % from 2018 to 2022, and +82 % and +45 % over
 2016–2023 (14.2 → 25.7 ha and 47.4 → 68.7 ha, presence ≥ 0.5). Both records put the faster growth in the strip
 nearest the sea. Dynamic World's areas are about seven times larger because its *built* class also covers paved
-yards, stockpiles and port surfaces. **[TBD: whether the growth sits behind the advancing stretches of § 4.1.]**
+yards, stockpiles and port surfaces.
+
+The growth sits behind the advancing shoreline. Within 300 m of the baseline point of the 31 advancing transects
+(reference transects left out), built area rose from 51 to 117 ha between 2018-19 and 2022-23: **23.8 ha per
+100 ha of strip land**, against 6.3 ha in all other strip cells. Near stable transects the rate is 7.0, against
+9.2 elsewhere, so the concentration belongs to the advancing stretches, not to the coast in general (within
+500 m: 21.4 against 4.1). Part of it is building on the reclaimed land itself, which counts as strip land
+because the strips are drawn from the October 2024 shoreline (`scripts/shoreline_paper_numbers.py`,
+`built_near_change`).
 
 ## 5. Discussion
 
@@ -327,7 +335,9 @@ The confirmed changes are almost all seaward, at rates up to about 40 m/yr, whic
 reclamation, port works and spoil rather than natural accretion. That is an interpretation of the imagery and
 the literature (Nguyen et al. 2022, [V]; Vu et al. 2024, [V]), not something the method measures. The shape of
 the change supports it: 37 of the 38 confirmed changes are steps, one season's jump making up most of the net
-movement, which is what building out a quay or filling a pond does and not what sediment supply does. Retreat is
+movement, which is what building out a quay or filling a pond does and not what sediment supply does. A second,
+independent line points the same way: built area grew almost four times faster per hectare behind the advancing
+shoreline than elsewhere on the coast, and not at all faster behind the stable one (§ 4.6). Retreat is
 rare (4 transects), and the fastest of it is more likely a tidal-flat artefact than erosion (§ 4.2).
 
 **Steps, not trends.** DSAS-style rates (LRR, Himmelstoss et al. 2021, [PK]) assume steady movement. On a coast

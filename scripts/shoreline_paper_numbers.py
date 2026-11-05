@@ -168,6 +168,38 @@ def planet_tail(planet: dict, monthly: dict, transects: dict, hidden: set[str], 
             "far_pairs_on_chronic": sum(abs(d) > far_m for t in chronic for d in per[t])}
 
 
+def built_near_change(years: dict, transects: dict, cells: dict, hidden: set[str], radius_m: float = 300) -> dict:
+    """Built-up growth between the detector's windows (Dynamic World, coastal-strip cells of
+    windows_*.json) within radius_m of the baseline point of transects with a given change call, and in all
+    other cells: is new building concentrated behind the advancing shoreline? "stable" is the control.
+    Hidden reference transects are left out."""
+    g, cols = cells["grid"], {c: i for i, c in enumerate(cells["columns"])}
+    base_t = shoreline.LAND_M / (shoreline.LAND_M + shoreline.SEA_M)   # baseline point along the transect
+    out = {}
+    for kind in ("advancing", "stable"):
+        pts = []
+        for f in transects["features"]:
+            if f["id"] in hidden or years["transects"].get(f["id"], {}).get("change") != kind:
+                continue
+            (a, b), (c, d) = f["geometry"]["coordinates"]
+            pts.append((a + (c - a) * base_t, b + (d - b) * base_t))
+        sums = {"near": [0.0, 0.0, 0.0], "far": [0.0, 0.0, 0.0]}
+        for cell in cells["cells"]:
+            lon = g["lon0"] + (cell[cols["cx"]] + 0.5) * g["step"]
+            lat = g["lat0"] + (cell[cols["cy"]] + 0.5) * g["step"]
+            kx = math.cos(math.radians(lat)) * shoreline.M_PER_DEG
+            close = any(math.hypot((lon - px) * kx, (lat - py) * shoreline.M_PER_DEG) <= radius_m for px, py in pts)
+            s = sums["near" if close else "far"]
+            s[0] += cell[cols["built_ha_before"]]
+            s[1] += cell[cols["built_ha_after"]]
+            s[2] += cell[cols["land_ha"]]
+        out[kind] = {"transects": len(pts), **{k: {"built_before_ha": round(b0, 1), "built_after_ha": round(b1, 1),
+                                                     "land_ha": round(land, 1),
+                                                     "growth_per_100ha_land": round(100 * (b1 - b0) / land, 1) if land else None}
+                                                 for k, (b0, b1, land) in sums.items()}}
+    return {"radius_m": radius_m, "windows": cells.get("windows"), **out}
+
+
 def compute() -> dict:
     load = lambda name: json.loads((shoreline.SHORELINE_DIR / name).read_text(encoding="utf-8"))
     years, planet, monthly, transects = load("years.json"), load("planet.json"), load("positions.json"), load("transects.geojson")
@@ -178,7 +210,9 @@ def compute() -> dict:
             "optical_threshold": threshold_sensitivity(years),
             "magnitude_agreement": magnitude_agreement(years), "step_changes": step_changes(years),
             "planet_vs_monthly_by_tidal": planet_by_tidal(planet, monthly, transects, hidden),
-            "planet_tail_off_flats": planet_tail(planet, monthly, transects, hidden)}
+            "planet_tail_off_flats": planet_tail(planet, monthly, transects, hidden),
+            "built_near_change": built_near_change(years, transects, json.loads(
+                (ROOT / "data" / "quangninh" / "coastal" / "windows_2018-11_2022-11.json").read_text(encoding="utf-8")), hidden)}
 
 
 def markdown(n: dict) -> str:
@@ -201,6 +235,12 @@ def markdown(n: dict) -> str:
     t = n["planet_tail_off_flats"]
     lines += ["", f"Off the flats: {t['far_pairs']} of {t['pairs']} pairs > 100 m ({t['far_landward']} with Planet landward); "
                   f"{t['chronic_transects']} of {t['transects']} transects have a median > 100 m and hold {t['far_pairs_on_chronic']} of them"]
+    b = n["built_near_change"]
+    lines += ["", f"Built-up growth {b['windows'][0][0][:7]} to {b['windows'][1][0][:7]} within {b['radius_m']:.0f} m of the transects' baseline point, "
+                  "ha per 100 ha of strip land:"]
+    lines += [f"- near {k} ({b[k]['transects']} transects): {b[k]['near']['growth_per_100ha_land']} "
+              f"({b[k]['near']['built_before_ha']} -> {b[k]['near']['built_after_ha']} ha); elsewhere {b[k]['far']['growth_per_100ha_land']}"
+              for k in ("advancing", "stable")]
     return "\n".join(lines)
 
 
