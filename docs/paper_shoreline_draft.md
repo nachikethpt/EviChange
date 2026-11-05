@@ -4,7 +4,7 @@
 results that already exist are written out. **[TBD]** marks what waits on the Phase 14 (b) reference
 shorelines, which stay blind until all labellers have finished (D13), or on a decision with the professor.
 
-**Sources of numbers.** Every number comes from a committed output: the yearly run (`data/quangninh/shoreline/years.json`,
+**Sources of numbers.** Every number comes from a committed output (aggregates: `scripts/shoreline_paper_numbers.py`): the yearly run (`data/quangninh/shoreline/years.json`,
 D11 "Yearly shorelines"), the monthly run (`summary.json`, D11), the Planet comparison (`planet.json`, D12
 "Year-2 rerun", 2026-11-02) and the coastal strips (`data/quangninh/coastal/`, D11, Phase 12). Rerunning a
 script changes them; quote them from the file at the paper's commit.
@@ -28,7 +28,7 @@ before 2020. We map ten dry seasons of shoreline (2015-16 to 2025-26) on 735 sho
 90 km of coast, from **tide-averaged Sentinel-1 radar shorelines** (water in at least half of a season's looks),
 and call a transect advancing or retreating only when (i) the linear-regression rate's 95 % confidence
 interval excludes zero and (ii) the season's Sentinel-2 optical shoreline moved the same way by at least
-20 m. Of 529 transects with enough seasons, 34 advance (median +12 m/yr, up to +41 m/yr), 4 retreat and 446
+20 m. Of 529 transects with enough seasons, 34 advance (median +12.0 m/yr, up to +41 m/yr), 4 retreat and 446
 are stable; 45 radar trends are not confirmed by the optical shoreline. A 24-month monthly series on the
 same transects finds only 5 confirmed changes, mostly tide. Against PlanetScope 3 m shorelines (23 months,
 2024–26) the tide-averaged yearly line lies a median 22.5 m away (48 % within 20 m). Against shorelines
@@ -184,24 +184,28 @@ for reclamation, not a building count.
 
 Of the 735 transects, 529 have a position in at least 5 of the 11 seasons (Table 1).
 
-**Table 1.** Change call on the 735 transects, yearly mode (`years.json`).
+**Table 1.** Change call on the 735 transects, yearly mode (`years.json`; `scripts/shoreline_paper_numbers.py`).
 
 | Change | Transects | LRR, median (range), m/yr |
 |---|---:|---|
-| Advancing (confirmed) | 34 | +12.1 (+0.8 to +41.1) |
-| Retreating (confirmed) | 4 | −4.7 (−46.4 to −2.7) |
+| Advancing (confirmed) | 34 | +12.0 (+0.8 to +41.1) |
+| Retreating (confirmed) | 4 | −13.5 (−46.4 to −2.7) |
 | Stable | 446 | |
 | Unconfirmed (radar trend, optical disagrees) | 45 | |
 | Too few seasons | 206 | |
 
 Accretion dominates: 34 confirmed advancing transects against 4 retreating, which agrees with the
 accretion-dominated change reported for Cam Pha (Duong Thi Loi et al. 2021, [V]) and with artificial coasts
-being Vietnam's fastest-accreting (Lappe et al. 2022, [V]). **[TBD: length of coast per class (transects ×
-100 m) and rates per stretch: Ha Long, Hon Gai, Cam Pha port, Cam Pha town; a map figure (Fig. 1) with the
-transects coloured by change.]**
+being Vietnam's fastest-accreting (Lappe et al. 2022, [V]). Each transect stands for 100 m of baseline, so about
+3.4 km of coast advanced and 0.4 km retreated, against 44.6 km stable. The advancing transects moved a median
+90 m over the decade (|NSM|). **[TBD: rates per stretch (Ha Long, Hon Gai, Cam Pha port, Cam Pha town) once the
+stretches are drawn; a map figure (Fig. 1) with the transects coloured by change.]**
 
-The 206 *too few* transects are mostly where the coast moved beyond a transect's reach or where the seaward
-end is not open water (§ 5.3). **[TBD: break the 206 down by reason from `years.json` status counts.]**
+Of the 206 *too few* transects, 155 never have a position in any season: the seaward end is not open water
+(narrow channels, island shores, pond walls), or the land / water edge is not clear enough on the transect.
+Only 3 have positions from some season on and 4 up to some season, the pattern of a shore that moved into or
+out of reach (§ 5.3); the other 44 have scattered gaps. Shores moving beyond reach are therefore rare here, and
+the 206 mostly mark coast the method cannot read. **[TBD: map them; check the 155 against the coast type.]**
 
 ### 4.2 Case studies
 
@@ -229,8 +233,11 @@ pairs), which is the case for tide-averaging: single days, even at 3 m, do not g
 | Planet day vs monthly radar, dry months | 3,134 | −19.4 | 32.5 | 70.9 | 123.0 | 40 % | 49 % |
 | Planet day vs monthly radar, monsoon months | 1,895 | +3.4 | 32.5 | 74.9 | 133.5 | 38 % | 50 % |
 
-**[TBD: why the tail. Expected sources: wide flats (78 transects are *tidal* in the monthly mode), aquaculture
-pond walls, moored barges. Break the error down by the tidal flag and by stretch.]**
+Wide flats explain much of the tail. On the transects the monthly mode flags *tidal* (monthly positions spread
+more than 100 m), Planet and radar differ by a median 112.5 m and 54 % of pairs are more than 100 m apart
+(609 pairs); elsewhere the median is 27.5 m and 16 % are over 100 m (4,420 pairs). The remaining tail off the
+flats is not explained yet. **[TBD: candidates are pond walls, moored barges and Planet days with haze the UDM2
+mask misses; look at the largest differences outside the reference transects.]**
 
 **Reference tracings, 2016–2026.** **[TBD: bias, RMSE, MAE and within 20 / 30 m, overall and per season, from
 `scripts/shoreline_reference_ge.py --score`; how many tracings were scored in another season than entered;
@@ -241,8 +248,8 @@ agreement of the two labellers.]** Compare the RMSE with CoastSat's roughly 10 m
 
 Of the 83 significant radar trends in the yearly mode, 38 are confirmed by the optical shoreline (34 advancing,
 4 retreating) and 45 are not, so without the confirmation more than half the reported changes would rest on
-radar alone. **[TBD: why the 45 fail: optical moved less than 20 m, optical moved the other way, or no clear
-optical look in the first or last season; split by tidal flag.]** In the monthly mode, Planet corroborated 3 of
+radar alone. In 29 of the 45 the optical shoreline moved the radar trend's way but by less than 20 m; in 15 it
+moved the other way; one has no optical shoreline in the first or last season. In the monthly mode, Planet corroborated 3 of
 the 26 significant radar trends it could test (all advancing, 20 to 123 m), did not corroborate 9 (8 advancing
 with Planet shifts of −15 to +3 m, and one retreating while Planet moved 145 m seaward), withheld 3 on tidal
 flats, and leaves 11 pending, with a cloud or no position in an end quarter (D12).
@@ -287,15 +294,16 @@ tide model available for Ha Long Bay at useful accuracy?]**
 
 The transects are laid on the 2024–26 coast. Where the coast moved more than 300 m landward or 500 m
 seaward of it over the decade, or where reclaimed land closed off the sea at the seaward end, a transect has
-no position for those seasons and drops to *too few*. Large reclamations are therefore under-counted,
-not over-counted.
+no position for those seasons and drops to *too few*. That bias can only under-count large reclamations,
+never invent them, and it is small here: 7 transects show the pattern (§ 4.1).
 
 ### 5.4 The optical confirmation rule
 
 Requiring Sentinel-2 to agree costs sensitivity (45 radar trends set aside) and buys protection against radar
 artefacts on this coast (barges, rough water). The 20 m threshold is two pixels; a transect whose optical
-shoreline moved 15 m is unconfirmed even if the radar trend is real. **[TBD: sensitivity of the counts to 10 /
-30 m.]**
+shoreline moved 15 m is unconfirmed even if the radar trend is real. The counts are not sensitive to the
+threshold: at 10 m, 36 advancing and 4 retreating are confirmed; at 30 m, 30 and 3 (against 34 and 4 at 20 m).
+The 15 trends the optical line contradicts stay unconfirmed at any threshold.
 
 ### 5.5 Limitations
 
