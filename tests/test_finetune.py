@@ -205,3 +205,16 @@ def test_blanks_on_a_saved_page_return_to_the_pool(tmp_path, monkeypatch):
     (fd.LABEL_DIR / "ft_label_1.json").write_text(json.dumps({"b0": {"verdict": "change", "types": []}}))   # b1 left blank
     fd.main(["--sheet"])
     assert (tmp_path / "ft_label_3.html").read_text() == "b1"         # the blank comes back; b2 still with P3
+
+
+def test_change_weight_repeats_only_change_boxes():
+    import json as _json
+    same = {"id": "a", "target": _json.dumps({"before": "water", "after": "water"})}
+    change = {"id": "b", "target": _json.dumps({"before": "bare", "after": "built"})}
+    junk = {"id": "c", "target": "not json"}
+    assert ft.is_change(change) and not ft.is_change(same) and not ft.is_change(junk)
+    out = ft.weighted([same, change, junk], "cover", 3)
+    assert [e["id"] for e in out] == ["a", "b", "b", "b", "c"]
+    assert ft.weighted([same, change], "cover", 1) == [same, change]
+    assert ft.weighted([same, change], "check", 3) == [same, change]      # other tasks are never reweighted
+    assert ft.DEFAULTS["change_weight"] == 1                               # the default run is as labelled

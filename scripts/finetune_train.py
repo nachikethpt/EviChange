@@ -25,13 +25,33 @@ sys.path.insert(0, str(ROOT))
 
 BASE_MODEL = "Qwen/Qwen2.5-VL-7B-Instruct"
 LORA_SUFFIXES = ("q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj")
-DEFAULTS = {"epochs": 3, "lr": 1e-4, "accum": 8, "rank": 16, "alpha": 32, "dropout": 0.05, "seed": 17}
+DEFAULTS = {"epochs": 3, "lr": 1e-4, "accum": 8, "rank": 16, "alpha": 32, "dropout": 0.05, "seed": 17,
+            "change_weight": 1}
+# change_weight (cover task): each training box whose main cover differs between the dates is shown this many
+# times per epoch. 1 = as labelled. The first 4b run (2026-11-07, weight 1: 64 of 327 boxes change) learned to
+# repeat the before cover and never predicted a change; the second run uses 3.
 
 
 # ---------- data (plain Python, tested locally) ----------
 def load_examples(data: Path, task: str, split: str) -> list[dict]:
     path = Path(data) / f"{task}_{split}.jsonl"
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def is_change(ex: dict) -> bool:
+    """A cover example whose target main cover differs between the two dates."""
+    try:
+        target = json.loads(ex["target"])
+    except (TypeError, ValueError, KeyError):
+        return False
+    return isinstance(target, dict) and target.get("before") is not None and target.get("before") != target.get("after")
+
+
+def weighted(examples: list[dict], task: str, change_weight: int = 1) -> list[dict]:
+    """One epoch's examples: change boxes repeated change_weight times (cover task only; others unchanged)."""
+    if task != "cover" or change_weight <= 1:
+        return list(examples)
+    return [ex for ex in examples for _ in range(change_weight if is_change(ex) else 1)]
 
 
 def lora_targets(module_names: list[str]) -> list[str]:
@@ -133,7 +153,9 @@ def train(args) -> None:
     import torch
     random.seed(args.seed)
     torch.manual_seed(args.seed)
-    examples = load_examples(args.data, args.task, "train")
+    examples = weighted(load_examples(args.data, args.task, "train"), args.task, args.change_weight)
+    print(f"{len(examples)} training examples per epoch ({sum(map(is_change, examples))} with a change, "
+          f"change_weight {args.change_weight})", flush=True)
     model, processor = _load(args.base, train=True, args=args)
     model.gradient_checkpointing_enable()
     model.enable_input_require_grads()
