@@ -94,6 +94,42 @@ def test_two_land_pixels_in_the_sea_dont_stop_the_walk():
     assert s.shoreline_position(v, OFF)["pos"] == -5.0
 
 
+def _with_land(shore, lo, hi):
+    v = profile(shore)
+    for i, o in enumerate(OFF):
+        if lo <= o < hi:
+            v[i] = 0
+    return v
+
+
+def test_offshore_islet_is_crossed_to_the_mainland():
+    """Phase 14 (b): the walk stopped on islets / barges 200-450 m out (errors 300-650 m)."""
+    v = _with_land(0, 200, 350)                     # 150 m islet, sea between it and the coast
+    r = s.shoreline_position(v, OFF)
+    assert r["status"] == "ok" and r["pos"] == -5.0 and r["crossed"] == 1
+    assert s.shoreline_position(v, OFF, offshore_m=None)["pos"] == 345.0     # the old rule stopped at the islet
+
+
+def test_two_offshore_strips_are_both_crossed():
+    v = _with_land(0, 120, 160)
+    for i, o in enumerate(OFF):
+        if 300 <= o < 340:
+            v[i] = 0
+    r = s.shoreline_position(v, OFF)
+    assert r["pos"] == -5.0 and r["crossed"] == 2
+
+
+@pytest.mark.parametrize("lo, hi, expect", [(150, 450, 445.0),   # 300 m wide: the coast itself, not crossed
+                                            (40, 90, 85.0)])      # starts within OFFSHORE_M: not crossed
+def test_strips_that_are_not_crossed(lo, hi, expect):
+    assert s.shoreline_position(_with_land(0, lo, hi), OFF)["pos"] == expect
+
+
+def test_land_strip_without_sea_behind_is_the_coast():
+    v = profile(330)                                # reclaimed land out to 330 m, solid behind it
+    assert s.shoreline_position(v, OFF)["crossed"] == 0
+
+
 @pytest.mark.parametrize("values, status", [([1] * len(OFF), "all_water"), ([0] * len(OFF), "all_land"),
                                             ([None] * len(OFF), "no_data")])
 def test_no_position_cases(values, status):
@@ -382,3 +418,22 @@ def test_report_sites_reuses_the_logged_evidence(tmp_path):
     ev = report_sites.frozen_evidence(log)
     assert ev == {"s01": {"transects": [{"id": "t1"}]}, "s02": {"transects": []}}
     assert report_sites.frozen_evidence(tmp_path / "missing.jsonl") == {}
+
+
+def test_existing_transects_come_back_with_the_same_geometry(tmp_path):
+    import json as _json
+    f = s.LocalFrame(107.3, 21.0)
+    origin, normal = (1000.0, -500.0), (0.6, -0.8)
+    a = f.to_lonlat(origin[0] - normal[0] * s.LAND_M, origin[1] - normal[1] * s.LAND_M)
+    b = f.to_lonlat(origin[0] + normal[0] * s.SEA_M, origin[1] + normal[1] * s.SEA_M)
+    fc = lambda feats: {"type": "FeatureCollection", "features": feats}
+    (tmp_path / "transects.geojson").write_text(_json.dumps(fc([{"type": "Feature", "geometry": {
+        "type": "LineString", "coordinates": [list(a), list(b)]}, "properties": {"id": "t0007", "line": 2, "chainage_m": 300.0}}])))
+    (tmp_path / "baseline.geojson").write_text(_json.dumps(fc([{"type": "Feature", "properties": {}, "geometry": {
+        "type": "LineString", "coordinates": [list(f.to_lonlat(0, 0)), list(f.to_lonlat(100, 0))]}}])))
+    trs, lines = s.existing_transects(tmp_path, f)
+    (ox, oy), (nx, ny) = trs[0]["origin_m"], trs[0]["normal"]
+    assert trs[0]["id"] == "t0007" and trs[0]["line"] == 2 and trs[0]["index"] == 0
+    assert abs(ox - 1000) < 0.01 and abs(oy + 500) < 0.01 and abs(nx - 0.6) < 1e-6 and abs(ny + 0.8) < 1e-6
+    assert abs(lines[0][1][0] - 100) < 0.01
+
