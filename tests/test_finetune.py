@@ -218,3 +218,21 @@ def test_change_weight_repeats_only_change_boxes():
     assert ft.weighted([same, change], "cover", 1) == [same, change]
     assert ft.weighted([same, change], "check", 3) == [same, change]      # other tasks are never reweighted
     assert ft.DEFAULTS["change_weight"] == 1                               # the default run is as labelled
+
+
+def test_compare_models_get_their_own_prediction_files():
+    assert ft.model_tag(ft.BASE_MODEL) == "base"                      # run 1's file name is kept
+    tags = [ft.model_tag(m["base"]) for m in ft.COMPARE_MODELS]
+    assert len(set(tags)) == len(tags) and "base" not in tags
+    assert ft.model_tag("Qwen/Qwen2.5-VL-32B-Instruct") == "qwen2_5-vl-32b-instruct"
+    assert ft.processor_kwargs("Qwen/Qwen3-VL-8B-Instruct") and ft.processor_kwargs("OpenGVLab/InternVL3-8B-hf") == {}
+
+
+def test_baselines_map_dynamic_world_and_read_features():
+    import baselines_cover as bc
+    assert bc.dw_main({"1": 30, "0": 10, "5": 25}) == "dense_vegetation"   # trees 30 vs water 10, scrub 25
+    assert bc.dw_main({"2": 20, "5": 15, "1": 30}) == "sparse_vegetation"  # grass + scrub 35 beat trees 30
+    assert bc.dw_main({}) == bc.cover_check.CANT_TELL
+    props = {"b_" + f: 0.1 for f in bc.FEATURES}
+    assert len(bc.feature_vector(props, "b_")) == 16 and bc.feature_vector(props, "a_") is None
+    assert set(c for c in bc.DW_TO_COVER.values() if c) == set(bc.cover_check.COVERS)

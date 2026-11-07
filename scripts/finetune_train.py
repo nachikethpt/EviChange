@@ -5,6 +5,8 @@ adapters on the language model's attention and MLP layers are trained (the visio
     python scripts/finetune_train.py train --task check --data /content/ft --out /content/drive/MyDrive/evichange_ft
     python scripts/finetune_train.py eval  --task check --data /content/ft --adapter /content/drive/MyDrive/evichange_ft/check
     python scripts/finetune_train.py eval  --task check --data /content/ft --base-only     # the untrained baseline
+    python scripts/finetune_train.py eval  --task cover --data /content/ft --base-only --base Qwen/Qwen3-VL-8B-Instruct
+                                                                    # another model, zero-shot (COMPARE_MODELS)
 
 Data: data/finetune/{task}_{train,holdout}.jsonl and chips.zip from scripts/finetune_build.py, unzipped into --data.
 Training masks the prompt: the loss is only on the answer tokens. Greedy decoding at eval, as the server.
@@ -30,6 +32,26 @@ DEFAULTS = {"epochs": 3, "lr": 1e-4, "accum": 8, "rank": 16, "alpha": 32, "dropo
 # change_weight (cover task): each training box whose main cover differs between the dates is shown this many
 # times per epoch. 1 = as labelled. The first 4b run (2026-11-07, weight 1: 64 of 327 boxes change) learned to
 # repeat the before cover and never predicted a change; the second run uses 3.
+
+# Zero-shot comparison on the cover hold-out (2026-11-07): open models that load with AutoModelForImageTextToText,
+# none gated on Hugging Face. 4-bit = loaded with bitsandbytes (a 40 GB A100 can't hold 32B in bf16).
+COMPARE_MODELS = [
+    {"base": "Qwen/Qwen3-VL-8B-Instruct", "four_bit": False},
+    {"base": "OpenGVLab/InternVL3-8B-hf", "four_bit": False},
+    {"base": "Qwen/Qwen2.5-VL-32B-Instruct", "four_bit": True},
+]
+
+
+def model_tag(base: str) -> str:
+    """File-name tag for a model's predictions: 'base' for the system model (the name used since 4b run 1)."""
+    if base == BASE_MODEL:
+        return "base"
+    return base.split("/")[-1].lower().replace(".", "_")
+
+
+def processor_kwargs(base: str) -> dict:
+    """Qwen's image-size limits, as the server; other processors don't take them."""
+    return {"min_pixels": 256 * 28 * 28, "max_pixels": 1024 * 28 * 28} if "qwen" in base.lower() else {}
 
 
 # ---------- data (plain Python, tested locally) ----------
@@ -109,8 +131,13 @@ def score(task: str, examples: list[dict], predictions: dict[str, str]) -> dict:
 def _load(base: str, adapter: str | None = None, train: bool = False, args=None):
     import torch
     from transformers import AutoModelForImageTextToText, AutoProcessor
-    model = AutoModelForImageTextToText.from_pretrained(base, torch_dtype=torch.bfloat16, device_map="auto")
-    processor = AutoProcessor.from_pretrained(base, min_pixels=256 * 28 * 28, max_pixels=1024 * 28 * 28)  # as the server
+    extra = {}
+    if getattr(args, "four_bit", False):
+        from transformers import BitsAndBytesConfig
+        extra["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4",
+                                                          bnb_4bit_compute_dtype=torch.bfloat16)
+    model = AutoModelForImageTextToText.from_pretrained(base, torch_dtype=torch.bfloat16, device_map="auto", **extra)
+    processor = AutoProcessor.from_pretrained(base, **processor_kwargs(base))
     if adapter:
         from peft import PeftModel
         model = PeftModel.from_pretrained(model, adapter, is_trainable=train)
@@ -189,7 +216,7 @@ def train(args) -> None:
 def evaluate(args) -> None:
     import torch
     examples = load_examples(args.data, args.task, "holdout")
-    model, processor = _load(args.base, adapter=None if args.base_only else args.adapter)
+    model, processor = _load(args.base, adapter=None if args.base_only else args.adapter, args=args)
     model.eval()
     preds = {}
     for i, ex in enumerate(examples, 1):
@@ -201,7 +228,7 @@ def evaluate(args) -> None:
         preds[ex["id"]] = processor.batch_decode(out[:, enc["input_ids"].shape[1]:], skip_special_tokens=True)[0].strip()
         if i % 20 == 0:
             print(f"{i}/{len(examples)}", flush=True)
-    name = "base" if args.base_only else "ft"
+    name = model_tag(args.base) if args.base_only else "ft"
     dest = (Path(args.data) if args.base_only else Path(args.adapter)) / f"predictions_{args.task}_{name}.jsonl"
     dest.write_text("".join(json.dumps({"id": k, "text": v}) + "\n" for k, v in preds.items()), encoding="utf-8")
     print(json.dumps(score(args.task, examples, preds), indent=1))
@@ -217,6 +244,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--out", default="/content/drive/MyDrive/evichange_ft")
     ap.add_argument("--adapter")
     ap.add_argument("--base-only", action="store_true")
+    ap.add_argument("--four_bit", action="store_true", help="load the model in 4-bit (bitsandbytes), e.g. a 32B model")
     for k, v in DEFAULTS.items():
         ap.add_argument(f"--{k}", type=type(v), default=v)
     args = ap.parse_args(argv)
