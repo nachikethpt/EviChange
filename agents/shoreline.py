@@ -19,6 +19,12 @@ Method, as in standard shoreline-change analysis (baseline + transects + rates):
    land / water split jumped between the coast and settling ponds ~300 m inland, month to month, which
    made false trends). No position when the seaward end isn't water, the water reaches the landward
    end, or fewer than MIN_AGREEMENT of the samples around the position agree.
+   Offshore strips (2026-11-07): a land run that starts more than OFFSHORE_M seaward of the baseline,
+   is at most MAX_STRIP_M wide and has at least WATER_RUN water samples in a row landward of it is
+   crossed, and the walk goes on to the mainland coast. The baseline is the mainland / sea boundary,
+   so land that far out with sea behind it is an islet, or barges and piers the radar reads as land.
+   Phase 14 (b) found the walk stopping on such strips 200-450 m out at 7 of 27 reference transects
+   (errors 300-650 m); Sentinel-2 shows vegetated islets at 4 of them and open water (barges) at 3.
 6. Rates come from QUARTERLY shorelines: water in at least half of all the radar looks in each 3-month
    window (~6-12 looks), which averages the tide out to about the mid-tide line. Per transect:
    positions in metres from the baseline, seaward positive; net movement (mean of the last 2
@@ -68,6 +74,9 @@ LAND_M, SEA_M, STEP_M = 300, 500, 10
 MIN_AGREEMENT = 0.8
 LAND_RUN = 3                   # land samples in a row that end the sea (30 m at STEP_M)
 LANDWARD_CHECK_M = 100         # agreement looks this far landward of the shoreline
+OFFSHORE_M = 100               # a land strip starting further seaward than this, with sea behind it, is crossed
+MAX_STRIP_M = 250              # ... if it is at most this wide (wider land is the coast itself)
+WATER_RUN = 3                  # water samples in a row landward of a strip that show sea behind it
 MIN_MONTHS = 6                 # (monthly series) points needed for a rate
 MIN_QUARTERS = 5               # quarters with a position needed for the reported rate
 TIDAL_IQR_M = 100              # monthly positions spreading more than this: tidal flat
@@ -215,14 +224,18 @@ def profile_offsets(land: float = LAND_M, sea: float = SEA_M, step: float = STEP
 
 # ---------- positions and rates ----------
 def shoreline_position(values: list[int | None], offsets: list[float], min_agreement: float = MIN_AGREEMENT,
-                       land_run: int = LAND_RUN, check_m: float = LANDWARD_CHECK_M) -> dict:
+                       land_run: int = LAND_RUN, check_m: float = LANDWARD_CHECK_M,
+                       offshore_m: float | None = OFFSHORE_M, max_strip_m: float = MAX_STRIP_M,
+                       water_run: int = WATER_RUN) -> dict:
     """Edge of the sea-connected water on one profile. values: 1 water, 0 land, None no data,
     landward first. Starting at the seaward end (which must be water), walk landward through the
     water until `land_run` land samples in a row: the shoreline is midway between the last water
     sample and that run. Inland ponds behind the coast are never reached, and a single land pixel in
-    the sea (speckle, a boat) doesn't stop the walk.
-    {'pos': metres from the baseline or None, 'agreement': water share seaward of pos + land share in
-     the check_m landward of it, 'status'}"""
+    the sea (speckle, a boat) doesn't stop the walk. An offshore strip (starts beyond offshore_m, at
+    most max_strip_m wide, water_run water samples landward of it) is crossed; offshore_m=None turns
+    that off (the rule before 2026-11-07).
+    {'pos': metres from the baseline or None, 'agreement': water share seaward of pos (crossed strips
+     left out) + land share in the check_m landward of it, 'status', 'crossed': strips crossed}"""
     pts = [(o, v) for o, v in zip(offsets, values) if v in (0, 1)]
     if len(pts) < 5:
         return {"pos": None, "agreement": None, "status": "no_data"}
@@ -231,26 +244,39 @@ def shoreline_position(values: list[int | None], offsets: list[float], min_agree
         land = sum(1 - v for _, v in pts) / len(pts)
         return {"pos": None, "agreement": round(land, 3),                  # shore beyond the transect, or a pier
                 "status": "all_land" if land >= min_agreement else "unclear"}
-    i, run, last_water = len(pts) - 1, 0, None
+    i, run, last_water, crossed = len(pts) - 1, 0, None, []
     while i >= 0:
         if pts[i][1] == 1:
             run, last_water = 0, i
         else:
             run += 1
             if run >= land_run:
+                first_land = i + land_run - 1
+                j = i
+                while j >= 0 and pts[j][1] == 0:                           # landward end of this land strip
+                    j -= 1
+                k = j
+                while k >= 0 and pts[k][1] == 1 and j - k < water_run:     # sea behind it?
+                    k -= 1
+                if (offshore_m is not None and pts[first_land][0] > offshore_m and j >= 0 and j - k >= water_run
+                        and pts[first_land][0] - pts[j + 1][0] <= max_strip_m):
+                    crossed.append((pts[j + 1][0], pts[first_land][0]))
+                    i, run = j, 0
+                    continue
                 break
         i -= 1
     if i < 0:                                                              # water to the landward end
         share = sum(v for _, v in pts) / len(pts)
-        return {"pos": None, "agreement": round(share, 3), "status": "all_water" if share >= min_agreement else "unclear"}
+        return {"pos": None, "agreement": round(share, 3), "status": "all_water" if share >= min_agreement else "unclear",
+                "crossed": len(crossed)}
     first_land = i + land_run - 1                                          # seaward-most sample of the land run
     pos = (pts[first_land][0] + pts[last_water][0]) / 2
-    sea = [v for o, v in pts if o > pos]
+    sea = [v for o, v in pts if o > pos and not any(a <= o <= b for a, b in crossed)]
     land = [v for o, v in pts if pos - check_m <= o < pos]
     agreement = (sum(sea) + sum(1 - v for v in land)) / max(1, len(sea) + len(land))
     if agreement < min_agreement:
-        return {"pos": None, "agreement": round(agreement, 3), "status": "unclear"}
-    return {"pos": round(pos, 1), "agreement": round(agreement, 3), "status": "ok"}
+        return {"pos": None, "agreement": round(agreement, 3), "status": "unclear", "crossed": len(crossed)}
+    return {"pos": round(pos, 1), "agreement": round(agreement, 3), "status": "ok", "crossed": len(crossed)}
 
 
 _T95 = [(1, 12.706), (2, 4.303), (3, 3.182), (4, 2.776), (5, 2.571), (6, 2.447), (7, 2.365), (8, 2.306),
@@ -427,8 +453,9 @@ def sample_profiles(ee: Any, stack: Any, points: list[tuple[str, int, float, flo
     return out
 
 
-def build(aoi: dict, summary: dict, log=print) -> dict:
-    """The full shoreline analysis for the monthly period in summary (Phase 10's summary.json)."""
+def build(aoi: dict, summary: dict, log=print, existing_dir: Path | None = None) -> dict:
+    """The full shoreline analysis for the monthly period in summary (Phase 10's summary.json). existing_dir:
+    keep that run's baseline and transects (existing_transects) and only re-measure the positions."""
     from .ee_engine import _ee
     ee = _ee()
     months = summary["months"]
@@ -446,6 +473,45 @@ def build(aoi: dict, summary: dict, log=print) -> dict:
     bw, bs = frame.to_m(min(lons), min(lats))
     be, bn = frame.to_m(max(lons), max(lats))
 
+    offsets = profile_offsets()
+    if existing_dir is not None:
+        transects, lines = existing_transects(existing_dir, frame)
+        log(f"kept the baseline and the {len(transects)} transects in {existing_dir}")
+    else:
+        transects, lines = _new_transects(ee, aoi, stack, frame, (bw, bs, be, bn), log)
+    points = []
+    for tr in transects:
+        (ox, oy), (nx, ny) = tr["origin_m"], tr["normal"]
+        for i, o in enumerate(offsets):
+            lon, lat = frame.to_lonlat(ox + nx * o, oy + ny * o)
+            points.append((tr["id"], i, lon, lat))
+    log(f"{len(transects)} transects, {len(points)} sample points")
+    return _measure(ee, stack, transects, points, offsets, keys, qs, bands, qbands, obands, seasons, frame, lines, log)
+
+
+def existing_transects(folder: Path, frame: "LocalFrame") -> tuple[list[dict], list[list[tuple[float, float]]]]:
+    """(transects, baseline lines) back from a previous run's transects.geojson / baseline.geojson, in `frame`:
+    positions can be re-measured on the same transects (ids unchanged, so labels keep matching) without
+    rebuilding the baseline from newer imagery."""
+    feats = json.loads((folder / "transects.geojson").read_text(encoding="utf-8"))["features"]
+    transects, per_line = [], {}
+    for f in feats:
+        (lon_a, lat_a), (lon_b, lat_b) = f["geometry"]["coordinates"]
+        ax, ay = frame.to_m(lon_a, lat_a)
+        bx, by = frame.to_m(lon_b, lat_b)
+        length = math.hypot(bx - ax, by - ay)
+        nx, ny = (bx - ax) / length, (by - ay) / length
+        p = f["properties"]
+        idx = per_line.get(p["line"], 0); per_line[p["line"]] = idx + 1
+        transects.append({"id": p["id"], "line": p["line"], "index": idx, "chainage": p["chainage_m"],
+                          "origin_m": (ax + nx * LAND_M, ay + ny * LAND_M), "normal": (nx, ny)})
+    base = json.loads((folder / "baseline.geojson").read_text(encoding="utf-8"))["features"]
+    lines = [[frame.to_m(x, y) for x, y in f["geometry"]["coordinates"]] for f in base]
+    return transects, lines
+
+
+def _new_transects(ee: Any, aoi: dict, stack: Any, frame: "LocalFrame", bounds: tuple, log=print):
+    bw, bs, be, bn = bounds
     sea_feats = sea_polygons(ee, aoi, stack)
     sea_m, lines = [], []
     for f in sea_feats:
@@ -461,19 +527,16 @@ def build(aoi: dict, summary: dict, log=print) -> dict:
     log(f"sea: {len(sea_feats)} polygons, baseline {len(lines)} lines, {sum(map(line_length, lines)) / 1000:.1f} km")
 
     raw = make_transects(lines, sea_m)
-    offsets = profile_offsets()
-    transects, points, per_line = [], [], {}
+    transects, per_line = [], {}
     for tr in raw:
         idx = per_line.get(tr["line"], 0); per_line[tr["line"]] = idx + 1
         tid = f"t{len(transects) + 1:04d}"
-        (ox, oy), (nx, ny) = tr["origin"], tr["normal"]
         transects.append({"id": tid, "line": tr["line"], "index": idx, "chainage": tr["chainage"],
-                          "origin_m": (ox, oy), "normal": (nx, ny)})
-        for i, o in enumerate(offsets):
-            lon, lat = frame.to_lonlat(ox + nx * o, oy + ny * o)
-            points.append((tid, i, lon, lat))
-    log(f"{len(transects)} transects, {len(points)} sample points")
+                          "origin_m": tr["origin"], "normal": tr["normal"]})
+    return transects, lines
 
+
+def _measure(ee, stack, transects, points, offsets, keys, qs, bands, qbands, obands, seasons, frame, lines, log=print) -> dict:
     profiles = sample_profiles(ee, stack, points, bands + qbands + obands, log)
     positions: dict[str, list[float | None]] = {}
     qpositions: dict[str, list[float | None]] = {}

@@ -32,22 +32,22 @@
  "transects": 735,
  "baseline_km": 90.17,
  "changes": {
-  "stable": 483,
-  "too_few": 217,
-  "unconfirmed": 30,
+  "stable": 499,
+  "too_few": 203,
+  "unconfirmed": 28,
   "advancing": 5
  },
  "radar_trends": {
-  "stable": 483,
-  "too_few": 217,
-  "advancing": 30,
-  "retreating": 5
+  "stable": 499,
+  "too_few": 203,
+  "advancing": 29,
+  "retreating": 4
  },
  "dry_seasons": [
   "2024-25",
   "2025-26"
  ],
- "tidal_transects": 78,
+ "tidal_transects": 33,
  "quarters": [
   "2024-10/2024-12",
   "2025-01/2025-03",
@@ -59,9 +59,9 @@
   "2026-07/2026-09"
  ],
  "month_status": {
-  "ok": 12642,
-  "unclear": 4399,
-  "all_water": 246,
+  "ok": 12992,
+  "unclear": 3927,
+  "all_water": 368,
   "all_land": 353
  },
  "fastest_advance_m_yr": 72.86,
