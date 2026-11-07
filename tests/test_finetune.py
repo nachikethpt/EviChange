@@ -236,3 +236,37 @@ def test_baselines_map_dynamic_world_and_read_features():
     props = {"b_" + f: 0.1 for f in bc.FEATURES}
     assert len(bc.feature_vector(props, "b_")) == 16 and bc.feature_vector(props, "a_") is None
     assert set(c for c in bc.DW_TO_COVER.values() if c) == set(bc.cover_check.COVERS)
+
+
+def test_folds_are_disjoint_stratified_and_fixed():
+    import json as _json
+    ex = [{"id": f"c{i}", "target": _json.dumps({"before": "bare", "after": "built"})} for i in range(10)]
+    ex += [{"id": f"n{i}", "target": _json.dumps({"before": "water", "after": "water"})} for i in range(40)]
+    folds = ft.split_folds(ex, 5)
+    ids = [i for f in folds for i in f]
+    assert len(ids) == len(set(ids)) == 50
+    assert all(sum(i.startswith("c") for i in f) == 2 for f in folds)      # every fold has change boxes
+    assert folds == ft.split_folds(list(reversed(ex)), 5)                  # same folds whatever the order
+
+
+def test_dw_evidence_goes_before_the_answer_line(tmp_path):
+    import json as _json
+    import finetune_dw_prompts as fdp
+    from agents import cover_check
+    p = cover_check.build_prompt(["2018-11-01", "2019-03-31"], ["2022-11-01", "2023-03-31"])
+    shares = {"before": {"built": 0.55, "bare": 0.42, "water": 0.03}, "after": {}}
+    q = cover_check.with_dw(p, shares)
+    assert "BEFORE: built 55 %, bare 42 %" in q and "water 3" not in q            # under 5 % left out
+    assert "AFTER: no Dynamic World image" in q
+    assert q.index("Evidence from Dynamic World") < q.index("Answer with JSON only")
+    rows = [{"id": "a", "prompt": p, "target": "{}"}, {"id": "b", "prompt": p, "target": "{}"}]
+    out = fdp.dw_rows(rows, {"a": shares})
+    assert "built 55 %" in out[0]["prompt"] and out[1]["prompt"].count("no Dynamic World image") == 2
+    (tmp_path / "cover_dw_train.jsonl").write_text(_json.dumps(out[0]) + "\n", encoding="utf-8")
+    assert ft.load_examples(tmp_path, "cover", "train", "dw")[0]["id"] == "a"
+
+
+def test_dw_shares_from_a_histogram():
+    import baselines_cover as bc
+    s = bc.dw_shares({"6": 30, "7": 10, "8": 60})          # built 30, bare 10, snow 60 (left out)
+    assert s == {"built": 0.75, "bare": 0.25} and bc.dw_shares({}) == {}
