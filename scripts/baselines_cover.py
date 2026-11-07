@@ -47,6 +47,17 @@ def dw_main(histogram: dict | None) -> str:
     return counts.most_common(1)[0][0] if counts else cover_check.CANT_TELL
 
 
+def dw_shares(histogram: dict | None) -> dict[str, float]:
+    """{cover: share of the box's Dynamic World pixels} from a {label index: pixel count} histogram."""
+    counts = Counter()
+    for k, n in (histogram or {}).items():
+        cover = DW_TO_COVER.get(DW_NAMES[int(float(k))])
+        if cover:
+            counts[cover] += n
+    total = sum(counts.values())
+    return {c: round(n / total, 3) for c, n in counts.items()} if total else {}
+
+
 def feature_vector(props: dict, prefix: str) -> list[float] | None:
     """The 16 box statistics of one date (properties named <prefix><band>_<stat>), or None if any is missing."""
     vals = [props.get(prefix + f) for f in FEATURES]
@@ -113,6 +124,9 @@ def main(argv: list[str] | None = None) -> None:
     print(f"{len(boxes)} boxes ({len(train_t)} train, {len(hold_t)} held out)")
     stats = _box_stats(_ee(), boxes, params)
     args.out.mkdir(parents=True, exist_ok=True)
+    shares = {b["id"]: {"before": dw_shares(stats.get(b["id"], {}).get("dw_before")),
+                        "after": dw_shares(stats.get(b["id"], {}).get("dw_after"))} for b in boxes}
+    (args.out / "dw_boxes.json").write_text(json.dumps(shares, indent=1), encoding="utf-8")
 
     preds = {"dynamic_world": {i: answer_text(dw_main(stats[i].get("dw_before")), dw_main(stats[i].get("dw_after")))
                                for i in hold_t}}

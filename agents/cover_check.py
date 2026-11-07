@@ -46,6 +46,28 @@ def build_prompt(before_window: list[str], after_window: list[str], chip_set: st
     return template.format(before=" to ".join(before_window), after=" to ".join(after_window))
 
 
+DW_PROMPT_VERSION = "covercheck_dw_v1"
+DW_MIN_SHARE = 0.05                    # covers below 5 % of the box are left out of the evidence line
+DW_NOTE = ("Dynamic World is usually right about the main cover, but it often confuses bare ground with built-up and "
+           "misses crops and sparse vegetation. Check it against the images; where they disagree, trust what you see.")
+
+
+def dw_line(shares: dict | None) -> str:
+    """'built 55 %, bare 30 %, water 15 %' from {cover: share of the box}; covers under DW_MIN_SHARE left out."""
+    kept = sorted(((c, s) for c, s in (shares or {}).items() if s >= DW_MIN_SHARE), key=lambda cs: -cs[1])
+    return ", ".join(f"{c.replace('_', ' ')} {round(s * 100)} %" for c, s in kept) or "no Dynamic World image"
+
+
+def with_dw(prompt: str, shares: dict) -> str:
+    """The cover prompt with Dynamic World's shares of the box at each date as evidence (2026-11-07): the
+    measurement does the measuring, the model checks it against the images. shares = {"before": {...}, "after": {...}}."""
+    marker = "Answer with JSON only"
+    assert prompt.count(marker) == 1
+    evidence = ("Evidence from Dynamic World (Google's 10 m land-cover map, same dates), share of the box:\n"
+                f"- BEFORE: {dw_line(shares.get('before'))}\n- AFTER: {dw_line(shares.get('after'))}\n{DW_NOTE}\n\n")
+    return prompt.replace(marker, evidence + marker)
+
+
 def target(label: dict) -> dict | None:
     """{"before", "after"} main covers from a v2 per-date label (finetune_mcq); None unless both dates have one."""
     out = {}
