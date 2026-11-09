@@ -121,6 +121,25 @@ def cover_scores(rows: list[tuple[dict, dict]]) -> dict:
     return {"main_cover_accuracy": acc, "derived_change": balanced_accuracy(pairs)}
 
 
+def split_scores(examples: list[dict], cover_preds: dict[str, str], change_preds: dict[str, str]) -> dict:
+    """The split design (exploratory, 2026-11-10): main cover from one model's answers (`cover_preds`, e.g. a
+    fine-tune), the change verdict from another's (`change_preds`, e.g. the untrained model with Dynamic World
+    evidence). Same measures as `cover_scores`; nothing is tuned, so it can be scored on any fold."""
+    from agents import cover_check
+    out = {"n": len(examples), "parse_failures": 0}
+    dates, pairs = [], []
+    for ex in examples:
+        target = json.loads(ex["target"])
+        cov = cover_check.parse_answer(cover_preds.get(ex["id"], ""))
+        chg = cover_check.parse_answer(change_preds.get(ex["id"], ""))
+        out["parse_failures"] += (not cov["parse_ok"]) + (not chg["parse_ok"])
+        dates += [(target[w], cov[w]) for w in cover_check.DATES]
+        pairs.append((cover_check.derived_change(target), cover_check.derived_change(chg)))
+    out["main_cover_accuracy"] = sum(x == y for x, y in dates) / len(dates) if dates else None
+    out["derived_change"] = balanced_accuracy(pairs)
+    return out
+
+
 def score(task: str, examples: list[dict], predictions: dict[str, str]) -> dict:
     """Parse each prediction with the parser the app and evaluation use; for the check, balanced accuracy;
     for the cover task, main-cover accuracy and the derived change."""
@@ -279,14 +298,15 @@ def train(args) -> None:
 
 
 def evaluate(args) -> None:
-    examples = load_examples(args.data, args.task, "holdout", args.variant)
+    examples = load_examples(args.data, args.task, args.split, args.variant)
     model, processor = _load(args.base, adapter=None if args.base_only else args.adapter, args=args)
     preds = predict(model, processor, args.data, examples, args.task)
-    dest = (Path(args.data) if args.base_only else Path(args.adapter)) / f"predictions_{args.task}_{run_name(args)}.jsonl"
+    suffix = "" if args.split == "holdout" else f"_{args.split}"
+    dest = (Path(args.data) if args.base_only else Path(args.adapter)) / f"predictions_{args.task}_{run_name(args)}{suffix}.jsonl"
     _write_preds(dest, preds)
     res = score(args.task, examples, preds)
     print(json.dumps(res, indent=1))
-    print("HOLDOUT SCORE " + json.dumps(res), flush=True)
+    print(f"{args.split.upper()} SCORE " + json.dumps(res), flush=True)
     print(f"predictions -> {dest}")
 
 
@@ -303,6 +323,9 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--variant", default="", choices=("", "dw"), help="dw: the cover prompt with Dynamic World evidence")
     ap.add_argument("--folds", type=int, default=0, help="cross-validation on the training boxes: number of folds")
     ap.add_argument("--fold", type=int, default=0, help="which fold to leave out and score (0-based)")
+    ap.add_argument("--split", default="holdout", choices=("holdout", "train"),
+                    help="eval: which boxes to answer (train: the untrained model on the training boxes, for the "
+                         "split design's cross-validation; never use with an adapter trained on them)")
     ap.add_argument("--eval_holdout", action="store_true", help="after training, score the held-out boxes")
     for k, v in DEFAULTS.items():
         ap.add_argument(f"--{k}", type=type(v), default=v)
@@ -312,6 +335,8 @@ def main(argv: list[str] | None = None) -> None:
     else:
         if not args.base_only and not args.adapter:
             raise SystemExit("eval needs --adapter or --base-only")
+        if args.split == "train" and not args.base_only:
+            raise SystemExit("--split train is for the untrained model only (an adapter has seen those boxes)")
         evaluate(args)
 
 

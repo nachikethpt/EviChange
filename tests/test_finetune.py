@@ -270,3 +270,30 @@ def test_dw_shares_from_a_histogram():
     import baselines_cover as bc
     s = bc.dw_shares({"6": 30, "7": 10, "8": 60})          # built 30, bare 10, snow 60 (left out)
     assert s == {"built": 0.75, "bare": 0.25} and bc.dw_shares({}) == {}
+
+
+def test_split_design_takes_cover_from_one_model_and_change_from_the_other():
+    rows = [{"id": "a", "target": json.dumps({"before": "water", "after": "built"})},
+            {"id": "b", "target": json.dumps({"before": "bare", "after": "bare"})}]
+    cover = {"a": '{"before": "water", "after": "water"}', "b": '{"before": "bare", "after": "bare"}'}     # never a change
+    change = {"a": '{"before": "bare", "after": "built"}', "b": '{"before": "crops", "after": "crops"}'}   # wrong covers
+    s = ft.split_scores(rows, cover, change)
+    assert s["main_cover_accuracy"] == 0.75                                   # the cover model's covers
+    assert s["derived_change"]["balanced"] == 1.0                             # the change model's verdicts
+    assert ft.score("cover", rows, cover)["derived_change"]["balanced"] == 0.5
+
+
+def test_split_cv_scores_each_fold_and_needs_every_box(tmp_path):
+    import finetune_split_cv as sc
+    ex = [{"id": f"c{i}", "target": json.dumps({"before": "bare", "after": "built"})} for i in range(6)]
+    ex += [{"id": f"n{i}", "target": json.dumps({"before": "water", "after": "water"})} for i in range(12)]
+    same = {e["id"]: json.dumps({"before": json.loads(e["target"])["before"]} | {"after": json.loads(e["target"])["before"]}) for e in ex}
+    truth = {e["id"]: e["target"] for e in ex}
+    res = sc.split_cv(ex, same, truth, folds=3)
+    assert [r["n_change"] for r in res["folds"]] == [2, 2, 2]
+    assert res["mean"]["finetune"]["change_balanced"] == 0.5 and res["mean"]["split"]["change_balanced"] == 1.0
+    assert res["mean"]["split"]["main_cover"] == res["mean"]["finetune"]["main_cover"]
+    with pytest.raises(SystemExit):
+        sc.split_cv(ex, same, {k: v for k, v in truth.items() if k != "c0"}, folds=3)
+    with pytest.raises(SystemExit):
+        ft.main(["eval", "--task", "cover", "--data", str(tmp_path), "--adapter", "x", "--split", "train"])
